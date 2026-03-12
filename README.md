@@ -1,38 +1,25 @@
-# Terminal Info CLI
+# Terminal Info
 
-`tinfo` is a terminal-first Rust CLI for weather and related local terminal information workflows. The current implementation focuses on weather lookups with a small command surface, plain output, and lightweight local configuration.
-
-By default, `tinfo` uses Open-Meteo, which does not require an API key. Users can optionally configure an OpenWeather API key and provider selection in their local config.
+`tinfo` is a small Rust CLI for useful terminal information. It combines weather, time, network, system diagnostics, and a lightweight plugin ecosystem built around a decentralized GitHub-based index.
 
 ## Features
 
-- Current weather in the terminal
-- Short forecast output
-- Automatic location detection by IP for `tinfo weather now`
-- Manual location configuration
-- Interactive configuration menu
-- Config stored in `~/.tinfo/config.json`
-- Optional API key support for OpenWeather
-- Cross-platform CLI with standard stdin/stdout behavior
+- Dashboard shown when running `tinfo`
+- Built-in weather, network, system, time, and doctor commands
+- TOML configuration at `~/.tinfo/config.toml`
+- External plugin execution for unknown top-level commands
+- GitHub-based plugin installation from a local plugin index
+- Plugin validation workflow for index pull requests
 
 ## Installation
 
-### Option 1 - Install script
-
-Install the latest release binary:
+### Install script
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash
 ```
 
-### Option 2 - Build from source
-
-Requirements:
-
-- Rust toolchain
-- Cargo
-
-Clone and build:
+### Build from source
 
 ```bash
 git clone https://github.com/T-1234567890/terminal-info
@@ -40,184 +27,151 @@ cd terminal-info
 cargo build --release
 ```
 
-The compiled binary will be available at:
-
-```bash
-target/release/tinfo
-```
-
-### Option 3 - Cargo install
+### Cargo install
 
 ```bash
 cargo install tinfo
 ```
 
-## Updating
-
-Update to the latest GitHub release:
+## Basic Usage
 
 ```bash
-tinfo update
+tinfo
+tinfo weather now
+tinfo ping
+tinfo network
+tinfo system
+tinfo time
+tinfo doctor
 ```
 
-## Quick Start
-
-Show current weather for a city:
+## Example Commands
 
 ```bash
+tinfo
 tinfo weather now tokyo
+tinfo ping github.com
+tinfo time london
+tinfo plugin search
+tinfo plugin install news
+tinfo plugin list
+tinfo news tech
 ```
 
-Show current weather using your saved default location:
+## Dashboard Feature
 
-```bash
-tinfo weather now
-```
+Running `tinfo` with no arguments shows a dashboard with:
 
-Show a forecast:
+- location
+- weather
+- time
+- network
+- CPU
+- memory
 
-```bash
-tinfo weather forecast london
-```
+See [docs/dashboard.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/dashboard.md).
 
-Set a default location:
+## Plugin Ecosystem
 
-```bash
-tinfo weather location tokyo
-```
+`tinfo` uses a decentralized plugin model:
 
-Open the interactive config menu:
+- this repository only stores plugin metadata files in `plugins/`
+- plugin authors host their own plugin repositories on GitHub
+- plugin installs fetch binaries from plugin release assets
 
-```bash
-tinfo config
-```
-
-## Commands
-
-Core commands:
-
-```bash
-tinfo weather now
-tinfo weather now <city>
-
-tinfo weather forecast
-tinfo weather forecast <city>
-
-tinfo weather location
-tinfo weather location <city>
-
-tinfo config
-tinfo config api
-tinfo config units metric
-tinfo config units imperial
-
-tinfo update
-```
-
-See [docs/commands.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/commands.md) for the full command reference.
-
-## Example Output
-
-ASCII example:
-
-```text
-╭────────────────────╮
-│  ☀ Tokyo Weather   │
-├────────────────────┤
-│ Temp: 27°C         │
-│ Wind: 3 m/s        │
-╰────────────────────╯
-```
-
-Current implementation output is intentionally simple and terminal-friendly, for example:
-
-```text
-+-----------------------------+
-| Tokyo, Tokyo, Japan Weather |
-+-----------------------------+
-  Partly cloudy
-  Temperature: 8.4°C
-  Wind: 1.6 m/s
-  Humidity: 47%
-```
-
-## Configuration
-
-`tinfo` stores user settings in:
-
-```text
-~/.tinfo/config.json
-```
-
-The config directory and file are created automatically when needed.
-
-Example config:
+Plugin metadata example:
 
 ```json
 {
-  "location": "Tokyo",
-  "units": "metric"
+  "name": "news",
+  "description": "News headlines plugin",
+  "repo": "https://github.com/example/tinfo-news",
+  "binary": "tinfo-news",
+  "version": "latest"
 }
 ```
 
-When an API provider and key are configured, the file may also include:
+## Plugin System
 
-```json
-{
-  "provider": "openweather",
-  "api_key": "your-api-key",
-  "units": "metric",
-  "location": "Tokyo"
-}
-```
+Unknown top-level commands are treated as plugin candidates.
 
-Configuration can be managed in two ways:
-
-- Interactive menu via `tinfo config`
-- Direct commands such as `tinfo weather location tokyo` or `tinfo config units imperial`
-
-See [docs/config.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/config.md) for details.
-
-## API Providers
-
-### Open-Meteo
-
-- Default provider
-- No API key required
-- Used automatically when no custom provider is configured
-
-### OpenWeather
-
-- Optional provider
-- Requires an API key
-- Can be configured with:
+Example:
 
 ```bash
-tinfo config api set openweather YOUR_API_KEY
+tinfo news tech
 ```
 
-`tinfo weather now` also supports IP-based location detection using:
+This attempts to run:
 
-- `https://ipapi.co/json/`
+```bash
+tinfo-news tech
+```
 
-This is used as a fallback when no city argument is provided and no default location is stored.
+Search order:
 
-See [docs/api.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/api.md) for provider details.
+1. `~/.tinfo/plugins/tinfo-<command>`
+2. `PATH`
 
-## Architecture
+## Plugin Installation
 
-The CLI is intentionally small and split into a few modules:
+Search available plugins from the index:
 
-- `src/main.rs` defines the `clap` command tree and user interaction
-- `src/config.rs` handles config loading and saving
-- `src/weather.rs` handles provider selection, HTTP requests, and response parsing
+```bash
+tinfo plugin search
+```
 
-See [docs/architecture.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/architecture.md) for a more detailed overview.
+Install a plugin from its GitHub release:
 
-## Acknowledgements
+```bash
+tinfo plugin install news
+```
 
-The project idea was inspired by [terminal-weather](https://github.com/Vincent4486/terminal-weather) by Vincent4486. This project acknowledges that inspiration respectfully and does not imply code reuse.
+List installed plugins:
+
+```bash
+tinfo plugin list
+```
+
+Remove a plugin:
+
+```bash
+tinfo plugin remove news
+```
+
+## Plugin Development
+
+Plugins are standalone executables named:
+
+```text
+tinfo-<command>
+```
+
+Example:
+
+```text
+tinfo-news
+```
+
+See [docs/plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md).
+
+## Plugin Submission
+
+To submit a plugin to the index:
+
+1. Create a plugin repository
+2. Publish a GitHub release
+3. Add a metadata JSON file to `plugins/`
+4. Open a pull request
+
+See [docs/plugin-index.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-index.md).
+
+## Documentation
+
+- [docs/commands.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/commands.md)
+- [docs/plugins.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugins.md)
+- [docs/plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md)
+- [docs/plugin-index.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-index.md)
 
 ## License
 
-This project is licensed under the Apache License 2.0.
+Apache 2.0

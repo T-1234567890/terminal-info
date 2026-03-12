@@ -20,7 +20,7 @@
 .env.local
 
 # CLI local config
-.tw/
+.tinfo/
 
 # Binary artifacts
 *.exe
