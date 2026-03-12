@@ -1,5 +1,12 @@
 # Terminal Info
 
+[![Release](https://img.shields.io/github/v/release/T-1234567890/terminal-info)](https://github.com/T-1234567890/terminal-info/releases)
+[![License](https://img.shields.io/github/license/T-1234567890/terminal-info)](LICENSE)
+[![Rust](https://img.shields.io/badge/language-Rust-orange)](https://www.rust-lang.org/)
+[![CLI](https://img.shields.io/badge/type-CLI-blue)]()
+[![Platform](https://img.shields.io/badge/platform-macOS%20Linux%20Windows-lightgrey)]()
+[![Plugins](https://img.shields.io/badge/plugins-supported-brightgreen)]()
+
 `tinfo` is a lightweight Rust CLI for terminal-friendly system, network, weather, and plugin-driven information.
 
 ## Features
