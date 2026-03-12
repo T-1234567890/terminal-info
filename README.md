@@ -19,6 +19,12 @@
 curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash
 ```
 
+The install script supports:
+
+- macOS Intel (`x86_64`)
+- macOS Apple Silicon (`arm64` / `aarch64`)
+- Linux `x86_64`
+
 ### Build from source
 
 ```bash
