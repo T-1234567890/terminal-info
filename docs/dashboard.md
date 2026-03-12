@@ -50,5 +50,5 @@ The dashboard is intentionally small and could expand later with:
 - disk summary
 - plugin-provided widgets
 - upcoming forecast
-- doctor status
+- diagnostic status
 - update status

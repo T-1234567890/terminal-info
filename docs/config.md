@@ -1,50 +1,53 @@
 # Configuration
 
-`tinfo` stores user configuration in a JSON file located at:
+`tinfo` stores user configuration in:
 
 ```text
-~/.tinfo/config.json
+~/.tinfo/config.toml
 ```
 
-The `~/.tinfo` directory is created automatically when needed. If the file does not exist, `tinfo` creates it with default values.
+The `~/.tinfo` directory is created automatically when needed.
 
-## Stored Fields
+## Config Format
 
-The config currently supports these fields:
+Minimal example:
+
+```toml
+location = "shenzhen"
+units = "metric"
+```
+
+With profiles:
+
+```toml
+location = "shenzhen"
+units = "metric"
+active_profile = "home"
+
+[profile.home]
+location = "shenzhen"
+units = "metric"
+
+[profile.work]
+location = "tokyo"
+units = "imperial"
+
+[profile.travel]
+location = "auto"
+```
+
+Supported top-level fields:
 
 - `location`
-  - Default city used by commands such as `tinfo weather now` and `tinfo weather forecast`
 - `units`
-  - Either `metric` or `imperial`
 - `provider`
-  - Optional API provider name
 - `api_key`
-  - Optional provider API key
+- `active_profile`
+- `profile.<name>`
 
-Example:
+`location = "auto"` means weather commands should try IP-based city detection.
 
-```json
-{
-  "provider": "openweather",
-  "api_key": "your-api-key",
-  "units": "metric",
-  "location": "Tokyo"
-}
-```
-
-## Default Behavior
-
-If no config exists, `tinfo` behaves as follows:
-
-- Provider defaults to Open-Meteo
-- Units default to `metric`
-- No default location is set
-
-For `tinfo weather now`, if no location is configured, the CLI attempts IP-based location detection before failing.
-
-## Ways to Configure
-
-### Interactive Menu
+## Interactive Configuration
 
 Run:
 
@@ -52,59 +55,88 @@ Run:
 tinfo config
 ```
 
-This opens a simple menu for:
+This opens the interactive menu built with `dialoguer`.
 
-- setting a default location
-- using IP location as the default
-- removing the default location
-- changing units
-- showing the current config
+Menu sections:
 
-### Direct Commands
+- `Location`
+- `Units`
+- `API Keys`
+- `Reset Config`
+- `Exit`
 
-Set a default location:
+Location submenu:
+
+- `Set location manually`
+- `Use IP location`
+- `Back`
+
+## Direct Commands
+
+Location:
 
 ```bash
-tinfo weather location tokyo
+tinfo config location
+tinfo config location tokyo
 ```
 
-Show the saved location:
+Units:
 
 ```bash
-tinfo weather location
-```
-
-Set units:
-
-```bash
+tinfo config units
 tinfo config units metric
 tinfo config units imperial
 ```
 
-Configure an API key:
+API settings:
 
 ```bash
+tinfo config api
+tinfo config api show
 tinfo config api set openweather YOUR_API_KEY
 ```
 
-Show the configured API provider:
+Reset:
 
 ```bash
-tinfo config api show
+tinfo config reset
 ```
+
+## Profiles
+
+Profiles are named configuration blocks stored under `[profile.<name>]`.
+
+Commands:
+
+```bash
+tinfo profile list
+tinfo profile use home
+```
+
+`tinfo profile use <name>` applies the stored profile values to the active config and saves `active_profile`.
 
 ## IP-Based Location
 
-`tinfo weather now` can detect the current city by IP using:
+When no explicit city is provided, `tinfo` can detect a city from:
 
 ```text
 https://ipapi.co/json/
 ```
 
-This is a network-based fallback and does not require GPS or OS location permissions.
+This is a network lookup only. It does not request GPS or OS location permissions.
 
-## Notes
+## Output Modes
 
-- The config file is local to the current user account.
-- The API key is stored in plain JSON in the config file.
-- If `ipapi.co` is unavailable or rate limited, `tinfo weather now` fails safely with a message directing the user to set a default location manually.
+All commands support these global flags:
+
+- `--plain`
+- `--compact`
+- `--color`
+
+Examples:
+
+```bash
+tinfo --plain weather now
+tinfo --compact diagnostic
+tinfo --color
+```

@@ -5,18 +5,35 @@ use std::fs::File;
 use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use flate2::read::GzDecoder;
 use reqwest::blocking::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tar::Archive;
 use zip::ZipArchive;
 
+use crate::output::{error_prefix, success_prefix};
+
 pub const RESERVED_COMMANDS: &[&str] = &[
-    "weather", "ping", "network", "system", "time", "doctor", "config", "plugin",
+    "weather",
+    "ping",
+    "network",
+    "system",
+    "time",
+    "diagnostic",
+    "config",
+    "profile",
+    "completion",
+    "plugin",
+    "update",
 ];
 
-#[derive(Clone, Debug, Deserialize)]
+const REGISTRY_OWNER: &str = "T-1234567890";
+const REGISTRY_REPO: &str = "terminal-info";
+const CACHE_TTL_SECS: u64 = 24 * 60 * 60;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PluginMetadata {
     pub name: String,
     pub description: String,
@@ -34,6 +51,20 @@ struct GithubRelease {
 struct GithubAsset {
     name: String,
     browser_download_url: String,
+}
+
+#[derive(Deserialize)]
+struct GithubContentItem {
+    name: String,
+    download_url: Option<String>,
+    #[serde(rename = "type")]
+    item_type: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PluginCache {
+    fetched_at: u64,
+    plugins: Vec<PluginMetadata>,
 }
 
 pub fn run_plugin(command: &str, args: &[String]) -> Result<(), String> {
@@ -77,37 +108,38 @@ pub fn search_plugins() -> Result<(), String> {
 
 pub fn install_plugin(name: &str) -> Result<(), String> {
     let plugin = load_plugin_by_name(name)?;
-    let plugin_dir = plugin_dir_path()?;
-    fs::create_dir_all(&plugin_dir)
-        .map_err(|err| format!("Failed to create plugin directory: {err}"))?;
+    install_or_update_plugin(&plugin, "Installed")
+}
 
-    let (owner, repo) = parse_github_repo(&plugin.repo)?;
-    let release = fetch_release(&owner, &repo, &plugin.version)?;
-    let asset = select_asset(&release.assets, &plugin.binary).ok_or_else(|| {
-        format!(
-            "No compatible release asset found for plugin '{}'.",
-            plugin.name
-        )
-    })?;
+pub fn update_plugin(name: &str) -> Result<(), String> {
+    let plugin = load_plugin_by_name(name)?;
+    install_or_update_plugin(&plugin, "Updated")
+}
 
-    let bytes = github_client()?
-        .get(&asset.browser_download_url)
-        .send()
-        .map_err(|err| format!("Failed to download plugin asset: {err}"))?
-        .error_for_status()
-        .map_err(|err| format!("Failed to download plugin asset: {err}"))?
-        .bytes()
-        .map_err(|err| format!("Failed to read plugin asset: {err}"))?;
+pub fn upgrade_all_plugins() -> Result<(), String> {
+    let installed = installed_plugin_names()?;
+    if installed.is_empty() {
+        println!("No plugins installed.");
+        return Ok(());
+    }
 
-    let destination = plugin_dir.join(binary_filename(&plugin.binary));
-    extract_asset(&asset.name, &plugin.binary, bytes.as_ref(), &destination)?;
-    set_executable(&destination)?;
+    let mut updated_any = false;
+    for name in installed {
+        match load_plugin_by_name(&name) {
+            Ok(plugin) => {
+                install_or_update_plugin(&plugin, "Updated")?;
+                updated_any = true;
+            }
+            Err(_) => {
+                println!("Skipping '{}': not found in plugin index.", name);
+            }
+        }
+    }
 
-    println!(
-        "Installed plugin '{}' to {}.",
-        plugin.name,
-        destination.display()
-    );
+    if !updated_any {
+        println!("No indexed plugins were updated.");
+    }
+
     Ok(())
 }
 
@@ -152,6 +184,80 @@ pub fn list_plugins() -> Result<(), String> {
     Ok(())
 }
 
+pub fn run_diagnostic_plugins() -> Result<(), String> {
+    let dir = plugin_dir_path()?;
+    if dir.exists() && dir.is_dir() {
+        println!("{} Plugin directory OK", success_prefix());
+    } else {
+        println!("{} Plugin directory missing", error_prefix());
+        return Ok(());
+    }
+
+    let index = load_plugin_index().unwrap_or_default();
+    let installed = installed_plugin_names()?;
+
+    if installed.is_empty() {
+        println!("{} No installed plugins", success_prefix());
+        return Ok(());
+    }
+
+    for name in installed {
+        let binary_path = dir.join(binary_filename(&format!("tinfo-{name}")));
+        if !binary_path.exists() {
+            println!("{} Plugin \"{name}\" missing binary", error_prefix());
+            continue;
+        }
+
+        match index.iter().find(|plugin| plugin.name == name) {
+            Some(plugin) if plugin.binary == format!("tinfo-{name}") => {
+                if plugin.version == "latest" {
+                    println!("{} Plugin \"{name}\" metadata OK", success_prefix());
+                } else {
+                    println!("{} Plugin \"{name}\" version mismatch", error_prefix());
+                }
+            }
+            _ => println!("{} Plugin \"{name}\" version mismatch", error_prefix()),
+        }
+    }
+
+    Ok(())
+}
+
+fn install_or_update_plugin(plugin: &PluginMetadata, action: &str) -> Result<(), String> {
+    let plugin_dir = plugin_dir_path()?;
+    fs::create_dir_all(&plugin_dir)
+        .map_err(|err| format!("Failed to create plugin directory: {err}"))?;
+
+    let (owner, repo) = parse_github_repo(&plugin.repo)?;
+    let release = fetch_release(&owner, &repo, &plugin.version)?;
+    let asset = select_asset(&release.assets, &plugin.binary).ok_or_else(|| {
+        format!(
+            "No compatible release asset found for plugin '{}'.",
+            plugin.name
+        )
+    })?;
+
+    let bytes = github_client()?
+        .get(&asset.browser_download_url)
+        .send()
+        .map_err(|err| format!("Failed to download plugin asset: {err}"))?
+        .error_for_status()
+        .map_err(|err| format!("Failed to download plugin asset: {err}"))?
+        .bytes()
+        .map_err(|err| format!("Failed to read plugin asset: {err}"))?;
+
+    let destination = plugin_dir.join(binary_filename(&plugin.binary));
+    extract_asset(&asset.name, &plugin.binary, bytes.as_ref(), &destination)?;
+    set_executable(&destination)?;
+
+    println!(
+        "{action} plugin '{}' at {}.",
+        plugin.name,
+        destination.display()
+    );
+    Ok(())
+}
+
 fn resolve_plugin_binary(binary_name: &str) -> Option<PathBuf> {
     find_in_plugin_dir(binary_name).or_else(|| find_in_path(binary_name))
 }
@@ -188,38 +294,39 @@ fn plugin_dir_path() -> Result<PathBuf, String> {
     Ok(PathBuf::from(home).join(".tinfo").join("plugins"))
 }
 
+fn plugin_cache_path() -> Result<PathBuf, String> {
+    if let Ok(path) = env::var("TINFO_PLUGIN_CACHE_PATH") {
+        return Ok(PathBuf::from(path));
+    }
+
+    let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
+    Ok(PathBuf::from(home)
+        .join(".tinfo")
+        .join("cache")
+        .join("plugins.json"))
+}
+
 fn plugin_index_dir() -> Result<PathBuf, String> {
     if let Ok(dir) = env::var("TINFO_PLUGIN_INDEX_DIR") {
         return Ok(PathBuf::from(dir));
     }
 
-    let cwd =
-        env::current_dir().map_err(|err| format!("Failed to read current directory: {err}"))?;
-    let local = cwd.join("plugins");
-    if local.exists() {
-        return Ok(local);
-    }
-
-    let exe = env::current_exe().map_err(|err| format!("Failed to read executable path: {err}"))?;
-    if let Some(parent) = exe.parent() {
-        let sibling = parent.join("plugins");
-        if sibling.exists() {
-            return Ok(sibling);
-        }
-    }
-
-    Err(
-        "Could not find plugin index directory. Set TINFO_PLUGIN_INDEX_DIR or run inside the repository."
-            .to_string(),
-    )
+    Err("No local plugin index override configured. Falling back to GitHub registry.".to_string())
 }
 
 fn load_plugin_index() -> Result<Vec<PluginMetadata>, String> {
-    let dir = plugin_index_dir()?;
+    if let Ok(dir) = plugin_index_dir() {
+        return load_plugin_index_from_local_dir(&dir);
+    }
+
+    load_plugin_index_cached()
+}
+
+fn load_plugin_index_from_local_dir(dir: &Path) -> Result<Vec<PluginMetadata>, String> {
     let mut plugins = Vec::new();
     let mut seen = HashSet::new();
 
-    for entry in fs::read_dir(&dir).map_err(|err| format!("Failed to read plugin index: {err}"))? {
+    for entry in fs::read_dir(dir).map_err(|err| format!("Failed to read plugin index: {err}"))? {
         let entry = entry.map_err(|err| format!("Failed to read plugin index: {err}"))?;
         let path = entry.path();
         if path.extension().and_then(|value| value.to_str()) != Some("json") {
@@ -246,11 +353,120 @@ fn load_plugin_index() -> Result<Vec<PluginMetadata>, String> {
     Ok(plugins)
 }
 
+fn load_plugin_index_cached() -> Result<Vec<PluginMetadata>, String> {
+    let cache_path = plugin_cache_path()?;
+    let cache = read_plugin_cache(&cache_path).ok();
+
+    if let Some(cache) = cache.as_ref() {
+        if !cache_is_expired(cache.fetched_at) {
+            return Ok(cache.plugins.clone());
+        }
+    }
+
+    match fetch_plugin_index_from_registry() {
+        Ok(plugins) => {
+            write_plugin_cache(&cache_path, &plugins)?;
+            Ok(plugins)
+        }
+        Err(err) => {
+            if let Some(cache) = cache {
+                Ok(cache.plugins)
+            } else {
+                Err(err)
+            }
+        }
+    }
+}
+
+fn fetch_plugin_index_from_registry() -> Result<Vec<PluginMetadata>, String> {
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/contents/plugins",
+        REGISTRY_OWNER, REGISTRY_REPO
+    );
+    let items: Vec<GithubContentItem> = github_client()?
+        .get(url)
+        .send()
+        .map_err(|err| format!("Failed to fetch plugin registry: {err}"))?
+        .error_for_status()
+        .map_err(|err| format!("Failed to fetch plugin registry: {err}"))?
+        .json()
+        .map_err(|err| format!("Failed to parse plugin registry: {err}"))?;
+
+    let mut plugins = Vec::new();
+    let mut seen = HashSet::new();
+
+    for item in items {
+        if item.item_type != "file" || !item.name.ends_with(".json") {
+            continue;
+        }
+
+        let download_url = item
+            .download_url
+            .ok_or_else(|| format!("Registry entry '{}' has no download URL.", item.name))?;
+        let contents = github_client()?
+            .get(download_url)
+            .send()
+            .map_err(|err| format!("Failed to download plugin metadata: {err}"))?
+            .error_for_status()
+            .map_err(|err| format!("Failed to download plugin metadata: {err}"))?
+            .text()
+            .map_err(|err| format!("Failed to read plugin metadata: {err}"))?;
+        let plugin: PluginMetadata = serde_json::from_str(&contents)
+            .map_err(|err| format!("Failed to parse plugin metadata '{}': {err}", item.name))?;
+        validate_plugin_metadata(&plugin)?;
+
+        if !seen.insert(plugin.name.clone()) {
+            return Err(format!(
+                "Duplicate plugin name '{}' in plugin index.",
+                plugin.name
+            ));
+        }
+
+        plugins.push(plugin);
+    }
+
+    plugins.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(plugins)
+}
+
 fn load_plugin_by_name(name: &str) -> Result<PluginMetadata, String> {
     load_plugin_index()?
         .into_iter()
         .find(|plugin| plugin.name == name)
         .ok_or_else(|| format!("Plugin '{}' not found in plugin index.", name))
+}
+
+fn read_plugin_cache(path: &Path) -> Result<PluginCache, String> {
+    let contents =
+        fs::read_to_string(path).map_err(|err| format!("Failed to read plugin cache: {err}"))?;
+    serde_json::from_str(&contents).map_err(|err| format!("Failed to parse plugin cache: {err}"))
+}
+
+fn write_plugin_cache(path: &Path, plugins: &[PluginMetadata]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("Failed to create plugin cache directory: {err}"))?;
+    }
+
+    let payload = PluginCache {
+        fetched_at: now_unix(),
+        plugins: plugins.to_vec(),
+    };
+    let json = serde_json::to_string_pretty(&payload)
+        .map_err(|err| format!("Failed to serialize plugin cache: {err}"))?;
+    fs::write(path, format!("{json}\n"))
+        .map_err(|err| format!("Failed to write plugin cache: {err}"))
+}
+
+fn cache_is_expired(fetched_at: u64) -> bool {
+    now_unix().saturating_sub(fetched_at) > CACHE_TTL_SECS
+}
+
+fn now_unix() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(Duration::from_secs(0))
+        .as_secs()
 }
 
 fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
@@ -485,4 +701,25 @@ fn set_executable(path: &Path) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn installed_plugin_names() -> Result<Vec<String>, String> {
+    let dir = plugin_dir_path()?;
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut names = Vec::new();
+    for entry in fs::read_dir(&dir).map_err(|err| format!("Failed to read plugins: {err}"))? {
+        let entry = entry.map_err(|err| format!("Failed to read plugins: {err}"))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if let Some(stripped) = name.strip_prefix("tinfo-") {
+            let stripped = stripped.strip_suffix(".exe").unwrap_or(stripped);
+            names.push(stripped.to_string());
+        }
+    }
+
+    names.sort();
+    names.dedup();
+    Ok(names)
 }
