@@ -41,18 +41,30 @@ impl WeatherClient {
     }
 
     pub fn detect_city_by_ip(&self) -> Option<String> {
+        self.detect_city_by_ip_detailed().ok()
+    }
+
+    pub fn detect_city_by_ip_detailed(&self) -> Result<String, String> {
         let location: IpApiLocation = self
             .client
             .get("https://ipapi.co/json/")
             .send()
-            .ok()?
+            .map_err(|err| format!("IP detection request failed: {err}"))?
             .error_for_status()
-            .ok()?
+            .map_err(|err| format!("IP detection request failed: {err}"))?
             .json()
-            .ok()?;
+            .map_err(|err| format!("IP detection response parse failed: {err}"))?;
 
-        let city = location.city?.trim().to_string();
-        if city.is_empty() { None } else { Some(city) }
+        let city = location
+            .city
+            .ok_or_else(|| "IP detection did not return a city.".to_string())?
+            .trim()
+            .to_string();
+        if city.is_empty() {
+            Err("IP detection did not return a city.".to_string())
+        } else {
+            Ok(city)
+        }
     }
 
     pub fn current_weather(&self, city: &str, config: &Config) -> Result<WeatherReport, String> {

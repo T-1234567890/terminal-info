@@ -21,8 +21,8 @@ use crate::config_menu::show_config_menu;
 use crate::dashboard::show_dashboard;
 use crate::output::{OutputMode, set_output_mode};
 use crate::plugin::{
-    install_plugin, list_plugins, remove_plugin, run_diagnostic_plugins, run_plugin,
-    search_plugins, update_plugin, upgrade_all_plugins,
+    init_plugin_template, install_plugin, list_plugins, remove_plugin, run_diagnostic_plugins,
+    run_plugin, search_plugins, update_plugin, upgrade_all_plugins,
 };
 use crate::weather::{ForecastReport, WeatherClient, WeatherReport};
 
@@ -153,6 +153,8 @@ enum PluginCommand {
     List,
     /// Search for plugins
     Search,
+    /// Generate a new plugin template
+    Init { name: String },
     /// Install a plugin
     Install { name: String },
     /// Update a plugin
@@ -350,6 +352,7 @@ fn handle_plugin(command: PluginCommand) -> Result<(), String> {
     match command {
         PluginCommand::List => list_plugins(),
         PluginCommand::Search => search_plugins(),
+        PluginCommand::Init { name } => init_plugin_template(&name),
         PluginCommand::Install { name } => install_plugin(&name),
         PluginCommand::Update { name } => update_plugin(&name),
         PluginCommand::UpgradeAll => upgrade_all_plugins(),

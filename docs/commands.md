@@ -133,6 +133,7 @@ tinfo completion fish
 ```bash
 tinfo plugin list
 tinfo plugin search
+tinfo plugin init <name>
 tinfo plugin install <name>
 tinfo plugin update <name>
 tinfo plugin upgrade-all

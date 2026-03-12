@@ -17,7 +17,7 @@ pub fn show_dashboard(config: &Config) -> Result<(), String> {
                 "location={} time={} weather={} net={} cpu={} mem={}",
                 location,
                 snapshot.time,
-                snapshot.weather.as_deref().unwrap_or("unavailable"),
+                snapshot.weather.line,
                 snapshot.network,
                 snapshot.cpu,
                 snapshot.memory
@@ -26,10 +26,13 @@ pub fn show_dashboard(config: &Config) -> Result<(), String> {
         OutputMode::Plain => {
             println!("{title}");
             println!("Location: {location}");
-            println!(
-                "Weather: {}",
-                snapshot.weather.as_deref().unwrap_or("unavailable")
-            );
+            println!("Weather: {}", snapshot.weather.line);
+            if let Some(city) = &snapshot.weather.detected_location {
+                println!("Detected location: {city}");
+            }
+            if let Some(hint) = &snapshot.weather.hint {
+                println!("{hint}");
+            }
             println!("Time: {}", snapshot.time);
             println!("Network: {}", snapshot.network);
             println!("CPU: {}", snapshot.cpu);
@@ -41,10 +44,13 @@ pub fn show_dashboard(config: &Config) -> Result<(), String> {
             println!("| {title} |");
             println!("{border}");
             println!("Location: {location}");
-            println!(
-                "Weather: {}",
-                snapshot.weather.as_deref().unwrap_or("unavailable")
-            );
+            println!("Weather: {}", snapshot.weather.line);
+            if let Some(city) = &snapshot.weather.detected_location {
+                println!("Detected location: {city}");
+            }
+            if let Some(hint) = &snapshot.weather.hint {
+                println!("{hint}");
+            }
             println!("Time: {}", snapshot.time);
             println!("Network: {}", snapshot.network);
             println!("CPU: {}", snapshot.cpu);

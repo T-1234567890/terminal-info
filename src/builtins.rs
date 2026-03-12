@@ -17,10 +17,16 @@ const DEFAULT_PING_HOSTS: [&str; 3] = ["google.com", "cloudflare.com", "github.c
 
 pub struct DashboardSnapshot {
     pub time: String,
-    pub weather: Option<String>,
+    pub weather: DashboardWeather,
     pub network: String,
     pub cpu: String,
     pub memory: String,
+}
+
+pub struct DashboardWeather {
+    pub line: String,
+    pub hint: Option<String>,
+    pub detected_location: Option<String>,
 }
 
 pub fn build_dashboard_snapshot(config: &Config) -> DashboardSnapshot {
@@ -227,17 +233,88 @@ fn gather_network_info() -> NetworkInfo {
     }
 }
 
-fn dashboard_weather(config: &Config) -> Option<String> {
-    let city = config.configured_location()?;
+fn dashboard_weather(config: &Config) -> DashboardWeather {
     let client = WeatherClient::new();
-    let report = client.current_weather(city, config).ok()?;
 
-    Some(format!(
-        "{}, {:.1}{}",
-        report.summary,
-        report.temperature,
-        config.units.temperature_symbol()
-    ))
+    if let Some(city) = config.configured_location() {
+        return match client.current_weather(city, config) {
+            Ok(report) => DashboardWeather {
+                line: format!(
+                    "{}, {:.1}{}",
+                    report.summary,
+                    report.temperature,
+                    config.units.temperature_symbol()
+                ),
+                hint: None,
+                detected_location: None,
+            },
+            Err(err) => DashboardWeather {
+                line: format!("unavailable ({})", weather_error_reason(&err)),
+                hint: None,
+                detected_location: None,
+            },
+        };
+    }
+
+    match client.detect_city_by_ip_detailed() {
+        Ok(city) => match client.current_weather(&city, config) {
+            Ok(report) => DashboardWeather {
+                line: format!(
+                    "{}, {:.1}{}",
+                    report.summary,
+                    report.temperature,
+                    config.units.temperature_symbol()
+                ),
+                hint: Some(format!("Tip: run\ntinfo config location {city}")),
+                detected_location: Some(city),
+            },
+            Err(err) => DashboardWeather {
+                line: format!("unavailable ({})", weather_error_reason(&err)),
+                hint: None,
+                detected_location: Some(city),
+            },
+        },
+        Err(err) => {
+            if config.uses_auto_location() {
+                DashboardWeather {
+                    line: "unavailable (IP detection failed)".to_string(),
+                    hint: None,
+                    detected_location: None,
+                }
+            } else if is_network_error(&err) {
+                DashboardWeather {
+                    line: "unavailable (IP detection failed)".to_string(),
+                    hint: None,
+                    detected_location: None,
+                }
+            } else {
+                DashboardWeather {
+                    line: "unavailable (location not configured)".to_string(),
+                    hint: Some("Tip: run\ntinfo config location <city>".to_string()),
+                    detected_location: None,
+                }
+            }
+        }
+    }
+}
+
+fn weather_error_reason(err: &str) -> &'static str {
+    if is_network_error(err) {
+        "network error"
+    } else {
+        "weather API error"
+    }
+}
+
+fn is_network_error(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("dns")
+        || lower.contains("connect")
+        || lower.contains("connection")
+        || lower.contains("network")
+        || lower.contains("timed out")
+        || lower.contains("timeout")
+        || lower.contains("request failed")
 }
 
 fn tcp_ping_latency(host: &str) -> Result<f64, String> {
