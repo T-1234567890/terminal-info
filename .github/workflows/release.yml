@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,6 +13,7 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+
     strategy:
       fail-fast: false
       matrix:
@@ -20,10 +22,12 @@ jobs:
             target: x86_64-unknown-linux-gnu
             archive_name: tinfo-x86_64-unknown-linux-gnu.tar.gz
             binary_name: tinfo
-          - os: macos-13
+
+          - os: macos-latest
             target: x86_64-apple-darwin
             archive_name: tinfo-x86_64-apple-darwin.tar.gz
             binary_name: tinfo
+
           - os: windows-2022
             target: x86_64-pc-windows-msvc
             archive_name: tinfo-x86_64-pc-windows-msvc.zip
@@ -60,3 +64,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.archive_name }}
+          generate_release_notes: true
