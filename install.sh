@@ -12,20 +12,31 @@ detect_target() {
   os="$(uname -s)"
   arch="$(uname -m)"
 
-  case "$arch" in
-    x86_64|amd64) ;;
-    *)
-      echo "Unsupported architecture: $arch" >&2
-      exit 1
-      ;;
-  esac
-
   case "$os" in
     Linux)
-      echo "x86_64-unknown-linux-gnu"
+      case "$arch" in
+        x86_64|amd64)
+          echo "x86_64-unknown-linux-gnu"
+          ;;
+        *)
+          echo "Unsupported architecture: $arch" >&2
+          exit 1
+          ;;
+      esac
       ;;
     Darwin)
-      echo "x86_64-apple-darwin"
+      case "$arch" in
+        x86_64)
+          echo "x86_64-apple-darwin"
+          ;;
+        arm64|aarch64)
+          echo "aarch64-apple-darwin"
+          ;;
+        *)
+          echo "Unsupported architecture: $arch" >&2
+          exit 1
+          ;;
+      esac
       ;;
     *)
       echo "Unsupported operating system: $os" >&2
