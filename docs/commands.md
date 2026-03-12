@@ -2,171 +2,145 @@
 
 This document describes the current `tinfo` command set.
 
-## Top Level
+## Dashboard
 
 ```bash
-tinfo weather
-tinfo config
-tinfo update
+tinfo
 ```
 
-Top-level help groups the CLI as:
+Shows the default dashboard.
 
-- `weather` for weather-related commands
-- `config` for configuration settings
-- `update` for self-updating the installed binary
-
-## `tinfo weather now`
-
-Show current weather.
-
-Usage:
+## Weather
 
 ```bash
 tinfo weather now
 tinfo weather now <city>
-```
-
-Resolution order:
-
-1. Use the provided `<city>` argument
-2. Use the configured default location
-3. Attempt IP-based location detection
-
-If all methods fail, `tinfo` prints:
-
-```text
-Unable to detect location. Use `tinfo weather location <city>` to set a default location.
-```
-
-Examples:
-
-```bash
-tinfo weather now
-tinfo weather now tokyo
-tinfo weather now shenzhen
-```
-
-## `tinfo weather forecast`
-
-Show a short forecast.
-
-Usage:
-
-```bash
 tinfo weather forecast
 tinfo weather forecast <city>
-```
-
-Behavior:
-
-- Uses the provided city when given
-- Otherwise uses the configured default location
-- Does not currently fall back to IP lookup
-
-Examples:
-
-```bash
-tinfo weather forecast
-tinfo weather forecast london
-```
-
-## `tinfo weather location`
-
-Show or set the default location.
-
-Usage:
-
-```bash
 tinfo weather location
 tinfo weather location <city>
 ```
 
-Examples:
+## Ping
 
 ```bash
-tinfo weather location
-tinfo weather location tokyo
+tinfo ping
+tinfo ping <host>
 ```
 
-## `tinfo config`
+If no host is provided, `tinfo` checks:
 
-Open the interactive configuration menu.
+- `google.com`
+- `cloudflare.com`
+- `github.com`
 
-Usage:
+## Network
+
+```bash
+tinfo network
+```
+
+Displays:
+
+- public IP
+- local IP
+- DNS
+- ISP when available
+
+## System
+
+```bash
+tinfo system
+```
+
+Displays:
+
+- OS
+- CPU
+- memory
+- disk usage
+- uptime
+
+## Time
+
+```bash
+tinfo time
+tinfo time <city>
+```
+
+Without a city, it shows:
+
+- Local
+- Tokyo
+- London
+- New York
+
+## Doctor
+
+```bash
+tinfo doctor
+```
+
+Runs simple diagnostics for:
+
+- internet connectivity
+- DNS
+- disk usage
+- CPU load
+- memory
+
+## Config
 
 ```bash
 tinfo config
-```
-
-Menu actions:
-
-1. Set default location
-2. Use IP location as default
-3. Remove default location
-4. Set units
-5. Show current config
-6. Exit
-
-## `tinfo config api`
-
-Show API provider configuration.
-
-Usage:
-
-```bash
-tinfo config api
-tinfo config api show
-```
-
-## `tinfo config api set`
-
-Set an API provider and API key.
-
-Usage:
-
-```bash
-tinfo config api set openweather YOUR_API_KEY
-```
-
-## `tinfo config units`
-
-Set display units.
-
-Usage:
-
-```bash
+tinfo config location
+tinfo config location <city>
+tinfo config units
 tinfo config units metric
 tinfo config units imperial
+tinfo config api
+tinfo config api show
+tinfo config api set openweather <key>
+tinfo config reset
 ```
 
-Values:
+Configuration is stored in:
 
-- `metric`
-- `imperial`
+```text
+~/.tinfo/config.toml
+```
 
-## `tinfo update`
+## Plugin Management
 
-Download and install the latest released version of `tinfo`.
+```bash
+tinfo plugin list
+tinfo plugin search
+tinfo plugin install <name>
+tinfo plugin remove <name>
+```
 
-Usage:
+`plugin search` reads the local plugin index in `plugins/*.json`.
+`plugin install` downloads the plugin's GitHub release asset and installs it into `~/.tinfo/plugins/`.
+`plugin remove` deletes the installed plugin binary.
+
+## External Plugins
+
+Unknown top-level commands are treated as plugin candidates.
+
+Example:
+
+```bash
+tinfo news tech
+```
+
+Attempts to run:
+
+```bash
+tinfo-news tech
+```
+
+## Update
 
 ```bash
 tinfo update
-```
-
-## Help
-
-Display top-level help:
-
-```bash
-tinfo --help
-```
-
-Display help for a subcommand:
-
-```bash
-tinfo weather --help
-tinfo weather now --help
-tinfo config --help
 ```

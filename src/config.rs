@@ -81,7 +81,7 @@ impl Config {
             return Ok(config);
         }
 
-        serde_json::from_str(&contents)
+        toml::from_str(&contents)
             .map_err(|err| format!("Failed to parse config file {}: {err}", path.display()))
     }
 
@@ -92,11 +92,15 @@ impl Config {
                 .map_err(|err| format!("Failed to create config directory: {err}"))?;
         }
 
-        let json = serde_json::to_string_pretty(self)
+        let toml = toml::to_string_pretty(self)
             .map_err(|err| format!("Failed to serialize config: {err}"))?;
 
-        fs::write(&path, format!("{json}\n"))
+        fs::write(&path, format!("{toml}\n"))
             .map_err(|err| format!("Failed to write config file {}: {err}", path.display()))
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::default();
     }
 
     pub fn provider_label(&self) -> &'static str {
@@ -119,20 +123,13 @@ impl Config {
 
 pub fn config_path() -> Result<PathBuf, String> {
     if let Ok(dir) = env::var("TINFO_CONFIG_DIR") {
-        return Ok(PathBuf::from(dir).join("config.json"));
+        return Ok(PathBuf::from(dir).join("config.toml"));
     }
 
     if let Ok(dir) = env::var("TW_CONFIG_DIR") {
-        return Ok(PathBuf::from(dir).join("config.json"));
+        return Ok(PathBuf::from(dir).join("config.toml"));
     }
 
     let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    let new_path = PathBuf::from(&home).join(".tinfo").join("config.json");
-    let old_path = PathBuf::from(home).join(".tw").join("config.json");
-
-    if !new_path.exists() && old_path.exists() {
-        return Ok(old_path);
-    }
-
-    Ok(new_path)
+    Ok(PathBuf::from(home).join(".tinfo").join("config.toml"))
 }

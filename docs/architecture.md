@@ -3,6 +3,7 @@
 `tinfo` is a small Rust CLI with a deliberately narrow architecture. The current implementation centers on weather features, but the command tree now leaves room for broader terminal information commands over time.
 
 The code is organized around three responsibilities: command parsing, configuration, and weather data retrieval.
+It also now includes a small dashboard module and an external plugin runner.
 
 ## Module Layout
 
@@ -11,6 +12,8 @@ The code is organized around three responsibilities: command parsing, configurat
   - Organizes commands under the `weather` group
   - Dispatches subcommands
   - Owns interactive terminal prompts for `tinfo config`
+  - Calls the dashboard when no command is provided
+  - Routes unknown top-level commands to the plugin system
   - Formats user-facing terminal output
 - `src/config.rs`
   - Resolves the config file path
@@ -23,6 +26,12 @@ The code is organized around three responsibilities: command parsing, configurat
   - Fetches current weather and forecast data
   - Selects between Open-Meteo and OpenWeather
   - Handles IP-based location lookup via `ipapi.co`
+- `src/dashboard.rs`
+  - Renders the default startup dashboard
+  - Displays location, local time, and a short weather summary when available
+- `src/plugin.rs`
+  - Resolves plugin binaries from `PATH` or `~/.tinfo/plugins/`
+  - Executes plugins for unknown top-level commands
 
 ## Command Flow
 
@@ -30,7 +39,7 @@ At startup:
 
 1. `clap` parses the command line.
 2. The config is loaded from `~/.tinfo/config.json` or a compatible legacy config path.
-3. The requested subcommand is executed.
+3. The requested subcommand is executed, the dashboard is shown, or a plugin is launched.
 
 Examples:
 
@@ -44,6 +53,10 @@ Examples:
 - `tinfo config`
   - Enters the interactive configuration menu
   - Saves changes immediately after each action
+- `tinfo`
+  - Shows the dashboard
+- `tinfo news`
+  - Attempts to execute a `tinfo-news` plugin
 
 ## Command Hierarchy
 
@@ -55,6 +68,8 @@ The top-level command tree is intentionally simple:
   - `location`
 - `tinfo config`
 - `tinfo update`
+
+Unknown top-level commands are treated as plugin candidates.
 
 This structure isolates weather-specific behavior under a dedicated command group while keeping global configuration and update workflows at the top level.
 
