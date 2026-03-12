@@ -1,15 +1,15 @@
 # Terminal Info
 
-`tinfo` is a small Rust CLI for useful terminal information. It combines weather, time, network, system diagnostics, and a lightweight plugin ecosystem built around a decentralized GitHub-based index.
+`tinfo` is a lightweight Rust CLI for terminal-friendly system, network, weather, and plugin-driven information.
 
 ## Features
 
-- Dashboard shown when running `tinfo`
-- Built-in weather, network, system, time, and doctor commands
-- TOML configuration at `~/.tinfo/config.toml`
-- External plugin execution for unknown top-level commands
-- GitHub-based plugin installation from a local plugin index
-- Plugin validation workflow for index pull requests
+- Dashboard view when running `tinfo`
+- Weather, time, ping, network, system, and diagnostic commands
+- TOML configuration with profiles in `~/.tinfo/config.toml`
+- Shell completions for `bash`, `zsh`, and `fish`
+- Output modes for scripting and interactive use
+- GitHub-based plugin discovery, install, update, and execution
 
 ## Installation
 
@@ -19,7 +19,7 @@
 curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash
 ```
 
-The install script supports:
+Supported release assets include:
 
 - macOS Intel (`x86_64`)
 - macOS Apple Silicon (`arm64` / `aarch64`)
@@ -48,54 +48,119 @@ tinfo ping
 tinfo network
 tinfo system
 tinfo time
-tinfo doctor
+tinfo diagnostic
 ```
 
 ## Example Commands
 
 ```bash
-tinfo
+tinfo --compact
 tinfo weather now tokyo
-tinfo ping github.com
-tinfo time london
+tinfo weather forecast
+tinfo diagnostic plugins
+tinfo config
+tinfo config units imperial
+tinfo profile list
+tinfo profile use home
+tinfo completion zsh
 tinfo plugin search
 tinfo plugin install news
-tinfo plugin list
 tinfo news tech
 ```
 
-## Dashboard Feature
+## Dashboard
 
-Running `tinfo` with no arguments shows a dashboard with:
+Running `tinfo` with no arguments shows a simple dashboard with:
 
-- location
-- weather
-- time
-- network
-- CPU
-- memory
+- configured location or `unknown`
+- current weather when a usable location is available
+- local time
+- basic network, CPU, and memory summary
 
 See [docs/dashboard.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/dashboard.md).
 
-## Plugin Ecosystem
+## Configuration
 
-`tinfo` uses a decentralized plugin model:
+Configuration is stored in:
 
-- this repository only stores plugin metadata files in `plugins/`
-- plugin authors host their own plugin repositories on GitHub
-- plugin installs fetch binaries from plugin release assets
-
-Plugin metadata example:
-
-```json
-{
-  "name": "news",
-  "description": "News headlines plugin",
-  "repo": "https://github.com/example/tinfo-news",
-  "binary": "tinfo-news",
-  "version": "latest"
-}
+```text
+~/.tinfo/config.toml
 ```
+
+You can configure `tinfo` in three ways:
+
+- `tinfo config` for the interactive menu
+- `tinfo config ...` commands for direct scripting
+- manual edits to `~/.tinfo/config.toml`
+
+Profiles let you switch quickly between named environments:
+
+```toml
+[profile.home]
+location = "shenzhen"
+
+[profile.work]
+location = "tokyo"
+
+[profile.travel]
+location = "auto"
+```
+
+Commands:
+
+```bash
+tinfo profile list
+tinfo profile use travel
+```
+
+See [docs/config.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/config.md).
+
+## Output Modes
+
+Global output flags:
+
+- `--plain` for minimal script-friendly output
+- `--compact` for shorter terminal output
+- `--color` for the default interactive formatting
+
+Examples:
+
+```bash
+tinfo --plain diagnostic
+tinfo --compact weather now
+tinfo --color
+```
+
+## Shell Completions
+
+Generate completions with:
+
+```bash
+tinfo completion bash
+tinfo completion zsh
+tinfo completion fish
+```
+
+See [docs/completions.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/completions.md).
+
+## Diagnostic Command
+
+`tinfo diagnostic` groups health checks for:
+
+- network
+- system
+- plugins
+
+Examples:
+
+```bash
+tinfo diagnostic
+tinfo diagnostic network
+tinfo diagnostic system
+tinfo diagnostic plugins
+```
+
+See [docs/diagnostic.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/diagnostic.md).
 
 ## Plugin System
 
@@ -118,65 +183,18 @@ Search order:
 1. `~/.tinfo/plugins/tinfo-<command>`
 2. `PATH`
 
-## Plugin Installation
-
-Search available plugins from the index:
+Plugin management commands:
 
 ```bash
 tinfo plugin search
-```
-
-Install a plugin from its GitHub release:
-
-```bash
-tinfo plugin install news
-```
-
-List installed plugins:
-
-```bash
+tinfo plugin install <name>
+tinfo plugin update <name>
+tinfo plugin upgrade-all
 tinfo plugin list
+tinfo plugin remove <name>
 ```
 
-Remove a plugin:
-
-```bash
-tinfo plugin remove news
-```
-
-## Plugin Development
-
-Plugins are standalone executables named:
-
-```text
-tinfo-<command>
-```
-
-Example:
-
-```text
-tinfo-news
-```
-
-See [docs/plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md).
-
-## Plugin Submission
-
-To submit a plugin to the index:
-
-1. Create a plugin repository
-2. Publish a GitHub release
-3. Add a metadata JSON file to `plugins/`
-4. Open a pull request
-
-See [docs/plugin-index.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-index.md).
-
-## Documentation
-
-- [docs/commands.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/commands.md)
-- [docs/plugins.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugins.md)
-- [docs/plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md)
-- [docs/plugin-index.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-index.md)
+See [docs/plugins.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugins.md), [docs/plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md), and [docs/plugin-index.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-index.md).
 
 ## License
 

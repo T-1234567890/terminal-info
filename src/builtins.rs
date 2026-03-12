@@ -9,6 +9,8 @@ use serde::Deserialize;
 use sysinfo::{Disks, System};
 
 use crate::config::Config;
+use crate::output::{error_prefix, success_prefix};
+use crate::plugin::run_diagnostic_plugins;
 use crate::weather::WeatherClient;
 
 const DEFAULT_PING_HOSTS: [&str; 3] = ["google.com", "cloudflare.com", "github.com"];
@@ -131,13 +133,40 @@ pub fn show_time(city: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
-pub fn run_doctor() -> Result<(), String> {
-    let internet_ok = tcp_ping_latency("google.com").is_ok();
-    let dns_ok = ("github.com", 80)
+pub fn run_diagnostic_all() -> Result<(), String> {
+    println!("Network");
+    run_diagnostic_network()?;
+    println!();
+    println!("System");
+    run_diagnostic_system()?;
+    println!();
+    println!("Plugins");
+    run_diagnostic_plugins()?;
+    Ok(())
+}
+
+pub fn run_diagnostic_network() -> Result<(), String> {
+    let dns_ok = ("github.com", 443)
         .to_socket_addrs()
         .map(|mut addrs| addrs.next().is_some())
         .unwrap_or(false);
+    print_status(dns_ok, "DNS OK", "DNS resolution failed");
 
+    let http_ok = http_reachable("http://example.com");
+    print_status(http_ok, "HTTP reachable", "HTTP unreachable");
+
+    let tls_ok = http_reachable("https://github.com");
+    print_status(tls_ok, "TLS handshake OK", "TLS handshake failed");
+
+    match tcp_ping_latency("cloudflare.com") {
+        Ok(latency_ms) => println!("{} Latency {:.1} ms", success_prefix(), latency_ms),
+        Err(_) => println!("{} Latency measurement failed", error_prefix()),
+    }
+
+    Ok(())
+}
+
+pub fn run_diagnostic_system() -> Result<(), String> {
     let mut system = System::new_all();
     system.refresh_all();
 
@@ -160,37 +189,21 @@ pub fn run_doctor() -> Result<(), String> {
         0.0
     };
 
-    println!(
-        "Internet connectivity: {}",
-        if internet_ok { "ok" } else { "failed" }
+    print_status(
+        disk_usage_ratio < 0.9,
+        &format!("Disk usage {:.1}%", disk_usage_ratio * 100.0),
+        &format!("Disk usage high {:.1}%", disk_usage_ratio * 100.0),
     );
-    println!("DNS check: {}", if dns_ok { "ok" } else { "failed" });
-    println!("Disk usage: {:.1}%", disk_usage_ratio * 100.0);
-    println!("CPU load: {:.1}%", cpu);
-    println!("Memory: {}", memory_line(&system));
-
-    let mut issues = Vec::new();
-    if !internet_ok {
-        issues.push("internet");
-    }
-    if !dns_ok {
-        issues.push("dns");
-    }
-    if disk_usage_ratio >= 0.9 {
-        issues.push("disk");
-    }
-    if cpu >= 90.0 {
-        issues.push("cpu");
-    }
-    if memory_ratio >= 0.9 {
-        issues.push("memory");
-    }
-
-    if issues.is_empty() {
-        println!("Health summary: healthy");
-    } else {
-        println!("Health summary: warning ({})", issues.join(", "));
-    }
+    print_status(
+        memory_ratio < 0.9,
+        &format!("Memory usage {:.1}%", memory_ratio * 100.0),
+        &format!("Memory usage high {:.1}%", memory_ratio * 100.0),
+    );
+    print_status(
+        cpu < 90.0,
+        &format!("CPU load {:.1}%", cpu),
+        &format!("CPU load high {:.1}%", cpu),
+    );
 
     Ok(())
 }
@@ -215,7 +228,7 @@ fn gather_network_info() -> NetworkInfo {
 }
 
 fn dashboard_weather(config: &Config) -> Option<String> {
-    let city = config.default_city.as_deref()?;
+    let city = config.configured_location()?;
     let client = WeatherClient::new();
     let report = client.current_weather(city, config).ok()?;
 
@@ -357,4 +370,23 @@ fn public_ip_info() -> Result<PublicIpInfo, String> {
         .map_err(|err| err.to_string())?
         .json()
         .map_err(|err| err.to_string())
+}
+
+fn http_reachable(url: &str) -> bool {
+    Client::builder()
+        .connect_timeout(Duration::from_secs(2))
+        .timeout(Duration::from_secs(4))
+        .build()
+        .ok()
+        .and_then(|client| client.get(url).send().ok())
+        .and_then(|response| response.error_for_status().ok())
+        .is_some()
+}
+
+fn print_status(ok: bool, ok_message: &str, err_message: &str) {
+    if ok {
+        println!("{} {ok_message}", success_prefix());
+    } else {
+        println!("{} {err_message}", error_prefix());
+    }
 }

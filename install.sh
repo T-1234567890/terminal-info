@@ -68,12 +68,13 @@ main() {
   require_cmd install
 
   local target archive_url tmp_dir archive_path binary_path
+  tmp_dir=""
+  trap 'if [ -n "${tmp_dir:-}" ]; then rm -rf "$tmp_dir"; fi' EXIT
+
   target="$(detect_target)"
   archive_url="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/${BINARY_NAME}-${target}.tar.gz"
   tmp_dir="$(mktemp -d)"
   archive_path="${tmp_dir}/${BINARY_NAME}-${target}.tar.gz"
-
-  trap 'rm -rf "$tmp_dir"' EXIT
 
   echo "Downloading ${BINARY_NAME} for ${target}..."
   curl -fsSL "$archive_url" -o "$archive_path"

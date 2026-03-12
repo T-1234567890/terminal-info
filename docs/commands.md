@@ -75,19 +75,20 @@ Without a city, it shows:
 - London
 - New York
 
-## Doctor
+## Diagnostic
 
 ```bash
-tinfo doctor
+tinfo diagnostic
+tinfo diagnostic network
+tinfo diagnostic system
+tinfo diagnostic plugins
 ```
 
-Runs simple diagnostics for:
+Runs grouped diagnostics for:
 
-- internet connectivity
-- DNS
-- disk usage
-- CPU load
-- memory
+- network checks
+- system checks
+- plugin checks
 
 ## Config
 
@@ -110,12 +111,31 @@ Configuration is stored in:
 ~/.tinfo/config.toml
 ```
 
+## Profiles
+
+```bash
+tinfo profile list
+tinfo profile use <name>
+```
+
+Profiles are defined in `~/.tinfo/config.toml` under `[profile.<name>]`.
+
+## Completions
+
+```bash
+tinfo completion bash
+tinfo completion zsh
+tinfo completion fish
+```
+
 ## Plugin Management
 
 ```bash
 tinfo plugin list
 tinfo plugin search
 tinfo plugin install <name>
+tinfo plugin update <name>
+tinfo plugin upgrade-all
 tinfo plugin remove <name>
 ```
 

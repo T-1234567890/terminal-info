@@ -2,23 +2,41 @@ mod builtins;
 mod config;
 mod config_menu;
 mod dashboard;
+mod output;
 mod plugin;
 mod weather;
 
 use std::process;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_complete::{Shell, generate};
 
-use crate::builtins::{run_doctor, run_ping, show_network_info, show_system_info, show_time};
+use crate::builtins::{
+    run_diagnostic_all, run_diagnostic_network, run_diagnostic_system, run_ping, show_network_info,
+    show_system_info, show_time,
+};
 use crate::config::{ApiProvider, Config, Units};
 use crate::config_menu::show_config_menu;
 use crate::dashboard::show_dashboard;
-use crate::plugin::{install_plugin, list_plugins, remove_plugin, run_plugin, search_plugins};
+use crate::output::{OutputMode, set_output_mode};
+use crate::plugin::{
+    install_plugin, list_plugins, remove_plugin, run_diagnostic_plugins, run_plugin,
+    search_plugins, update_plugin, upgrade_all_plugins,
+};
 use crate::weather::{ForecastReport, WeatherClient, WeatherReport};
 
 #[derive(Parser, Debug)]
 #[command(name = "tinfo", version, about = "Terminal Info CLI")]
 struct Cli {
+    /// Use minimal output for scripts
+    #[arg(long, conflicts_with_all = ["compact", "color"])]
+    plain: bool,
+    /// Use short one-line output when available
+    #[arg(long, conflicts_with_all = ["plain", "color"])]
+    compact: bool,
+    /// Use interactive terminal formatting
+    #[arg(long, conflicts_with_all = ["plain", "compact"])]
+    color: bool,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -28,7 +46,7 @@ enum Command {
     /// Weather related commands
     Weather {
         #[command(subcommand)]
-        command: WeatherCommand,
+        command: Option<WeatherCommand>,
     },
     /// Test network latency to a host
     Ping {
@@ -44,12 +62,25 @@ enum Command {
         /// Optional city name
         city: Option<String>,
     },
-    /// Run simple diagnostics
-    Doctor,
+    /// Run diagnostics
+    Diagnostic {
+        #[command(subcommand)]
+        command: Option<DiagnosticCommand>,
+    },
     /// Manage configuration
     Config {
         #[command(subcommand)]
         command: Option<ConfigCommand>,
+    },
+    /// Manage configuration profiles
+    Profile {
+        #[command(subcommand)]
+        command: ProfileCommand,
+    },
+    /// Generate shell completions
+    Completion {
+        /// Shell to generate completions for
+        shell: CompletionShell,
     },
     /// Manage plugins
     Plugin {
@@ -100,6 +131,14 @@ enum ConfigCommand {
 }
 
 #[derive(Subcommand, Debug)]
+enum ProfileCommand {
+    /// Use a profile
+    Use { name: String },
+    /// List profiles
+    List,
+}
+
+#[derive(Subcommand, Debug)]
 enum ApiCommand {
     /// Save an API provider and key
     Set { provider: ProviderArg, key: String },
@@ -115,8 +154,29 @@ enum PluginCommand {
     Search,
     /// Install a plugin
     Install { name: String },
+    /// Update a plugin
+    Update { name: String },
+    /// Update all installed plugins
+    UpgradeAll,
     /// Remove a plugin
     Remove { name: String },
+}
+
+#[derive(Subcommand, Debug)]
+enum DiagnosticCommand {
+    /// Run network diagnostics
+    Network,
+    /// Run system diagnostics
+    System,
+    /// Run plugin diagnostics
+    Plugins,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum CompletionShell {
+    Bash,
+    Zsh,
+    Fish,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -132,6 +192,7 @@ enum UnitArg {
 
 fn main() {
     let cli = Cli::parse();
+    set_output_mode(resolve_output_mode(&cli));
     let mut config = match Config::load_or_create() {
         Ok(config) => config,
         Err(err) => {
@@ -146,8 +207,13 @@ fn main() {
         Some(Command::Network) => show_network_info(),
         Some(Command::System) => show_system_info(),
         Some(Command::Time { city }) => show_time(city),
-        Some(Command::Doctor) => run_doctor(),
+        Some(Command::Diagnostic { command }) => handle_diagnostic(command),
         Some(Command::Config { command }) => handle_config(&mut config, command),
+        Some(Command::Profile { command }) => handle_profile(&mut config, command),
+        Some(Command::Completion { shell }) => {
+            print_completions(shell);
+            Ok(())
+        }
         Some(Command::Plugin { command }) => handle_plugin(command),
         Some(Command::Update) => handle_update(),
         Some(Command::External(args)) => handle_external(args),
@@ -160,6 +226,25 @@ fn main() {
     }
 }
 
+fn resolve_output_mode(cli: &Cli) -> OutputMode {
+    if cli.plain {
+        OutputMode::Plain
+    } else if cli.compact {
+        OutputMode::Compact
+    } else {
+        OutputMode::Color
+    }
+}
+
+fn handle_diagnostic(command: Option<DiagnosticCommand>) -> Result<(), String> {
+    match command {
+        Some(DiagnosticCommand::Network) => run_diagnostic_network(),
+        Some(DiagnosticCommand::System) => run_diagnostic_system(),
+        Some(DiagnosticCommand::Plugins) => run_diagnostic_plugins(),
+        None => run_diagnostic_all(),
+    }
+}
+
 fn handle_external(args: Vec<String>) -> Result<(), String> {
     let Some((command, remaining)) = args.split_first() else {
         return Ok(());
@@ -168,11 +253,12 @@ fn handle_external(args: Vec<String>) -> Result<(), String> {
     run_plugin(command, remaining)
 }
 
-fn handle_weather(config: &mut Config, command: WeatherCommand) -> Result<(), String> {
+fn handle_weather(config: &mut Config, command: Option<WeatherCommand>) -> Result<(), String> {
     match command {
-        WeatherCommand::Now { city } => handle_now(config, city),
-        WeatherCommand::Forecast { city } => handle_forecast(config, city),
-        WeatherCommand::Location { city } => handle_location(config, city),
+        Some(WeatherCommand::Now { city }) => handle_now(config, city),
+        Some(WeatherCommand::Forecast { city }) => handle_forecast(config, city),
+        Some(WeatherCommand::Location { city }) => handle_location(config, city),
+        None => handle_now(config, None),
     }
 }
 
@@ -222,11 +308,50 @@ fn handle_config(config: &mut Config, command: Option<ConfigCommand>) -> Result<
     }
 }
 
+fn handle_profile(config: &mut Config, command: ProfileCommand) -> Result<(), String> {
+    match command {
+        ProfileCommand::Use { name } => {
+            config.apply_profile(&name)?;
+            config.save()?;
+            println!("Using profile '{}'.", name);
+            Ok(())
+        }
+        ProfileCommand::List => {
+            if config.profile.is_empty() {
+                println!("No profiles configured.");
+                return Ok(());
+            }
+
+            for name in config.profile.keys() {
+                if config.active_profile.as_deref() == Some(name.as_str()) {
+                    println!("* {name}");
+                } else {
+                    println!("  {name}");
+                }
+            }
+
+            Ok(())
+        }
+    }
+}
+
+fn print_completions(shell: CompletionShell) {
+    let mut command = Cli::command();
+    let mut stdout = std::io::stdout();
+    match shell {
+        CompletionShell::Bash => generate(Shell::Bash, &mut command, "tinfo", &mut stdout),
+        CompletionShell::Zsh => generate(Shell::Zsh, &mut command, "tinfo", &mut stdout),
+        CompletionShell::Fish => generate(Shell::Fish, &mut command, "tinfo", &mut stdout),
+    }
+}
+
 fn handle_plugin(command: PluginCommand) -> Result<(), String> {
     match command {
         PluginCommand::List => list_plugins(),
         PluginCommand::Search => search_plugins(),
         PluginCommand::Install { name } => install_plugin(&name),
+        PluginCommand::Update { name } => update_plugin(&name),
+        PluginCommand::UpgradeAll => upgrade_all_plugins(),
         PluginCommand::Remove { name } => remove_plugin(&name),
     }
 }
@@ -240,8 +365,8 @@ fn handle_now(config: &Config, city: Option<String>) -> Result<(), String> {
 }
 
 fn handle_forecast(config: &Config, city: Option<String>) -> Result<(), String> {
-    let city = resolve_city(config, city)?;
     let client = WeatherClient::new();
+    let city = resolve_city(config, city, &client)?;
     let report = client.forecast(&city, config)?;
     print_forecast_report(&report, config.units);
     Ok(())
@@ -279,11 +404,23 @@ fn handle_update() -> Result<(), String> {
     Ok(())
 }
 
-fn resolve_city(config: &Config, city: Option<String>) -> Result<String, String> {
-    city.or_else(|| config.default_city.clone()).ok_or_else(|| {
-        "No city provided. Use `tinfo config location <city>` to set a default location."
-            .to_string()
-    })
+fn resolve_city(
+    config: &Config,
+    city: Option<String>,
+    client: &WeatherClient,
+) -> Result<String, String> {
+    city.or_else(|| config.configured_location().map(str::to_string))
+        .or_else(|| {
+            if config.uses_auto_location() {
+                client.detect_city_by_ip()
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| {
+            "No city provided. Use `tinfo config location <city>` to set a default location."
+                .to_string()
+        })
 }
 
 fn resolve_city_for_now(
@@ -295,8 +432,8 @@ fn resolve_city_for_now(
         return Ok(city);
     }
 
-    if let Some(city) = config.default_city.clone() {
-        return Ok(city);
+    if let Some(city) = config.configured_location() {
+        return Ok(city.to_string());
     }
 
     client.detect_city_by_ip().ok_or_else(|| {
@@ -306,21 +443,48 @@ fn resolve_city_for_now(
 }
 
 pub(crate) fn print_weather_report(report: &WeatherReport, units: Units) {
-    print_boxed_title(&format!("{} Weather", report.location_name));
-    println!("  {}", report.summary);
-    println!(
-        "  Temperature: {:.1}{}",
-        report.temperature,
-        units.temperature_symbol()
-    );
-    println!(
-        "  Wind: {:.1} {}",
-        report.wind_speed,
-        units.wind_speed_unit()
-    );
-
-    if let Some(humidity) = report.humidity {
-        println!("  Humidity: {humidity}%");
+    match crate::output::output_mode() {
+        OutputMode::Compact => {
+            println!(
+                "{}: {}, {:.1}{}, wind {:.1} {}",
+                report.location_name,
+                report.summary,
+                report.temperature,
+                units.temperature_symbol(),
+                report.wind_speed,
+                units.wind_speed_unit()
+            );
+        }
+        OutputMode::Plain => {
+            println!("{} Weather", report.location_name);
+            println!("Weather: {}", report.summary);
+            println!(
+                "Temperature: {:.1}{}",
+                report.temperature,
+                units.temperature_symbol()
+            );
+            println!("Wind: {:.1} {}", report.wind_speed, units.wind_speed_unit());
+            if let Some(humidity) = report.humidity {
+                println!("Humidity: {humidity}%");
+            }
+        }
+        OutputMode::Color => {
+            print_boxed_title(&format!("{} Weather", report.location_name));
+            println!("  {}", report.summary);
+            println!(
+                "  Temperature: {:.1}{}",
+                report.temperature,
+                units.temperature_symbol()
+            );
+            println!(
+                "  Wind: {:.1} {}",
+                report.wind_speed,
+                units.wind_speed_unit()
+            );
+            if let Some(humidity) = report.humidity {
+                println!("  Humidity: {humidity}%");
+            }
+        }
     }
 }
 
@@ -340,6 +504,13 @@ fn print_forecast_report(report: &ForecastReport, units: Units) {
 }
 
 pub(crate) fn print_boxed_title(title: &str) {
+    if matches!(
+        crate::output::output_mode(),
+        OutputMode::Plain | OutputMode::Compact
+    ) {
+        println!("{title}");
+        return;
+    }
     let inner_width = title.len() + 2;
     let border = format!("+{}+", "-".repeat(inner_width));
     println!("{border}");

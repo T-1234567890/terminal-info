@@ -62,6 +62,6 @@ Reserved names:
 - `network`
 - `system`
 - `time`
-- `doctor`
+- `diagnostic`
 - `config`
 - `plugin`

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -16,6 +17,18 @@ pub enum Units {
     #[default]
     Metric,
     Imperial,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct ProfileConfig {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "location")]
+    pub location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub units: Option<Units>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<ApiProvider>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
 }
 
 impl Units {
@@ -49,6 +62,10 @@ pub struct Config {
     pub api_key: Option<String>,
     #[serde(default)]
     pub units: Units,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_profile: Option<String>,
+    #[serde(default)]
+    pub profile: BTreeMap<String, ProfileConfig>,
     #[serde(
         skip_serializing_if = "Option::is_none",
         rename = "location",
@@ -103,6 +120,28 @@ impl Config {
         *self = Self::default();
     }
 
+    pub fn apply_profile(&mut self, name: &str) -> Result<(), String> {
+        let profile = self
+            .profile
+            .get(name)
+            .cloned()
+            .ok_or_else(|| format!("Profile '{}' not found.", name))?;
+
+        self.active_profile = Some(name.to_string());
+        self.default_city = profile.location;
+        if let Some(units) = profile.units {
+            self.units = units;
+        }
+        if let Some(provider) = profile.provider {
+            self.provider = Some(provider);
+        }
+        if let Some(api_key) = profile.api_key {
+            self.api_key = Some(api_key);
+        }
+
+        Ok(())
+    }
+
     pub fn provider_label(&self) -> &'static str {
         match self.provider {
             Some(ApiProvider::OpenWeather) => "openweather",
@@ -118,6 +157,19 @@ impl Config {
                 format!("{}{}", "*".repeat(key.len() - 4), &key[key.len() - 4..])
             }
         })
+    }
+
+    pub fn configured_location(&self) -> Option<&str> {
+        self.default_city
+            .as_deref()
+            .filter(|city| !city.eq_ignore_ascii_case("auto"))
+    }
+
+    pub fn uses_auto_location(&self) -> bool {
+        self.default_city
+            .as_deref()
+            .map(|city| city.eq_ignore_ascii_case("auto"))
+            .unwrap_or(false)
     }
 }
 

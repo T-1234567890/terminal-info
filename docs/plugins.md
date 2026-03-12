@@ -32,6 +32,18 @@ Users can discover available plugins with:
 tinfo plugin search
 ```
 
+`tinfo plugin search` uses a local metadata cache at:
+
+```text
+~/.tinfo/cache/plugins.json
+```
+
+Cache behavior:
+
+- cache is valid for 24 hours
+- if expired, `tinfo` refreshes from the GitHub registry
+- if offline and cache exists, cached data is used
+
 ## Plugin Installation
 
 Install a plugin from the index:
@@ -46,6 +58,18 @@ This flow:
 2. fetches the plugin's GitHub release metadata
 3. downloads the release asset
 4. installs the binary into `~/.tinfo/plugins/`
+
+Update one installed plugin:
+
+```bash
+tinfo plugin update news
+```
+
+Update all installed plugins:
+
+```bash
+tinfo plugin upgrade-all
+```
 
 Installed plugins can be listed with:
 
@@ -66,6 +90,8 @@ The built-in plugin management commands are:
 ```bash
 tinfo plugin search
 tinfo plugin install <name>
+tinfo plugin update <name>
+tinfo plugin upgrade-all
 tinfo plugin remove <name>
 tinfo plugin list
 ```
