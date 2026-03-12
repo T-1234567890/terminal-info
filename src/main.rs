@@ -6,6 +6,7 @@ mod output;
 mod plugin;
 mod weather;
 
+use std::path::Path;
 use std::process;
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
@@ -389,19 +390,41 @@ fn handle_location(config: &mut Config, city: Option<String>) -> Result<(), Stri
 }
 
 fn handle_update() -> Result<(), String> {
-    let status = self_update::backends::github::Update::configure()
+    let updater = self_update::backends::github::Update::configure()
         .repo_owner("T-1234567890")
         .repo_name("terminal-info")
         .bin_name("tinfo")
         .show_download_progress(true)
         .current_version(self_update::cargo_crate_version!())
         .build()
-        .map_err(|err| format!("Failed to prepare updater: {err}"))?
-        .update()
-        .map_err(|err| format!("Failed to update tinfo: {err}"))?;
+        .map_err(|err| format!("Failed to prepare updater: {err}"))?;
+
+    let current_exe = std::env::current_exe().ok();
+    let status = match updater.update() {
+        Ok(status) => status,
+        Err(err) => {
+            if is_permission_denied(&err.to_string())
+                && current_exe
+                    .as_deref()
+                    .is_some_and(|path| path.starts_with(Path::new("/usr/local/bin")))
+            {
+                println!(
+                    "This installation requires administrator permission. Run: sudo tinfo update"
+                );
+                return Ok(());
+            }
+
+            return Err(format!("Failed to update tinfo: {err}"));
+        }
+    };
 
     println!("Updated tinfo to {}.", status.version());
     Ok(())
+}
+
+fn is_permission_denied(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("permission denied") || lower.contains("os error 13")
 }
 
 fn resolve_city(
