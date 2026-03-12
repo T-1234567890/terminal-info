@@ -1,0 +1,29 @@
+# Rust build artifacts
+/target/
+
+# IDE files
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+
+# Environment files
+.env
+.env.local
+
+# CLI local config
+.tw/
+
+# Binary artifacts
+*.exe
+*.dll
+*.so
+*.dylib
