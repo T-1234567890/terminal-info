@@ -1,6 +1,6 @@
 # APIs
 
-`tw` currently supports one default weather provider, one optional weather provider, and one IP geolocation service.
+`tinfo` currently supports one default weather provider, one optional weather provider, and one IP geolocation service.
 
 ## Open-Meteo
 
@@ -12,7 +12,7 @@ Characteristics:
 - Used automatically when no custom provider is configured
 - Suitable for a zero-setup CLI experience
 
-Current usage in `tw`:
+Current usage in `tinfo`:
 
 - Geocoding city names
 - Current weather
@@ -30,12 +30,12 @@ OpenWeather is an optional provider.
 Characteristics:
 
 - Requires an API key
-- Used only when configured in `~/.tw/config.json`
+- Used only when configured in `~/.tinfo/config.json`
 
 Configure it with:
 
 ```bash
-tw config api set openweather YOUR_API_KEY
+tinfo config api set openweather YOUR_API_KEY
 ```
 
 Endpoints used:
@@ -45,16 +45,16 @@ Endpoints used:
 
 ## IP Geolocation
 
-For automatic location detection, `tw` uses:
+For automatic location detection, `tinfo` uses:
 
 - `https://ipapi.co/json/`
 
-This service is only used to infer the city for `tw now` when:
+This service is only used to infer the city for `tinfo weather now` when:
 
 1. no city argument is provided
 2. no saved default location exists
 
-If the request fails, times out, or returns no usable city, `tw` falls back to a clear manual-configuration message.
+If the request fails, times out, or returns no usable city, `tinfo` falls back to a clear manual-configuration message.
 
 ## Provider Selection Rules
 

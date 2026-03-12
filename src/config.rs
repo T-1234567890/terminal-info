@@ -118,10 +118,21 @@ impl Config {
 }
 
 pub fn config_path() -> Result<PathBuf, String> {
+    if let Ok(dir) = env::var("TINFO_CONFIG_DIR") {
+        return Ok(PathBuf::from(dir).join("config.json"));
+    }
+
     if let Ok(dir) = env::var("TW_CONFIG_DIR") {
         return Ok(PathBuf::from(dir).join("config.json"));
     }
 
     let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    Ok(PathBuf::from(home).join(".tw").join("config.json"))
+    let new_path = PathBuf::from(&home).join(".tinfo").join("config.json");
+    let old_path = PathBuf::from(home).join(".tw").join("config.json");
+
+    if !new_path.exists() && old_path.exists() {
+        return Ok(old_path);
+    }
+
+    Ok(new_path)
 }

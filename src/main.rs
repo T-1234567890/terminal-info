@@ -10,7 +10,7 @@ use crate::config::{ApiProvider, Config, Units};
 use crate::weather::{ForecastReport, WeatherClient, WeatherReport};
 
 #[derive(Parser, Debug)]
-#[command(name = "tw", version, about = "Terminal Weather CLI")]
+#[command(name = "tinfo", version, about = "Terminal Info CLI")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -18,6 +18,22 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
+    /// Weather related commands
+    Weather {
+        #[command(subcommand)]
+        command: WeatherCommand,
+    },
+    /// Manage provider and unit configuration
+    Config {
+        #[command(subcommand)]
+        command: Option<ConfigCommand>,
+    },
+    /// Download and install the latest released version of tinfo
+    Update,
+}
+
+#[derive(Subcommand, Debug)]
+enum WeatherCommand {
     /// Show current weather for the configured location or a city
     Now {
         /// City name, such as Tokyo or London
@@ -32,11 +48,6 @@ enum Command {
     Location {
         /// City name to store as the default location
         city: Option<String>,
-    },
-    /// Manage provider and unit configuration
-    Config {
-        #[command(subcommand)]
-        command: Option<ConfigCommand>,
     },
 }
 
@@ -81,10 +92,9 @@ fn main() {
     };
 
     let result = match cli.command {
-        Some(Command::Now { city }) => handle_now(&config, city),
-        Some(Command::Forecast { city }) => handle_forecast(&config, city),
-        Some(Command::Location { city }) => handle_location(&mut config, city),
+        Some(Command::Weather { command }) => handle_weather(&mut config, command),
         Some(Command::Config { command }) => handle_config(&mut config, command),
+        Some(Command::Update) => handle_update(),
         None => {
             println!("{}", Cli::command().render_help());
             Ok(())
@@ -94,6 +104,14 @@ fn main() {
     if let Err(err) = result {
         eprintln!("{err}");
         process::exit(1);
+    }
+}
+
+fn handle_weather(config: &mut Config, command: WeatherCommand) -> Result<(), String> {
+    match command {
+        WeatherCommand::Now { city } => handle_now(config, city),
+        WeatherCommand::Forecast { city } => handle_forecast(config, city),
+        WeatherCommand::Location { city } => handle_location(config, city),
     }
 }
 
@@ -156,9 +174,26 @@ fn handle_config(config: &mut Config, command: Option<ConfigCommand>) -> Result<
     Ok(())
 }
 
+fn handle_update() -> Result<(), String> {
+    let status = self_update::backends::github::Update::configure()
+        .repo_owner("T-1234567890")
+        .repo_name("terminal-info")
+        .bin_name("tinfo")
+        .show_download_progress(true)
+        .current_version(self_update::cargo_crate_version!())
+        .build()
+        .map_err(|err| format!("Failed to prepare updater: {err}"))?
+        .update()
+        .map_err(|err| format!("Failed to update tinfo: {err}"))?;
+
+    println!("Updated tinfo to {}.", status.version());
+    Ok(())
+}
+
 fn resolve_city(config: &Config, city: Option<String>) -> Result<String, String> {
     city.or_else(|| config.default_city.clone()).ok_or_else(|| {
-        "No city provided. Use `tw location <city>` to set a default location.".to_string()
+        "No city provided. Use `tinfo weather location <city>` to set a default location."
+            .to_string()
     })
 }
 
@@ -176,7 +211,8 @@ fn resolve_city_for_now(
     }
 
     client.detect_city_by_ip().ok_or_else(|| {
-        "Unable to detect location. Use `tw location <city>` to set a default location.".to_string()
+        "Unable to detect location. Use `tinfo weather location <city>` to set a default location."
+            .to_string()
     })
 }
 
@@ -250,7 +286,7 @@ fn print_api_config(config: &Config) {
 fn run_config_menu(config: &mut Config) -> Result<(), String> {
     loop {
         println!();
-        println!("Terminal Weather Configuration");
+        println!("Terminal Info Configuration");
         println!();
         println!("1. Set default location");
         println!("2. Use IP location as default");
@@ -293,7 +329,9 @@ fn set_default_location(config: &mut Config) -> Result<(), String> {
 fn set_ip_location(config: &mut Config) -> Result<(), String> {
     let client = WeatherClient::new();
     let Some(city) = client.detect_city_by_ip() else {
-        println!("Unable to detect location. Use `tw location <city>` to set a default location.");
+        println!(
+            "Unable to detect location. Use `tinfo weather location <city>` to set a default location."
+        );
         return Ok(());
     };
 
