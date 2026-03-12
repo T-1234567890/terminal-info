@@ -1,16 +1,30 @@
 # Commands
 
-This document describes the current `tw` command set.
+This document describes the current `tinfo` command set.
 
-## `tw now`
+## Top Level
+
+```bash
+tinfo weather
+tinfo config
+tinfo update
+```
+
+Top-level help groups the CLI as:
+
+- `weather` for weather-related commands
+- `config` for configuration settings
+- `update` for self-updating the installed binary
+
+## `tinfo weather now`
 
 Show current weather.
 
 Usage:
 
 ```bash
-tw now
-tw now <city>
+tinfo weather now
+tinfo weather now <city>
 ```
 
 Resolution order:
@@ -19,29 +33,29 @@ Resolution order:
 2. Use the configured default location
 3. Attempt IP-based location detection
 
-If all methods fail, `tw` prints:
+If all methods fail, `tinfo` prints:
 
 ```text
-Unable to detect location. Use `tw location <city>` to set a default location.
+Unable to detect location. Use `tinfo weather location <city>` to set a default location.
 ```
 
 Examples:
 
 ```bash
-tw now
-tw now tokyo
-tw now shenzhen
+tinfo weather now
+tinfo weather now tokyo
+tinfo weather now shenzhen
 ```
 
-## `tw forecast`
+## `tinfo weather forecast`
 
 Show a short forecast.
 
 Usage:
 
 ```bash
-tw forecast
-tw forecast <city>
+tinfo weather forecast
+tinfo weather forecast <city>
 ```
 
 Behavior:
@@ -53,36 +67,36 @@ Behavior:
 Examples:
 
 ```bash
-tw forecast
-tw forecast london
+tinfo weather forecast
+tinfo weather forecast london
 ```
 
-## `tw location`
+## `tinfo weather location`
 
 Show or set the default location.
 
 Usage:
 
 ```bash
-tw location
-tw location <city>
+tinfo weather location
+tinfo weather location <city>
 ```
 
 Examples:
 
 ```bash
-tw location
-tw location tokyo
+tinfo weather location
+tinfo weather location tokyo
 ```
 
-## `tw config`
+## `tinfo config`
 
 Open the interactive configuration menu.
 
 Usage:
 
 ```bash
-tw config
+tinfo config
 ```
 
 Menu actions:
@@ -94,43 +108,36 @@ Menu actions:
 5. Show current config
 6. Exit
 
-## `tw config api`
+## `tinfo config api`
 
 Show API provider configuration.
 
 Usage:
 
 ```bash
-tw config api
-tw config api show
+tinfo config api
+tinfo config api show
 ```
 
-Examples:
-
-```bash
-tw config api
-tw config api show
-```
-
-## `tw config api set`
+## `tinfo config api set`
 
 Set an API provider and API key.
 
 Usage:
 
 ```bash
-tw config api set openweather YOUR_API_KEY
+tinfo config api set openweather YOUR_API_KEY
 ```
 
-## `tw config units`
+## `tinfo config units`
 
 Set display units.
 
 Usage:
 
 ```bash
-tw config units metric
-tw config units imperial
+tinfo config units metric
+tinfo config units imperial
 ```
 
 Values:
@@ -138,18 +145,28 @@ Values:
 - `metric`
 - `imperial`
 
+## `tinfo update`
+
+Download and install the latest released version of `tinfo`.
+
+Usage:
+
+```bash
+tinfo update
+```
+
 ## Help
 
 Display top-level help:
 
 ```bash
-tw --help
+tinfo --help
 ```
 
 Display help for a subcommand:
 
 ```bash
-tw now --help
-tw forecast --help
-tw config --help
+tinfo weather --help
+tinfo weather now --help
+tinfo config --help
 ```

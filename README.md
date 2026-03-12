@@ -1,51 +1,63 @@
-# Terminal Weather CLI
+# Terminal Info CLI
 
-`tw` is a terminal weather CLI written in Rust. It provides current weather and short forecasts with a small command surface, plain terminal output, and a lightweight local configuration file.
+`tinfo` is a terminal-first Rust CLI for weather and related local terminal information workflows. The current implementation focuses on weather lookups with a small command surface, plain output, and lightweight local configuration.
 
-By default, `tw` uses Open-Meteo, which does not require an API key. Users can optionally configure an OpenWeather API key and provider selection in their local config.
+By default, `tinfo` uses Open-Meteo, which does not require an API key. Users can optionally configure an OpenWeather API key and provider selection in their local config.
 
 ## Features
 
 - Current weather in the terminal
 - Short forecast output
-- Automatic location detection by IP for `tw now`
+- Automatic location detection by IP for `tinfo weather now`
 - Manual location configuration
 - Interactive configuration menu
-- Config stored in `~/.tw/config.json`
+- Config stored in `~/.tinfo/config.json`
 - Optional API key support for OpenWeather
 - Cross-platform CLI with standard stdin/stdout behavior
 
 ## Installation
 
-### Build from source
+### Option 1 - Install script
+
+Install the latest release binary:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash
+```
+
+### Option 2 - Build from source
 
 Requirements:
 
 - Rust toolchain
 - Cargo
 
-Clone the repository and build:
+Clone and build:
 
 ```bash
+git clone https://github.com/T-1234567890/terminal-info
+cd terminal-info
 cargo build --release
-```
-
-Run directly from the project:
-
-```bash
-cargo run -- now tokyo
 ```
 
 The compiled binary will be available at:
 
 ```bash
-target/release/tw
+target/release/tinfo
 ```
 
-You can also install it into Cargo's bin directory:
+### Option 3 - Cargo install
 
 ```bash
-cargo install --path .
+cargo install tinfo
+```
+
+## Updating
+
+Update to the latest GitHub release:
+
+```bash
+tinfo update
 ```
 
 ## Quick Start
@@ -53,31 +65,31 @@ cargo install --path .
 Show current weather for a city:
 
 ```bash
-tw now tokyo
+tinfo weather now tokyo
 ```
 
 Show current weather using your saved default location:
 
 ```bash
-tw now
+tinfo weather now
 ```
 
 Show a forecast:
 
 ```bash
-tw forecast london
+tinfo weather forecast london
 ```
 
 Set a default location:
 
 ```bash
-tw location tokyo
+tinfo weather location tokyo
 ```
 
 Open the interactive config menu:
 
 ```bash
-tw config
+tinfo config
 ```
 
 ## Commands
@@ -85,19 +97,21 @@ tw config
 Core commands:
 
 ```bash
-tw now
-tw now <city>
+tinfo weather now
+tinfo weather now <city>
 
-tw forecast
-tw forecast <city>
+tinfo weather forecast
+tinfo weather forecast <city>
 
-tw location
-tw location <city>
+tinfo weather location
+tinfo weather location <city>
 
-tw config
-tw config api
-tw config units metric
-tw config units imperial
+tinfo config
+tinfo config api
+tinfo config units metric
+tinfo config units imperial
+
+tinfo update
 ```
 
 See [docs/commands.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/commands.md) for the full command reference.
@@ -105,6 +119,17 @@ See [docs/commands.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal
 ## Example Output
 
 ASCII example:
+
+```text
+╭────────────────────╮
+│  ☀ Tokyo Weather   │
+├────────────────────┤
+│ Temp: 27°C         │
+│ Wind: 3 m/s        │
+╰────────────────────╯
+```
+
+Current implementation output is intentionally simple and terminal-friendly, for example:
 
 ```text
 +-----------------------------+
@@ -118,10 +143,10 @@ ASCII example:
 
 ## Configuration
 
-`tw` stores user settings in:
+`tinfo` stores user settings in:
 
 ```text
-~/.tw/config.json
+~/.tinfo/config.json
 ```
 
 The config directory and file are created automatically when needed.
@@ -148,8 +173,8 @@ When an API provider and key are configured, the file may also include:
 
 Configuration can be managed in two ways:
 
-- Interactive menu via `tw config`
-- Direct commands such as `tw location tokyo` or `tw config units imperial`
+- Interactive menu via `tinfo config`
+- Direct commands such as `tinfo weather location tokyo` or `tinfo config units imperial`
 
 See [docs/config.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/config.md) for details.
 
@@ -168,10 +193,10 @@ See [docs/config.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%2
 - Can be configured with:
 
 ```bash
-tw config api set openweather YOUR_API_KEY
+tinfo config api set openweather YOUR_API_KEY
 ```
 
-`tw now` also supports IP-based location detection using:
+`tinfo weather now` also supports IP-based location detection using:
 
 - `https://ipapi.co/json/`
 
@@ -196,5 +221,3 @@ The project idea was inspired by [terminal-weather](https://github.com/Vincent44
 ## License
 
 This project is licensed under the Apache License 2.0.
-
-See the Apache 2.0 license text in your repository license file if one is added separately.
