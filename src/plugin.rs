@@ -44,6 +44,7 @@ pub struct PluginMetadata {
 
 #[derive(Deserialize)]
 struct GithubRelease {
+    tag_name: String,
     assets: Vec<GithubAsset>,
 }
 
@@ -65,6 +66,30 @@ struct GithubContentItem {
 struct PluginCache {
     fetched_at: u64,
     plugins: Vec<PluginMetadata>,
+}
+
+#[derive(Serialize)]
+struct PluginManifest {
+    plugin: PluginSection,
+    command: CommandSection,
+    compatibility: CompatibilitySection,
+}
+
+#[derive(Serialize)]
+struct PluginSection {
+    name: String,
+    version: String,
+    description: String,
+}
+
+#[derive(Serialize)]
+struct CommandSection {
+    name: String,
+}
+
+#[derive(Serialize)]
+struct CompatibilitySection {
+    terminal_info: String,
 }
 
 pub fn run_plugin(command: &str, args: &[String]) -> Result<(), String> {
@@ -144,43 +169,72 @@ pub fn upgrade_all_plugins() -> Result<(), String> {
 }
 
 pub fn remove_plugin(name: &str) -> Result<(), String> {
-    let plugin = load_plugin_by_name(name)?;
-    let path = plugin_dir_path()?.join(binary_filename(&plugin.binary));
-    if !path.exists() {
+    let plugin_home = plugin_home_path(name)?;
+    let legacy_binary = plugin_dir_path()?.join(binary_filename(&format!("tinfo-{name}")));
+
+    if plugin_home.exists() {
+        fs::remove_dir_all(&plugin_home)
+            .map_err(|err| format!("Failed to remove plugin '{}': {err}", name))?;
+    } else if legacy_binary.exists() {
+        fs::remove_file(&legacy_binary)
+            .map_err(|err| format!("Failed to remove plugin '{}': {err}", name))?;
+    } else {
         return Err(format!("Plugin '{}' is not installed.", name));
     }
 
-    fs::remove_file(&path).map_err(|err| format!("Failed to remove plugin '{}': {err}", name))?;
     println!("Removed plugin '{}'.", name);
     Ok(())
 }
 
 pub fn list_plugins() -> Result<(), String> {
-    let dir = plugin_dir_path()?;
-    if !dir.exists() {
-        println!("No plugins installed.");
-        return Ok(());
-    }
-
-    let mut entries = Vec::new();
-    for entry in fs::read_dir(&dir).map_err(|err| format!("Failed to read plugins: {err}"))? {
-        let entry = entry.map_err(|err| format!("Failed to read plugins: {err}"))?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with("tinfo-") {
-            entries.push(name);
-        }
-    }
-
+    let entries = installed_plugin_names()?;
     if entries.is_empty() {
         println!("No plugins installed.");
         return Ok(());
     }
 
-    entries.sort();
     for entry in entries {
         println!("{entry}");
     }
 
+    Ok(())
+}
+
+pub fn init_plugin_template(name: &str) -> Result<(), String> {
+    validate_plugin_name(name)?;
+
+    let directory = env::current_dir()
+        .map_err(|err| format!("Failed to read current directory: {err}"))?
+        .join(format!("tinfo-{name}"));
+
+    if directory.exists() {
+        return Err(format!(
+            "Target directory '{}' already exists.",
+            directory.display()
+        ));
+    }
+
+    fs::create_dir_all(directory.join("src"))
+        .map_err(|err| format!("Failed to create plugin template: {err}"))?;
+
+    fs::write(
+        directory.join("plugin.toml"),
+        plugin_manifest_template(name),
+    )
+    .map_err(|err| format!("Failed to write plugin.toml: {err}"))?;
+    fs::write(directory.join("Cargo.toml"), cargo_template(name))
+        .map_err(|err| format!("Failed to write Cargo.toml: {err}"))?;
+    fs::write(directory.join("src").join("main.rs"), main_template(name))
+        .map_err(|err| format!("Failed to write src/main.rs: {err}"))?;
+    fs::write(directory.join("README.md"), readme_template(name))
+        .map_err(|err| format!("Failed to write README.md: {err}"))?;
+
+    println!("Created plugin template at {}.", directory.display());
+    println!("Next steps:");
+    println!("  cd {}", directory.display());
+    println!("  cargo run -- --help");
+    println!("  cargo build --release");
+    println!("  ./target/release/tinfo-{name}");
     Ok(())
 }
 
@@ -202,10 +256,13 @@ pub fn run_diagnostic_plugins() -> Result<(), String> {
     }
 
     for name in installed {
-        let binary_path = dir.join(binary_filename(&format!("tinfo-{name}")));
+        let binary_path = plugin_home_path(&name)?.join(binary_filename(&format!("tinfo-{name}")));
         if !binary_path.exists() {
-            println!("{} Plugin \"{name}\" missing binary", error_prefix());
-            continue;
+            let legacy_binary = dir.join(binary_filename(&format!("tinfo-{name}")));
+            if !legacy_binary.exists() {
+                println!("{} Plugin \"{name}\" missing binary", error_prefix());
+                continue;
+            }
         }
 
         match index.iter().find(|plugin| plugin.name == name) {
@@ -224,8 +281,8 @@ pub fn run_diagnostic_plugins() -> Result<(), String> {
 }
 
 fn install_or_update_plugin(plugin: &PluginMetadata, action: &str) -> Result<(), String> {
-    let plugin_dir = plugin_dir_path()?;
-    fs::create_dir_all(&plugin_dir)
+    let plugin_home = plugin_home_path(&plugin.name)?;
+    fs::create_dir_all(&plugin_home)
         .map_err(|err| format!("Failed to create plugin directory: {err}"))?;
 
     let (owner, repo) = parse_github_repo(&plugin.repo)?;
@@ -246,9 +303,15 @@ fn install_or_update_plugin(plugin: &PluginMetadata, action: &str) -> Result<(),
         .bytes()
         .map_err(|err| format!("Failed to read plugin asset: {err}"))?;
 
-    let destination = plugin_dir.join(binary_filename(&plugin.binary));
+    let destination = plugin_home.join(binary_filename(&plugin.binary));
     extract_asset(&asset.name, &plugin.binary, bytes.as_ref(), &destination)?;
     set_executable(&destination)?;
+    write_plugin_manifest(plugin, &release.tag_name)?;
+
+    let legacy_path = plugin_dir_path()?.join(binary_filename(&plugin.binary));
+    if legacy_path.exists() && legacy_path != destination {
+        let _ = fs::remove_file(legacy_path);
+    }
 
     println!(
         "{action} plugin '{}' at {}.",
@@ -264,12 +327,18 @@ fn resolve_plugin_binary(binary_name: &str) -> Option<PathBuf> {
 
 fn find_in_plugin_dir(binary_name: &str) -> Option<PathBuf> {
     let dir = plugin_dir_path().ok()?;
-    let candidate = dir.join(binary_name);
+    let name = binary_name.strip_prefix("tinfo-").unwrap_or(binary_name);
+    let candidate = dir.join(name).join(binary_filename(binary_name));
     if is_executable_file(&candidate) {
-        Some(candidate)
-    } else {
-        None
+        return Some(candidate);
     }
+
+    let legacy_candidate = dir.join(binary_filename(binary_name));
+    if is_executable_file(&legacy_candidate) {
+        return Some(legacy_candidate);
+    }
+
+    None
 }
 
 fn find_in_path(binary_name: &str) -> Option<PathBuf> {
@@ -291,7 +360,7 @@ fn plugin_dir_path() -> Result<PathBuf, String> {
     }
 
     let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    Ok(PathBuf::from(home).join(".tinfo").join("plugins"))
+    Ok(PathBuf::from(home).join(".terminal-info").join("plugins"))
 }
 
 fn plugin_cache_path() -> Result<PathBuf, String> {
@@ -470,6 +539,8 @@ fn now_unix() -> u64 {
 }
 
 fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
+    validate_plugin_name(&plugin.name)?;
+
     if plugin.name.trim().is_empty()
         || plugin.description.trim().is_empty()
         || plugin.repo.trim().is_empty()
@@ -501,6 +572,31 @@ fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
         return Err(format!(
             "Plugin '{}' must use a GitHub repository URL.",
             plugin.name
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_plugin_name(name: &str) -> Result<(), String> {
+    if name.trim().is_empty() {
+        return Err("Plugin name cannot be empty.".to_string());
+    }
+
+    if RESERVED_COMMANDS.contains(&name) {
+        return Err(format!(
+            "Plugin '{}' conflicts with a reserved built-in command.",
+            name
+        ));
+    }
+
+    if !name
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
+    {
+        return Err(format!(
+            "Plugin '{}' must use lowercase ASCII letters, digits, or '-'.",
+            name
         ));
     }
 
@@ -712,8 +808,31 @@ fn installed_plugin_names() -> Result<Vec<String>, String> {
     let mut names = Vec::new();
     for entry in fs::read_dir(&dir).map_err(|err| format!("Failed to read plugins: {err}"))? {
         let entry = entry.map_err(|err| format!("Failed to read plugins: {err}"))?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        if let Some(stripped) = name.strip_prefix("tinfo-") {
+        let path = entry.path();
+        let file_name = entry.file_name().to_string_lossy().to_string();
+
+        if path.is_dir() {
+            let manifest_path = path.join("plugin.toml");
+            if manifest_path.exists() {
+                if let Ok(contents) = fs::read_to_string(&manifest_path) {
+                    if let Ok(manifest) = toml::from_str::<toml::Value>(&contents) {
+                        if let Some(name) = manifest
+                            .get("plugin")
+                            .and_then(|section| section.get("name"))
+                            .and_then(|value| value.as_str())
+                        {
+                            names.push(name.to_string());
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            names.push(file_name);
+            continue;
+        }
+
+        if let Some(stripped) = file_name.strip_prefix("tinfo-") {
             let stripped = stripped.strip_suffix(".exe").unwrap_or(stripped);
             names.push(stripped.to_string());
         }
@@ -722,4 +841,108 @@ fn installed_plugin_names() -> Result<Vec<String>, String> {
     names.sort();
     names.dedup();
     Ok(names)
+}
+
+fn plugin_home_path(name: &str) -> Result<PathBuf, String> {
+    Ok(plugin_dir_path()?.join(name))
+}
+
+fn plugin_manifest_path(name: &str) -> Result<PathBuf, String> {
+    Ok(plugin_home_path(name)?.join("plugin.toml"))
+}
+
+fn write_plugin_manifest(plugin: &PluginMetadata, version: &str) -> Result<(), String> {
+    let manifest = PluginManifest {
+        plugin: PluginSection {
+            name: plugin.name.clone(),
+            version: version.to_string(),
+            description: plugin.description.clone(),
+        },
+        command: CommandSection {
+            name: plugin.name.clone(),
+        },
+        compatibility: CompatibilitySection {
+            terminal_info: format!(">={}", env!("CARGO_PKG_VERSION")),
+        },
+    };
+
+    let toml = toml::to_string_pretty(&manifest)
+        .map_err(|err| format!("Failed to serialize plugin manifest: {err}"))?;
+    fs::write(plugin_manifest_path(&plugin.name)?, format!("{toml}\n"))
+        .map_err(|err| format!("Failed to write plugin manifest: {err}"))
+}
+
+fn plugin_manifest_template(name: &str) -> String {
+    format!(
+        r#"[plugin]
+name = "{name}"
+version = "0.1.0"
+description = "{name} utilities for Terminal Info"
+
+[command]
+name = "{name}"
+
+[compatibility]
+terminal_info = ">={version}"
+"#,
+        version = env!("CARGO_PKG_VERSION")
+    )
+}
+
+fn cargo_template(name: &str) -> String {
+    format!(
+        r#"[package]
+name = "tinfo-{name}"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+"#
+    )
+}
+
+fn main_template(name: &str) -> String {
+    format!(
+        r#"fn main() {{
+    let args: Vec<String> = std::env::args().skip(1).collect();
+
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {{
+        println!("tinfo-{name} - {name} plugin for Terminal Info");
+        println!();
+        println!("Usage: tinfo {name} [args]");
+        return;
+    }}
+
+    if args.is_empty() {{
+        println!("Hello from Terminal Info plugin '{name}'.");
+    }} else {{
+        println!("Hello from Terminal Info plugin '{name}': {{}}", args.join(" "));
+    }}
+}}
+"#
+    )
+}
+
+fn readme_template(name: &str) -> String {
+    format!(
+        r#"# tinfo-{name}
+
+This is a Terminal Info plugin template.
+
+## Development
+
+```bash
+cargo run -- --help
+cargo build --release
+```
+
+## Example
+
+```bash
+tinfo {name}
+```
+
+Terminal Info will route `tinfo {name}` to the `tinfo-{name}` executable.
+"#
+    )
 }

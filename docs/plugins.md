@@ -1,94 +1,40 @@
 # Plugins
 
-`tinfo` supports a decentralized plugin ecosystem.
-
-The main repository does not host plugin code. It only hosts a plugin index in `plugins/*.json`. Plugin authors publish and maintain their own GitHub repositories and releases.
-
-## Plugin Discovery
-
-Plugin metadata lives in:
-
-```text
-plugins/
-```
-
-Each plugin is described by a JSON file.
+Terminal Info plugins are external executables. The design is intentionally simple: Terminal Info routes unknown top-level commands to a matching `tinfo-<plugin-name>` binary.
 
 Example:
 
-```json
-{
-  "name": "news",
-  "description": "News headlines plugin",
-  "repo": "https://github.com/example/tinfo-news",
-  "binary": "tinfo-news",
-  "version": "latest"
-}
-```
-
-Users can discover available plugins with:
-
 ```bash
-tinfo plugin search
+tinfo github issues
 ```
 
-`tinfo plugin search` uses a local metadata cache at:
+Terminal Info attempts to run:
 
 ```text
-~/.tinfo/cache/plugins.json
+tinfo-github issues
 ```
 
-Cache behavior:
+## Managed Plugin Layout
 
-- cache is valid for 24 hours
-- if expired, `tinfo` refreshes from the GitHub registry
-- if offline and cache exists, cached data is used
+Managed plugins are installed into:
 
-## Plugin Installation
-
-Install a plugin from the index:
-
-```bash
-tinfo plugin install news
+```text
+~/.terminal-info/plugins/<plugin-name>/
 ```
 
-This flow:
+Example:
 
-1. reads `plugins/news.json`
-2. fetches the plugin's GitHub release metadata
-3. downloads the release asset
-4. installs the binary into `~/.tinfo/plugins/`
-
-Update one installed plugin:
-
-```bash
-tinfo plugin update news
-```
-
-Update all installed plugins:
-
-```bash
-tinfo plugin upgrade-all
-```
-
-Installed plugins can be listed with:
-
-```bash
-tinfo plugin list
-```
-
-Removed with:
-
-```bash
-tinfo plugin remove news
+```text
+~/.terminal-info/plugins/docker/
+├── plugin.toml
+└── tinfo-docker
 ```
 
 ## Plugin Commands
 
-The built-in plugin management commands are:
-
 ```bash
 tinfo plugin search
+tinfo plugin init <name>
 tinfo plugin install <name>
 tinfo plugin update <name>
 tinfo plugin upgrade-all
@@ -96,27 +42,9 @@ tinfo plugin remove <name>
 tinfo plugin list
 ```
 
-## Plugin Execution
+## Related Documentation
 
-If `tinfo` receives an unknown top-level command, it attempts to execute a plugin named:
-
-```text
-tinfo-<command>
-```
-
-Example:
-
-```bash
-tinfo news tech
-```
-
-Attempts to execute:
-
-```bash
-tinfo-news tech
-```
-
-Search order:
-
-1. `~/.tinfo/plugins/tinfo-<command>`
-2. `PATH`
+- [plugin-spec.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-spec.md)
+- [plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md)
+- [plugin-registry.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-registry.md)
+- [plugin-security.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-security.md)

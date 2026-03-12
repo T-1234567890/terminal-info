@@ -162,31 +162,41 @@ tinfo diagnostic plugins
 
 See [docs/diagnostic.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/diagnostic.md).
 
-## Plugin System
+## Plugin Ecosystem
 
-Unknown top-level commands are treated as plugin candidates.
+Terminal Info supports community plugins using a simple executable plugin model.
 
 Example:
 
 ```bash
-tinfo news tech
+tinfo docker
 ```
 
-This attempts to run:
+Terminal Info resolves that to:
 
-```bash
-tinfo-news tech
+```text
+tinfo-docker
 ```
 
-Search order:
+Managed plugins are installed into:
 
-1. `~/.tinfo/plugins/tinfo-<command>`
-2. `PATH`
+```text
+~/.terminal-info/plugins/<plugin-name>/
+```
+
+Example:
+
+```text
+~/.terminal-info/plugins/docker/
+├── plugin.toml
+└── tinfo-docker
+```
 
 Plugin management commands:
 
 ```bash
 tinfo plugin search
+tinfo plugin init <name>
 tinfo plugin install <name>
 tinfo plugin update <name>
 tinfo plugin upgrade-all
@@ -194,7 +204,20 @@ tinfo plugin list
 tinfo plugin remove <name>
 ```
 
-See [docs/plugins.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugins.md), [docs/plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md), and [docs/plugin-index.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-index.md).
+Developer quick start:
+
+```bash
+tinfo plugin init hello
+cd tinfo-hello
+cargo build --release
+```
+
+See:
+
+- [docs/plugin-spec.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-spec.md)
+- [docs/plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md)
+- [docs/plugin-registry.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-registry.md)
+- [docs/plugin-security.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-security.md)
 
 ## License
 
