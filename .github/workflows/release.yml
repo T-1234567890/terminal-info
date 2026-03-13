@@ -20,22 +20,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             archive_name: tinfo-x86_64-unknown-linux-gnu.tar.gz
             binary_name: tinfo
 
-          - os: macos-latest
+          - os: macos-13
             target: x86_64-apple-darwin
             archive_name: tinfo-x86_64-apple-darwin.tar.gz
             binary_name: tinfo
 
-          - os: macos-latest
+          - os: macos-14
             target: aarch64-apple-darwin
             archive_name: tinfo-aarch64-apple-darwin.tar.gz
             binary_name: tinfo
 
-          - os: windows-2022
+          - os: windows-latest
             target: x86_64-pc-windows-msvc
             archive_name: tinfo-x86_64-pc-windows-msvc.zip
             binary_name: tinfo.exe
@@ -53,9 +53,15 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Install minisign
-        if: runner.os != 'Windows' && env.MINISIGN_SECRET_KEY != ''
-        continue-on-error: true
+        if: runner.os != 'Windows'
         run: |
+          if [ -z "$MINISIGN_SECRET_KEY" ]; then
+            echo "MINISIGN_SECRET_KEY is required for release signing."
+            exit 1
+          fi
+          if command -v minisign >/dev/null 2>&1; then
+            exit 0
+          fi
           if command -v brew >/dev/null 2>&1; then
             brew install minisign
           elif command -v apt-get >/dev/null 2>&1; then
@@ -66,36 +72,32 @@ jobs:
               make -C /tmp/minisign-src
               sudo install /tmp/minisign-src/minisign /usr/local/bin/minisign
             }
+          else
+            echo "Unable to install minisign on this runner."
+            exit 1
           fi
 
       - name: Install minisign (Windows)
-        if: runner.os == 'Windows' && env.MINISIGN_SECRET_KEY != ''
-        continue-on-error: true
+        if: runner.os == 'Windows'
         shell: pwsh
-        run: choco install minisign -y
+        run: |
+          if (-not $env:MINISIGN_SECRET_KEY) {
+            throw "MINISIGN_SECRET_KEY is required for release signing."
+          }
+          choco install minisign -y
 
       - name: Package archive (Unix)
-        id: package_unix
         if: runner.os != 'Windows'
         run: |
           mkdir -p dist
           cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} dist/${{ matrix.binary_name }}
           tar -czf ${{ matrix.archive_name }} -C dist ${{ matrix.binary_name }}
           shasum -a 256 ${{ matrix.archive_name }} > ${{ matrix.archive_name }}.sha256
-          signed=false
-          if [ -n "$MINISIGN_SECRET_KEY" ] && command -v minisign >/dev/null 2>&1; then
-            printf '%s' "$MINISIGN_SECRET_KEY" > minisign.key
-            chmod 600 minisign.key
-            if minisign -S -s minisign.key -m ${{ matrix.archive_name }} -x ${{ matrix.archive_name }}.minisig -t "${{ matrix.archive_name }}"; then
-              signed=true
-            else
-              echo "Signing skipped because minisign failed for ${{ matrix.archive_name }}."
-            fi
-          fi
-          echo "signed=$signed" >> "$GITHUB_OUTPUT"
+          printf '%s' "$MINISIGN_SECRET_KEY" > minisign.key
+          chmod 600 minisign.key
+          minisign -S -s minisign.key -m ${{ matrix.archive_name }} -x ${{ matrix.archive_name }}.minisig -t "${{ matrix.archive_name }}"
 
       - name: Package archive (Windows)
-        id: package_windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -104,51 +106,10 @@ jobs:
           Compress-Archive -Path "dist/${{ matrix.binary_name }}" -DestinationPath "${{ matrix.archive_name }}"
           $hash = (Get-FileHash "${{ matrix.archive_name }}" -Algorithm SHA256).Hash.ToLower()
           Set-Content -Path "${{ matrix.archive_name }}.sha256" -Value "$hash  ${{ matrix.archive_name }}"
-          $signed = "false"
-          if ($env:MINISIGN_SECRET_KEY) {
-            $minisign = Get-Command minisign -ErrorAction SilentlyContinue
-            if ($minisign) {
-              [System.IO.File]::WriteAllText("minisign.key", $env:MINISIGN_SECRET_KEY)
-              try {
-                minisign -S -s minisign.key -m "${{ matrix.archive_name }}" -x "${{ matrix.archive_name }}.minisig" -t "${{ matrix.archive_name }}"
-                $signed = "true"
-              } catch {
-                Write-Host "Signing skipped because minisign failed for ${{ matrix.archive_name }}."
-              }
-            }
-          }
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "signed=$signed"
+          [System.IO.File]::WriteAllText("minisign.key", $env:MINISIGN_SECRET_KEY)
+          minisign -S -s minisign.key -m "${{ matrix.archive_name }}" -x "${{ matrix.archive_name }}.minisig" -t "${{ matrix.archive_name }}"
 
-      - name: Upload release artifact (signed Unix)
-        if: runner.os != 'Windows' && steps.package_unix.outputs.signed == 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            ${{ matrix.archive_name }}
-            ${{ matrix.archive_name }}.sha256
-            ${{ matrix.archive_name }}.minisig
-          generate_release_notes: true
-
-      - name: Upload release artifact (unsigned Unix)
-        if: runner.os != 'Windows' && steps.package_unix.outputs.signed != 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            ${{ matrix.archive_name }}
-            ${{ matrix.archive_name }}.sha256
-          generate_release_notes: true
-
-      - name: Upload release artifact (Windows)
-        if: runner.os == 'Windows' && steps.package_windows.outputs.signed != 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            ${{ matrix.archive_name }}
-            ${{ matrix.archive_name }}.sha256
-          generate_release_notes: true
-
-      - name: Upload release artifact (signed Windows)
-        if: runner.os == 'Windows' && steps.package_windows.outputs.signed == 'true'
+      - name: Upload release artifact
         uses: softprops/action-gh-release@v2
         with:
           files: |

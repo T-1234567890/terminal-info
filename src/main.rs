@@ -729,14 +729,13 @@ fn handle_update() -> Result<(), String> {
         })?;
         let signature_asset = select_update_signature_asset(&release.assets, &asset.name)
             .ok_or_else(|| format!("No minisign signature found for '{}'.", asset.name))?;
-        let checksum_asset = select_update_checksum_asset(&release.assets, &asset.name)
-            .ok_or_else(|| format!("No checksum asset found for '{}'.", asset.name))?;
-
         download_to_path(&asset.browser_download_url, &archive_path)?;
         let signature = download_text(&signature_asset.browser_download_url, "update signature")?;
-        let expected_checksum =
-            download_checksum(&checksum_asset.browser_download_url, &asset.name)?;
-        verify_download_checksum(&archive_path, &expected_checksum)?;
+        if let Some(checksum_asset) = select_update_checksum_asset(&release.assets, &asset.name) {
+            let expected_checksum =
+                download_checksum(&checksum_asset.browser_download_url, &asset.name)?;
+            verify_download_checksum(&archive_path, &expected_checksum)?;
+        }
         verify_download_signature(&archive_path, &signature)?;
 
         println!("Extracting archive");

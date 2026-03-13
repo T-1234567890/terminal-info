@@ -79,7 +79,8 @@ Terminal Info plugin rules:
 - plugins must not require root privileges
 - plugins should be installed from trusted sources
 - plugins must be trusted locally before Terminal Info will execute them
-- plugin downloads are verified with a pinned checksum and a Minisign signature
+- plugin downloads are verified with the plugin author's Minisign signature from the reviewed registry
+- checksums may be used as an additional integrity check when present
 
 Registry review improves safety, but it is not a full security audit.
 

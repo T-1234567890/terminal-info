@@ -18,7 +18,7 @@ RESERVED = {
     "update",
 }
 
-REQUIRED = {"name", "description", "repo", "version", "checksums", "public_key"}
+REQUIRED = {"name", "description", "repo", "version", "checksums", "pubkey"}
 
 
 def fail(message: str) -> None:
@@ -74,9 +74,9 @@ def main() -> None:
             if not isinstance(checksum, str) or len(checksum) != 64 or any(ch not in "0123456789abcdefABCDEF" for ch in checksum):
                 fail(f"{path}: checksum for '{target}' must be a 64-character SHA-256 hex string")
 
-        public_key = data["public_key"]
-        if not isinstance(public_key, str) or not public_key.startswith("RW"):
-            fail(f"{path}: public_key must be a minisign public key string")
+        pubkey = data["pubkey"]
+        if not isinstance(pubkey, str) or not pubkey.startswith("RW"):
+            fail(f"{path}: pubkey must be a minisign public key string")
 
         if name in names:
             fail(f"{path}: duplicate plugin name '{name}' also defined in {names[name]}")
