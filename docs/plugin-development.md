@@ -60,7 +60,7 @@ The workflow:
   - `x86_64-unknown-linux-gnu`
   - `x86_64-pc-windows-msvc`
 - uploads release assets to GitHub Releases
-- can sign release assets with Minisign on macOS, Linux, and Windows when repository secrets are configured
+- signs release assets with Minisign when `MINISIGN_SECRET_KEY` is configured in the plugin repository
 
 Generated asset names follow this pattern:
 
@@ -76,6 +76,34 @@ For registry installation, publish matching signature files:
 ```text
 tinfo-<plugin-name>-x86_64-apple-darwin.minisig
 tinfo-<plugin-name>-x86_64-pc-windows-msvc.exe.minisig
+```
+
+## Plugin Signing
+
+Each plugin author signs their own plugin releases.
+
+Generate a Minisign keypair:
+
+```bash
+minisign -G
+```
+
+Sign each published release asset:
+
+```bash
+minisign -S -s minisign.key -m dist/tinfo-<plugin-name>-x86_64-apple-darwin
+```
+
+Add the public key to the Terminal Info registry entry:
+
+```json
+{
+  "name": "<plugin-name>",
+  "repo": "https://github.com/example/tinfo-<plugin-name>",
+  "description": "<plugin description>",
+  "version": "0.1.0",
+  "pubkey": "RW..."
+}
 ```
 
 ## Manifest
@@ -102,7 +130,8 @@ The recommended flow is:
 1. Create a plugin repository such as `tinfo-<plugin-name>`
 2. Push a version tag such as `0.1.0`
 3. Let GitHub Actions publish the binaries
-4. Add release checksums and a Minisign public key to `plugins/<plugin-name>.json`
-5. Submit or update `plugins/<plugin-name>.json` in the Terminal Info repository
+4. Sign the release assets with the plugin's own Minisign key
+5. Add release checksums and the plugin public key to `plugins/<plugin-name>.json`
+6. Submit or update `plugins/<plugin-name>.json` in the Terminal Info repository
 
 See [plugin-registry.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-registry.md) and [plugin-spec.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-spec.md).

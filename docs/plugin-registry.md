@@ -18,7 +18,7 @@ Example:
   "description": "<plugin description>",
   "repo": "https://github.com/example/tinfo-<plugin-name>",
   "version": "0.2.1",
-  "public_key": "RW...",
+  "pubkey": "RW...",
   "checksums": {
     "x86_64-unknown-linux-gnu": "<sha256>",
     "x86_64-pc-windows-msvc": "<sha256>"
@@ -55,7 +55,7 @@ Maintainers review metadata and obvious risks, but users should still evaluate t
 Registry metadata should include:
 
 - exact reviewed version
-- Minisign public key
+- plugin author Minisign public key in `pubkey`
 - per-target SHA-256 checksums
 
 ## User Commands
@@ -83,8 +83,9 @@ Terminal Info:
 2. reads `plugins/<plugin-name>.json`
 3. reads the exact version from the registry
 4. downloads that exact GitHub Release tag
-5. verifies the checksum and Minisign signature
-6. installs the plugin into:
+5. verifies the Minisign signature using the registry `pubkey`
+6. verifies the checksum when a registry checksum is present
+7. installs the plugin into:
 
 ```text
 ~/.terminal-info/plugins/<plugin-name>/
@@ -105,3 +106,11 @@ Update all installed plugins:
 ```bash
 tinfo plugin upgrade-all
 ```
+
+## Signing Policy
+
+- Terminal Info core releases are signed with the official Terminal Info Minisign key.
+- Plugins must not reuse the Terminal Info core signing key.
+- Each plugin author signs their own release artifacts.
+- The reviewed registry stores the plugin author's public key in `pubkey`.
+- `tinfo plugin install` and `tinfo plugin update` verify plugin artifacts against that plugin-specific key before installation.

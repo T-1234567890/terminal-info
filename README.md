@@ -255,7 +255,7 @@ tinfo plugin remove <name>
 Registry-managed plugins are installed from the exact reviewed version pinned in `plugins/<name>.json`. Terminal Info does not install the latest plugin release automatically.
 Plugins must also be trusted locally before Terminal Info will execute them.
 
-Plugin downloads and core self-updates verify a pinned checksum and a Minisign signature before replacement.
+Core self-updates verify the official Terminal Info Minisign signature, and plugin installs verify the plugin author's Minisign signature from the reviewed registry entry. SHA-256 checksums remain an extra integrity check when present.
 
 Developer quick start:
 
