@@ -1354,33 +1354,49 @@ jobs:
         run: cargo build --release --target ${{{{ matrix.target }}}}
 
       - name: Install minisign
-        if: ${{{{ runner.os != 'Windows' && secrets.MINISIGN_SECRET_KEY != '' }}}}
+        if: ${{{{ runner.os != 'Windows' && env.MINISIGN_SECRET_KEY != '' }}}}
+        continue-on-error: true
         run: |
           if command -v brew >/dev/null 2>&1; then
             brew install minisign
           elif command -v apt-get >/dev/null 2>&1; then
             sudo apt-get update
-            sudo apt-get install -y minisign
+            sudo apt-get install -y minisign || {{
+              sudo apt-get install -y build-essential pkg-config libssl-dev libsodium-dev git
+              git clone --depth 1 https://github.com/jedisct1/minisign.git /tmp/minisign-src
+              make -C /tmp/minisign-src
+              sudo install /tmp/minisign-src/minisign /usr/local/bin/minisign
+            }}
           fi
 
       - name: Install minisign (Windows)
         if: ${{{{ runner.os == 'Windows' && env.MINISIGN_SECRET_KEY != '' }}}}
+        continue-on-error: true
         shell: pwsh
         run: choco install minisign -y
 
       - name: Package asset (Unix)
+        id: package_unix
         if: runner.os != 'Windows'
         run: |
           mkdir -p dist
           cp target/${{{{ matrix.target }}}}/release/${{{{ matrix.binary_name }}}} dist/${{{{ matrix.binary_name }}}}
           mv dist/${{{{ matrix.binary_name }}}} dist/tinfo-{name}-${{{{ matrix.target }}}}
           shasum -a 256 dist/tinfo-{name}-${{{{ matrix.target }}}} > dist/tinfo-{name}-${{{{ matrix.target }}}}.sha256
-          if [ -n "$MINISIGN_SECRET_KEY" ]; then
-            echo "$MINISIGN_SECRET_KEY" > minisign.key
-            minisign -S -s minisign.key -m dist/tinfo-{name}-${{{{ matrix.target }}}} -x dist/tinfo-{name}-${{{{ matrix.target }}}}.minisig -t "tinfo-{name}-${{{{ matrix.target }}}}"
+          signed=false
+          if [ -n "$MINISIGN_SECRET_KEY" ] && command -v minisign >/dev/null 2>&1; then
+            printf '%s' "$MINISIGN_SECRET_KEY" > minisign.key
+            chmod 600 minisign.key
+            if minisign -S -s minisign.key -m dist/tinfo-{name}-${{{{ matrix.target }}}} -x dist/tinfo-{name}-${{{{ matrix.target }}}}.minisig -t "tinfo-{name}-${{{{ matrix.target }}}}"; then
+              signed=true
+            else
+              echo "Signing skipped because minisign failed for dist/tinfo-{name}-${{{{ matrix.target }}}}."
+            fi
           fi
+          echo "signed=$signed" >> "$GITHUB_OUTPUT"
 
       - name: Package asset (Windows)
+        id: package_windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -1388,13 +1404,23 @@ jobs:
           Copy-Item "target/${{{{ matrix.target }}}}/release/${{{{ matrix.binary_name }}}}" "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe"
           $hash = (Get-FileHash "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe" -Algorithm SHA256).Hash.ToLower()
           Set-Content -Path "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.sha256" -Value "$hash  tinfo-{name}-${{{{ matrix.target }}}}.exe"
+          $signed = "false"
           if ($env:MINISIGN_SECRET_KEY) {{
-            Set-Content -Path minisign.key -Value $env:MINISIGN_SECRET_KEY -NoNewline
-            minisign -S -s minisign.key -m "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe" -x "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.minisig" -t "tinfo-{name}-${{{{ matrix.target }}}}.exe"
+            $minisign = Get-Command minisign -ErrorAction SilentlyContinue
+            if ($minisign) {{
+              [System.IO.File]::WriteAllText("minisign.key", $env:MINISIGN_SECRET_KEY)
+              try {{
+                minisign -S -s minisign.key -m "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe" -x "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.minisig" -t "tinfo-{name}-${{{{ matrix.target }}}}.exe"
+                $signed = "true"
+              }} catch {{
+                Write-Host "Signing skipped because minisign failed for dist/tinfo-{name}-${{{{ matrix.target }}}}.exe."
+              }}
+            }}
           }}
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "signed=$signed"
 
       - name: Upload release asset (Unix)
-        if: runner.os != 'Windows' && env.MINISIGN_SECRET_KEY != ''
+        if: runner.os != 'Windows' && steps.package_unix.outputs.signed == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -1404,7 +1430,7 @@ jobs:
           generate_release_notes: true
 
       - name: Upload release asset (unsigned Unix)
-        if: runner.os != 'Windows' && env.MINISIGN_SECRET_KEY == ''
+        if: runner.os != 'Windows' && steps.package_unix.outputs.signed != 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -1413,7 +1439,7 @@ jobs:
           generate_release_notes: true
 
       - name: Upload release asset (Windows)
-        if: runner.os == 'Windows' && env.MINISIGN_SECRET_KEY == ''
+        if: runner.os == 'Windows' && steps.package_windows.outputs.signed != 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -1422,7 +1448,7 @@ jobs:
           generate_release_notes: true
 
       - name: Upload release asset (signed Windows)
-        if: runner.os == 'Windows' && env.MINISIGN_SECRET_KEY != ''
+        if: runner.os == 'Windows' && steps.package_windows.outputs.signed == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: |
