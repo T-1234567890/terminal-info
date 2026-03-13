@@ -17,7 +17,11 @@ Example:
   "name": "docker",
   "description": "Docker utilities for Terminal Info",
   "repo": "https://github.com/example/tinfo-docker",
-  "version": "0.2.1"
+  "version": "0.2.1",
+  "public_key": "RW...",
+  "checksums": {
+    "x86_64-unknown-linux-gnu": "<sha256>"
+  }
 }
 ```
 
@@ -47,6 +51,12 @@ This review is not a full security audit.
 
 Maintainers review metadata and obvious risks, but users should still evaluate third-party plugins themselves before installation.
 
+Registry metadata should include:
+
+- exact reviewed version
+- Minisign public key
+- per-target SHA-256 checksums
+
 ## User Commands
 
 ```bash
@@ -72,7 +82,8 @@ Terminal Info:
 2. reads `plugins/docker.json`
 3. reads the exact version from the registry
 4. downloads that exact GitHub Release tag
-5. installs the plugin into:
+5. verifies the checksum and Minisign signature
+6. installs the plugin into:
 
 ```text
 ~/.terminal-info/plugins/docker/

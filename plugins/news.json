@@ -2,5 +2,11 @@
   "name": "news",
   "description": "News headlines plugin",
   "repo": "https://github.com/example/tinfo-news",
-  "version": "0.2.1"
+  "version": "0.2.1",
+  "public_key": "RWQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "checksums": {
+    "x86_64-unknown-linux-gnu": "0000000000000000000000000000000000000000000000000000000000000000",
+    "x86_64-apple-darwin": "1111111111111111111111111111111111111111111111111111111111111111",
+    "aarch64-apple-darwin": "2222222222222222222222222222222222222222222222222222222222222222"
+  }
 }

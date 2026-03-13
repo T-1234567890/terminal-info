@@ -44,8 +44,25 @@ Supported top-level fields:
 - `api_key`
 - `active_profile`
 - `profile.<name>`
+- `locations.<alias>`
+- `dashboard.widgets`
 
 `location = "auto"` means weather commands should try IP-based city detection.
+
+Location aliases:
+
+```toml
+[locations]
+home = "Shenzhen"
+work = "Hong Kong"
+```
+
+Dashboard widget order:
+
+```toml
+[dashboard]
+widgets = ["weather", "time", "network", "system", "plugins"]
+```
 
 ## Interactive Configuration
 
@@ -102,6 +119,12 @@ Reset:
 tinfo config reset
 ```
 
+Doctor:
+
+```bash
+tinfo config doctor
+```
+
 ## Profiles
 
 Profiles are named configuration blocks stored under `[profile.<name>]`.
@@ -132,6 +155,7 @@ All commands support these global flags:
 - `--plain`
 - `--compact`
 - `--color`
+- `--json`
 
 Examples:
 
