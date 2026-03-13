@@ -7,13 +7,13 @@ Terminal Info plugins are standalone executables. The plugin SDK model is intent
 Generate a new plugin template:
 
 ```bash
-tinfo plugin init docker
+tinfo plugin init <name>
 ```
 
 This creates:
 
 ```text
-tinfo-docker/
+tinfo-<name>/
 ├── .github/
 │   └── workflows/
 │       └── release.yml
@@ -28,15 +28,15 @@ tinfo-docker/
 
 The generated plugin:
 
-- compiles to `tinfo-docker`
-- works with `tinfo docker`
+- compiles to `tinfo-<name>`
+- works with `tinfo <name>`
 - includes a `plugin.toml` manifest
 - includes a GitHub Actions release workflow
 
 ## Local Development
 
 ```bash
-cd tinfo-docker
+cd tinfo-<name>
 cargo run -- --help
 cargo build --release
 ./target/release/tinfo-docker
@@ -63,9 +63,9 @@ The workflow:
 Generated asset names follow this pattern:
 
 ```text
-tinfo-docker-x86_64-apple-darwin
-tinfo-docker-aarch64-apple-darwin
-tinfo-docker-x86_64-unknown-linux-gnu
+tinfo-<name>-x86_64-apple-darwin
+tinfo-<name>-aarch64-apple-darwin
+tinfo-<name>-x86_64-unknown-linux-gnu
 ```
 
 ## Manifest
@@ -74,15 +74,15 @@ Every plugin includes:
 
 ```toml
 [plugin]
-name = "docker"
-version = "0.1.0"
-description = "docker utilities for Terminal Info"
+name = "<name>"
+version = "x.y.z"
+description = "<description>"
 
 [command]
 name = "docker"
 
 [compatibility]
-terminal_info = ">=0.2.3"
+terminal_info = ">=x.y.z"
 ```
 
 ## Publishing to the Registry
