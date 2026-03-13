@@ -18,8 +18,8 @@ Core release assets are published as:
 The GitHub Actions release workflow builds each target on a native runner:
 
 - Linux on `ubuntu-latest`
-- macOS Intel on `macos-13`
-- macOS Apple Silicon on `macos-14`
+- macOS Intel on `macos-15-intel`
+- macOS Apple Silicon on `macos-latest`
 - Windows on `windows-latest`
 
 The `tinfo update` command downloads the release archive and its `.minisig` file, then verifies the signature using the public key embedded in the Terminal Info binary from `keys/minisign.pub`.
@@ -30,12 +30,14 @@ If the signature does not verify, the update is aborted.
 
 Core releases use the `MINISIGN_SECRET_KEY` GitHub Actions secret.
 
+That secret must contain the raw contents of an unencrypted Minisign secret key file. For CI signing, generate or convert the key so it can be used with `minisign -W` in a non-interactive environment.
+
 For each release artifact, the workflow:
 
 1. builds the target-specific binary
 2. packages the archive with the exact name `tinfo-<target>.tar.gz` or `tinfo-<target>.zip`
 3. writes the secret key to `minisign.key`
-4. runs Minisign to produce `archive.minisig`
+4. runs `minisign -S -W` to produce `archive.minisig`
 5. uploads both the archive and the signature to the GitHub release
 
 The `.sha256` file is optional extra metadata. Signature verification is the required trust check.
@@ -45,10 +47,11 @@ The `.sha256` file is optional extra metadata. Signature verification is the req
 To rotate the Terminal Info core signing key:
 
 1. generate a new Minisign keypair
-2. update the private key stored in the GitHub Actions secret `MINISIGN_SECRET_KEY`
-3. replace the public key in `keys/minisign.pub`
-4. cut a new signed Terminal Info release
-5. ship a Terminal Info update that contains the new embedded public key before depending on the rotated key for future updater-only releases
+2. convert it to an unencrypted CI key if needed, for example with `minisign -C -W -s minisign.key`
+3. update the private key stored in the GitHub Actions secret `MINISIGN_SECRET_KEY`
+4. replace the public key in `keys/minisign.pub`
+5. cut a new signed Terminal Info release
+6. ship a Terminal Info update that contains the new embedded public key before depending on the rotated key for future updater-only releases
 
 Because `tinfo update` verifies signatures with the public key embedded in the currently installed binary, key rotation must be staged carefully. Existing clients must receive a release that embeds the new public key before they can verify future releases signed only by the new key.
 

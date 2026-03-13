@@ -1396,7 +1396,7 @@ jobs:
           shasum -a 256 dist/tinfo-{name}-${{{{ matrix.target }}}} > dist/tinfo-{name}-${{{{ matrix.target }}}}.sha256
           printf '%s' "$MINISIGN_SECRET_KEY" > minisign.key
           chmod 600 minisign.key
-          minisign -S -s minisign.key -m dist/tinfo-{name}-${{{{ matrix.target }}}} -x dist/tinfo-{name}-${{{{ matrix.target }}}}.minisig -t "tinfo-{name}-${{{{ matrix.target }}}}"
+          minisign -S -W -s minisign.key -m dist/tinfo-{name}-${{{{ matrix.target }}}} -x dist/tinfo-{name}-${{{{ matrix.target }}}}.minisig -t "tinfo-{name}-${{{{ matrix.target }}}}"
 
       - name: Package asset (Windows)
         if: runner.os == 'Windows'
@@ -1407,8 +1407,9 @@ jobs:
           $hash = (Get-FileHash "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe" -Algorithm SHA256).Hash.ToLower()
           Set-Content -Path "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.sha256" -Value "$hash  tinfo-{name}-${{{{ matrix.target }}}}.exe"
           if ($env:MINISIGN_SECRET_KEY) {{
-            [System.IO.File]::WriteAllText("minisign.key", $env:MINISIGN_SECRET_KEY)
-            minisign -S -s minisign.key -m "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe" -x "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.minisig" -t "tinfo-{name}-${{{{ matrix.target }}}}.exe"
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            [System.IO.File]::WriteAllText("minisign.key", $env:MINISIGN_SECRET_KEY, $utf8NoBom)
+            minisign -S -W -s minisign.key -m "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe" -x "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.minisig" -t "tinfo-{name}-${{{{ matrix.target }}}}.exe"
           }}
 
       - name: Upload release asset (Unix)
