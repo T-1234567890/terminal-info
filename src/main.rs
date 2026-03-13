@@ -6,7 +6,9 @@ mod output;
 mod plugin;
 mod weather;
 
-use std::path::Path;
+use std::fs;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 use std::process;
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
@@ -83,13 +85,19 @@ enum Command {
         /// Shell to generate completions for
         shell: CompletionShell,
     },
-    /// Manage plugins
+    /// Manage plugins and scaffold new plugin projects
     Plugin {
         #[command(subcommand)]
         command: PluginCommand,
     },
     /// Download and install the latest released version of tinfo
     Update,
+    /// Remove the Terminal Info binary and optionally its local data
+    Uninstall {
+        /// Remove the binary only and keep ~/.terminal-info
+        #[arg(long)]
+        keep_data: bool,
+    },
     #[command(external_subcommand)]
     External(Vec<String>),
 }
@@ -153,8 +161,11 @@ enum PluginCommand {
     List,
     /// Search for plugins
     Search,
-    /// Generate a new plugin template
-    Init { name: String },
+    /// Interactively scaffold a new plugin template
+    Init {
+        /// Optional plugin name used as the default prompt value
+        name: Option<String>,
+    },
     /// Install a plugin
     Install { name: String },
     /// Update a plugin
@@ -219,6 +230,7 @@ fn main() {
         }
         Some(Command::Plugin { command }) => handle_plugin(command),
         Some(Command::Update) => handle_update(),
+        Some(Command::Uninstall { keep_data }) => handle_uninstall(keep_data),
         Some(Command::External(args)) => handle_external(args),
         None => show_dashboard(&config),
     };
@@ -352,7 +364,7 @@ fn handle_plugin(command: PluginCommand) -> Result<(), String> {
     match command {
         PluginCommand::List => list_plugins(),
         PluginCommand::Search => search_plugins(),
-        PluginCommand::Init { name } => init_plugin_template(&name),
+        PluginCommand::Init { name } => init_plugin_template(name),
         PluginCommand::Install { name } => install_plugin(&name),
         PluginCommand::Update { name } => update_plugin(&name),
         PluginCommand::UpgradeAll => upgrade_all_plugins(),
@@ -428,6 +440,91 @@ fn handle_update() -> Result<(), String> {
 fn is_permission_denied(message: &str) -> bool {
     let lower = message.to_ascii_lowercase();
     lower.contains("permission denied") || lower.contains("os error 13")
+}
+
+fn handle_uninstall(keep_data: bool) -> Result<(), String> {
+    let binary_path = find_tinfo_binary()?;
+    let data_path = terminal_info_data_dir()?;
+
+    println!("Terminal Info will be removed.");
+    println!();
+    println!("Binary:");
+    println!("  {}", binary_path.display());
+    println!();
+    println!("User data:");
+    println!("  {}", data_path.display());
+    println!();
+    print!("Continue? [y/N] ");
+    io::stdout()
+        .flush()
+        .map_err(|err| format!("Failed to flush stdout: {err}"))?;
+
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .map_err(|err| format!("Failed to read confirmation: {err}"))?;
+
+    if !matches!(input.trim(), "y" | "Y" | "yes" | "YES" | "Yes") {
+        println!("Uninstall cancelled.");
+        return Ok(());
+    }
+
+    fs::remove_file(&binary_path).map_err(|err| {
+        if is_permission_denied(&err.to_string()) {
+            format!(
+                "Failed to remove {}: permission denied.",
+                binary_path.display()
+            )
+        } else {
+            format!("Failed to remove {}: {err}", binary_path.display())
+        }
+    })?;
+
+    if !keep_data && data_path.exists() {
+        fs::remove_dir_all(&data_path)
+            .map_err(|err| format!("Failed to remove {}: {err}", data_path.display()))?;
+    }
+
+    println!("Terminal Info successfully removed.");
+    Ok(())
+}
+
+fn find_tinfo_binary() -> Result<PathBuf, String> {
+    let output = process::Command::new("which")
+        .arg("tinfo")
+        .output()
+        .map_err(|err| format!("Failed to locate tinfo with `which`: {err}"))?;
+
+    if !output.status.success() {
+        return Err("Could not locate tinfo in PATH.".to_string());
+    }
+
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let binary_path = PathBuf::from(path);
+    validate_binary_path(&binary_path)?;
+    Ok(binary_path)
+}
+
+fn validate_binary_path(path: &Path) -> Result<(), String> {
+    let home =
+        std::env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
+    let allowed_local = PathBuf::from(home).join(".local").join("bin").join("tinfo");
+    let allowed_global = PathBuf::from("/usr/local/bin/tinfo");
+
+    if path == allowed_global || path == allowed_local {
+        Ok(())
+    } else {
+        Err(format!(
+            "Refusing to remove unexpected binary path: {}",
+            path.display()
+        ))
+    }
+}
+
+fn terminal_info_data_dir() -> Result<PathBuf, String> {
+    let home =
+        std::env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
+    Ok(PathBuf::from(home).join(".terminal-info"))
 }
 
 fn resolve_city(
