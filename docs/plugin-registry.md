@@ -14,13 +14,14 @@ Example:
 
 ```json
 {
-  "name": "docker",
-  "description": "Docker utilities for Terminal Info",
-  "repo": "https://github.com/example/tinfo-docker",
+  "name": "<plugin-name>",
+  "description": "<plugin description>",
+  "repo": "https://github.com/example/tinfo-<plugin-name>",
   "version": "0.2.1",
   "public_key": "RW...",
   "checksums": {
-    "x86_64-unknown-linux-gnu": "<sha256>"
+    "x86_64-unknown-linux-gnu": "<sha256>",
+    "x86_64-pc-windows-msvc": "<sha256>"
   }
 }
 ```
@@ -73,20 +74,20 @@ tinfo plugin list
 When a user runs:
 
 ```bash
-tinfo plugin install docker
+tinfo plugin install <plugin-name>
 ```
 
 Terminal Info:
 
 1. downloads the plugin registry
-2. reads `plugins/docker.json`
+2. reads `plugins/<plugin-name>.json`
 3. reads the exact version from the registry
 4. downloads that exact GitHub Release tag
 5. verifies the checksum and Minisign signature
 6. installs the plugin into:
 
 ```text
-~/.terminal-info/plugins/docker/
+~/.terminal-info/plugins/<plugin-name>/
 ```
 
 ## Updating Plugins
@@ -94,7 +95,7 @@ Terminal Info:
 Updating follows the same reviewed path:
 
 ```bash
-tinfo plugin update docker
+tinfo plugin update <plugin-name>
 ```
 
 The installed version changes only when the registry version changes after review.
