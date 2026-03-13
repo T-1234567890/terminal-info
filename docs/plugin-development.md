@@ -60,7 +60,7 @@ The workflow:
   - `x86_64-unknown-linux-gnu`
   - `x86_64-pc-windows-msvc`
 - uploads release assets to GitHub Releases
-- can sign release assets with Minisign when repository secrets are configured
+- can sign release assets with Minisign on macOS, Linux, and Windows when repository secrets are configured
 
 Generated asset names follow this pattern:
 
@@ -75,6 +75,7 @@ For registry installation, publish matching signature files:
 
 ```text
 tinfo-<plugin-name>-x86_64-apple-darwin.minisig
+tinfo-<plugin-name>-x86_64-pc-windows-msvc.exe.minisig
 ```
 
 ## Manifest

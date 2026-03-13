@@ -45,9 +45,6 @@ use crate::plugin::{
 };
 use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, WeatherReport};
 
-const TERMINAL_INFO_UPDATE_PUBLIC_KEY: &str =
-    "RWSd4eW2pwv6W8pQv4wKp0l6rXqWw0v0gkYfY8G8I7v7k5M2nQ8m7D3O";
-
 #[derive(Parser, Debug)]
 #[command(name = "tinfo", version, about = "Terminal Info CLI")]
 struct Cli {
@@ -1065,12 +1062,20 @@ fn verify_download_checksum(path: &Path, expected: &str) -> Result<(), String> {
 fn verify_download_signature(path: &Path, signature: &str) -> Result<(), String> {
     let bytes =
         fs::read(path).map_err(|err| format!("Failed to read downloaded archive: {err}"))?;
-    let key = PublicKey::from_base64(TERMINAL_INFO_UPDATE_PUBLIC_KEY)
+    let key = PublicKey::from_base64(terminal_info_update_public_key()?)
         .map_err(|err| format!("invalid embedded minisign public key: {err}"))?;
     let sig =
         Signature::decode(signature).map_err(|err| format!("invalid minisign signature: {err}"))?;
     key.verify(&bytes, &sig, false)
         .map_err(|err| format!("minisign verification failed: {err}"))
+}
+
+fn terminal_info_update_public_key() -> Result<&'static str, String> {
+    include_str!("../keys/minisign.pub")
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with("untrusted comment:"))
+        .ok_or_else(|| "missing minisign public key in keys/minisign.pub".to_string())
 }
 
 fn extract_update_binary(archive_path: &Path, temp_dir: &Path) -> Result<PathBuf, String> {
