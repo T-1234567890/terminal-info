@@ -13,6 +13,8 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    env:
+      MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
 
     strategy:
       fail-fast: false
@@ -51,7 +53,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Install minisign
-        if: runner.os != 'Windows' && secrets.MINISIGN_SECRET_KEY != ''
+        if: runner.os != 'Windows' && env.MINISIGN_SECRET_KEY != ''
         run: |
           if command -v brew >/dev/null 2>&1; then
             brew install minisign
@@ -67,8 +69,8 @@ jobs:
           cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} dist/${{ matrix.binary_name }}
           tar -czf ${{ matrix.archive_name }} -C dist ${{ matrix.binary_name }}
           shasum -a 256 ${{ matrix.archive_name }} > ${{ matrix.archive_name }}.sha256
-          if [ -n "${{ secrets.MINISIGN_SECRET_KEY }}" ]; then
-            echo "${{ secrets.MINISIGN_SECRET_KEY }}" > minisign.key
+          if [ -n "$MINISIGN_SECRET_KEY" ]; then
+            echo "$MINISIGN_SECRET_KEY" > minisign.key
             minisign -S -s minisign.key -m ${{ matrix.archive_name }} -x ${{ matrix.archive_name }}.minisig -t "${{ matrix.archive_name }}"
           fi
 
@@ -82,11 +84,30 @@ jobs:
           $hash = (Get-FileHash "${{ matrix.archive_name }}" -Algorithm SHA256).Hash.ToLower()
           Set-Content -Path "${{ matrix.archive_name }}.sha256" -Value "$hash  ${{ matrix.archive_name }}"
 
-      - name: Upload release artifact
+      - name: Upload release artifact (signed Unix)
+        if: runner.os != 'Windows' && env.MINISIGN_SECRET_KEY != ''
         uses: softprops/action-gh-release@v2
         with:
           files: |
             ${{ matrix.archive_name }}
             ${{ matrix.archive_name }}.sha256
             ${{ matrix.archive_name }}.minisig
+          generate_release_notes: true
+
+      - name: Upload release artifact (unsigned Unix)
+        if: runner.os != 'Windows' && env.MINISIGN_SECRET_KEY == ''
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ matrix.archive_name }}
+            ${{ matrix.archive_name }}.sha256
+          generate_release_notes: true
+
+      - name: Upload release artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ matrix.archive_name }}
+            ${{ matrix.archive_name }}.sha256
           generate_release_notes: true
