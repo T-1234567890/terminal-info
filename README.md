@@ -1,4 +1,4 @@
-# Terminal Info
+# Terminal Info CLI
 
 [![Release](https://img.shields.io/github/v/release/T-1234567890/terminal-info)](https://github.com/T-1234567890/terminal-info/releases)
 [![License](https://img.shields.io/github/license/T-1234567890/terminal-info)](LICENSE)
@@ -22,6 +22,8 @@
 
 ### Install script
 
+You can inspect the install script before running it:
+
 ```bash
 curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash
 ```
@@ -31,6 +33,7 @@ Supported release assets include:
 - macOS Intel (`x86_64`)
 - macOS Apple Silicon (`arm64` / `aarch64`)
 - Linux `x86_64`
+- Windows `x86_64`
 
 ### Build from source
 
@@ -226,6 +229,47 @@ See:
 - [docs/plugin-registry.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-registry.md)
 - [docs/plugin-security.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-security.md)
 
+## Disclaimer
+
+While Terminal Info aims to be safe and transparent, users should understand that:
+
+- Terminal Info executes commands locally on your machine.
+- Terminal Info may perform network requests for certain features (for example weather data or IP-based location detection).
+- Terminal Info supports **third-party plugins**, which are external executables developed by independent contributors.
+
+### Third-party plugins
+
+Third-party plugins are not developed by the Terminal Info project.
+Installing a plugin may execute external code on your system.
+
+Plugins listed in the official plugin registry will go through a basic review process.
+This review does not guarantee that plugins are safe or free of malicious behavior.
+
+Only install plugins from sources you trust and review plugin repositories before installing them.
+
+### Installation scripts
+
+If you install Terminal Info using the provided installation script, you may review the script before running it:
+
+```
+curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh
+```
+
+You may also download binaries directly from the GitHub Releases page.
+
+### Privacy
+
+Terminal Info does **not collect personal data or identifiers**.
+
+Network requests are only used for specific features such as:
+
+- weather information
+- IP-based location detection
+- plugin registry queries
+- Future features
+
+By using Terminal Info, you acknowledge that you are responsible for reviewing the software and plugins you install.
+
 ## License
 
-Apache 2.0
+This project is licensed under the **Apache 2.0** License.
