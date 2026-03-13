@@ -1313,7 +1313,7 @@ fn workflow_template(name: &str) -> String {
 on:
   push:
     tags:
-      - "v*"
+      - "*.*.*"
 
 permissions:
   contents: write
@@ -1328,10 +1328,16 @@ jobs:
         include:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            binary_name: tinfo-{name}
           - os: macos-latest
             target: x86_64-apple-darwin
+            binary_name: tinfo-{name}
           - os: macos-latest
             target: aarch64-apple-darwin
+            binary_name: tinfo-{name}
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            binary_name: tinfo-{name}.exe
 
     steps:
       - name: Checkout
@@ -1346,7 +1352,7 @@ jobs:
         run: cargo build --release --target ${{{{ matrix.target }}}}
 
       - name: Install minisign
-        if: ${{{{ secrets.MINISIGN_SECRET_KEY != '' }}}}
+        if: ${{{{ runner.os != 'Windows' && secrets.MINISIGN_SECRET_KEY != '' }}}}
         run: |
           if command -v brew >/dev/null 2>&1; then
             brew install minisign
@@ -1355,23 +1361,44 @@ jobs:
             sudo apt-get install -y minisign
           fi
 
-      - name: Package asset
+      - name: Package asset (Unix)
+        if: runner.os != 'Windows'
         run: |
           mkdir -p dist
-          cp target/${{{{ matrix.target }}}}/release/tinfo-{name} dist/tinfo-{name}-${{{{ matrix.target }}}}
+          cp target/${{{{ matrix.target }}}}/release/${{{{ matrix.binary_name }}}} dist/${{{{ matrix.binary_name }}}}
+          mv dist/${{{{ matrix.binary_name }}}} dist/tinfo-{name}-${{{{ matrix.target }}}}
           shasum -a 256 dist/tinfo-{name}-${{{{ matrix.target }}}} > dist/tinfo-{name}-${{{{ matrix.target }}}}.sha256
           if [ -n "${{{{ secrets.MINISIGN_SECRET_KEY || '' }}}}" ]; then
             echo "${{{{ secrets.MINISIGN_SECRET_KEY }}}}" > minisign.key
             minisign -S -s minisign.key -m dist/tinfo-{name}-${{{{ matrix.target }}}} -x dist/tinfo-{name}-${{{{ matrix.target }}}}.minisig -t "tinfo-{name}-${{{{ matrix.target }}}}"
           fi
 
-      - name: Upload release asset
+      - name: Package asset (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "target/${{{{ matrix.target }}}}/release/${{{{ matrix.binary_name }}}}" "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe"
+          $hash = (Get-FileHash "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe" -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.sha256" -Value "$hash  tinfo-{name}-${{{{ matrix.target }}}}.exe"
+
+      - name: Upload release asset (Unix)
+        if: runner.os != 'Windows'
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/tinfo-{name}-${{{{ matrix.target }}}}
             dist/tinfo-{name}-${{{{ matrix.target }}}}.sha256
             dist/tinfo-{name}-${{{{ matrix.target }}}}.minisig
+          generate_release_notes: true
+
+      - name: Upload release asset (Windows)
+        if: runner.os == 'Windows'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/tinfo-{name}-${{{{ matrix.target }}}}.exe
+            dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.sha256
           generate_release_notes: true
 "#
     )

@@ -9,13 +9,18 @@ mod weather;
 
 use std::fs;
 use std::fs::File;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{Shell, generate};
+use crossterm::cursor::{Hide, Show};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::execute;
+use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use flate2::read::GzDecoder;
 use minisign_verify::{PublicKey, Signature};
 use reqwest::blocking::Client;
@@ -27,12 +32,11 @@ use zip::ZipArchive;
 
 use crate::builtins::{
     run_config_doctor, run_diagnostic_all, run_diagnostic_network, run_diagnostic_system, run_ping,
-    show_network_info, show_system_info, show_time,
+    show_network_info, show_system_info,
 };
 use crate::cache::{read_cache, write_cache};
 use crate::config::{ApiProvider, Config, Units};
 use crate::config_menu::show_config_menu;
-use crate::dashboard::show_dashboard;
 use crate::output::{OutputMode, set_json_output, set_output_mode};
 use crate::plugin::{
     info_plugin, init_plugin_template, install_plugin, list_plugins, list_trusted_plugins,
@@ -59,6 +63,9 @@ struct Cli {
     /// Output machine-readable JSON where supported
     #[arg(long, global = true)]
     json: bool,
+    /// Render once and exit instead of refreshing live views
+    #[arg(long, global = true)]
+    freeze: bool,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -252,6 +259,7 @@ fn main() {
     let cli = Cli::parse();
     set_output_mode(resolve_output_mode(&cli));
     set_json_output(cli.json);
+    let freeze = should_freeze(&cli);
     let mut config = match Config::load_or_create() {
         Ok(config) => config,
         Err(err) => {
@@ -261,11 +269,11 @@ fn main() {
     };
 
     let result = match cli.command {
-        Some(Command::Weather { command }) => handle_weather(&mut config, command),
+        Some(Command::Weather { command }) => handle_weather(&mut config, command, freeze),
         Some(Command::Ping { host }) => run_ping(host),
         Some(Command::Network) => show_network_info(),
         Some(Command::System) => show_system_info(),
-        Some(Command::Time { city }) => show_time(city),
+        Some(Command::Time { city }) => live_time(city, freeze),
         Some(Command::Diagnostic { command }) => handle_diagnostic(command),
         Some(Command::Config { command }) => handle_config(&mut config, command),
         Some(Command::Profile { command }) => handle_profile(&mut config, command),
@@ -277,13 +285,17 @@ fn main() {
         Some(Command::Update) => handle_update(),
         Some(Command::Uninstall { keep_data }) => handle_uninstall(keep_data),
         Some(Command::External(args)) => handle_external(args),
-        None => show_dashboard(&config),
+        None => live_dashboard(&config, freeze),
     };
 
     if let Err(err) = result {
         eprintln!("{err}");
         process::exit(1);
     }
+}
+
+fn should_freeze(cli: &Cli) -> bool {
+    cli.freeze || cli.json || !io::stdout().is_terminal()
 }
 
 fn resolve_output_mode(cli: &Cli) -> OutputMode {
@@ -313,20 +325,135 @@ fn handle_external(args: Vec<String>) -> Result<(), String> {
     run_plugin(command, remaining)
 }
 
-fn handle_weather(config: &mut Config, command: Option<WeatherCommand>) -> Result<(), String> {
+fn handle_weather(
+    config: &mut Config,
+    command: Option<WeatherCommand>,
+    freeze: bool,
+) -> Result<(), String> {
     match command {
-        Some(WeatherCommand::Now { city }) => handle_now(config, city),
-        Some(WeatherCommand::Forecast { city }) => handle_forecast(config, city),
-        Some(WeatherCommand::Hourly { city }) => handle_hourly(config, city),
-        Some(WeatherCommand::Alerts { city }) => handle_alerts(config, city),
+        Some(WeatherCommand::Now { city }) => live_weather(config, WeatherView::Now(city), freeze),
+        Some(WeatherCommand::Forecast { city }) => {
+            live_weather(config, WeatherView::Forecast(city), freeze)
+        }
+        Some(WeatherCommand::Hourly { city }) => {
+            live_weather(config, WeatherView::Hourly(city), freeze)
+        }
+        Some(WeatherCommand::Alerts { city }) => {
+            live_weather(config, WeatherView::Alerts(city), freeze)
+        }
         Some(WeatherCommand::Location { city }) => handle_location(config, city),
         Some(WeatherCommand::External(args)) => {
             let Some((first, _)) = args.split_first() else {
-                return handle_now(config, None);
+                return live_weather(config, WeatherView::Now(None), freeze);
             };
-            handle_now(config, Some(first.clone()))
+            live_weather(config, WeatherView::Now(Some(first.clone())), freeze)
         }
-        None => handle_now(config, None),
+        None => live_weather(config, WeatherView::Now(None), freeze),
+    }
+}
+
+enum WeatherView {
+    Now(Option<String>),
+    Forecast(Option<String>),
+    Hourly(Option<String>),
+    Alerts(Option<String>),
+}
+
+fn live_dashboard(config: &Config, freeze: bool) -> Result<(), String> {
+    run_live_loop(Duration::from_secs(1), freeze, || {
+        Ok(dashboard::dashboard_output(config))
+    })
+}
+
+fn live_time(city: Option<String>, freeze: bool) -> Result<(), String> {
+    run_live_loop(Duration::from_secs(1), freeze, || {
+        crate::builtins::time_output(city.clone())
+    })
+}
+
+fn live_weather(config: &Config, view: WeatherView, freeze: bool) -> Result<(), String> {
+    run_live_loop(Duration::from_secs(60), freeze, || match &view {
+        WeatherView::Now(city) => handle_now(config, city.clone()),
+        WeatherView::Forecast(city) => handle_forecast(config, city.clone()),
+        WeatherView::Hourly(city) => handle_hourly(config, city.clone()),
+        WeatherView::Alerts(city) => handle_alerts(config, city.clone()),
+    })
+}
+
+fn run_live_loop<F>(interval: Duration, freeze: bool, mut render: F) -> Result<(), String>
+where
+    F: FnMut() -> Result<String, String>,
+{
+    if freeze {
+        print!("{}", render()?);
+        io::stdout()
+            .flush()
+            .map_err(|err| format!("Failed to flush output: {err}"))?;
+        return Ok(());
+    }
+
+    let mut stdout = io::stdout();
+    let _terminal = LiveTerminalGuard::enter(&mut stdout)?;
+
+    loop {
+        clear_screen(&mut stdout)?;
+        write_live_frame(&mut stdout, &render()?)?;
+        write!(stdout, "\r\nPress q or Ctrl+C to exit\r\n")
+            .map_err(|err| format!("Failed to write exit hint: {err}"))?;
+        stdout
+            .flush()
+            .map_err(|err| format!("Failed to flush output: {err}"))?;
+
+        let deadline = Instant::now() + interval;
+        while Instant::now() < deadline {
+            if event::poll(Duration::from_millis(100))
+                .map_err(|err| format!("Failed to read terminal input: {err}"))?
+            {
+                let next =
+                    event::read().map_err(|err| format!("Failed to read terminal input: {err}"))?;
+                if should_exit_live_view(&next) {
+                    return Ok(());
+                }
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+}
+
+fn clear_screen(stdout: &mut io::Stdout) -> Result<(), String> {
+    write!(stdout, "\x1B[2J\x1B[H").map_err(|err| format!("Failed to clear terminal screen: {err}"))
+}
+
+fn should_exit_live_view(event: &Event) -> bool {
+    matches!(
+        event,
+        Event::Key(key)
+            if key.kind != KeyEventKind::Release
+                && matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q'))
+    )
+}
+
+fn write_live_frame(stdout: &mut io::Stdout, frame: &str) -> Result<(), String> {
+    let normalized = frame.trim_end_matches('\n').replace('\n', "\r\n");
+    write!(stdout, "{normalized}").map_err(|err| format!("Failed to write live frame: {err}"))
+}
+
+struct LiveTerminalGuard;
+
+impl LiveTerminalGuard {
+    fn enter(stdout: &mut io::Stdout) -> Result<Self, String> {
+        terminal::enable_raw_mode().map_err(|err| format!("Failed to enable raw mode: {err}"))?;
+        execute!(stdout, EnterAlternateScreen, Hide)
+            .map_err(|err| format!("Failed to initialize terminal UI: {err}"))?;
+        Ok(Self)
+    }
+}
+
+impl Drop for LiveTerminalGuard {
+    fn drop(&mut self) {
+        let mut stdout = io::stdout();
+        let _ = execute!(stdout, Show, LeaveAlternateScreen);
+        let _ = terminal::disable_raw_mode();
     }
 }
 
@@ -482,7 +609,7 @@ fn handle_plugin(command: PluginCommand) -> Result<(), String> {
     }
 }
 
-fn handle_now(config: &Config, city: Option<String>) -> Result<(), String> {
+fn handle_now(config: &Config, city: Option<String>) -> Result<String, String> {
     let client = WeatherClient::new();
     let city = resolve_city_for_now(config, city, &client)?;
     let report = weather_cache_get_or_fetch(
@@ -494,11 +621,10 @@ fn handle_now(config: &Config, city: Option<String>) -> Result<(), String> {
         60,
         || client.current_weather(&city, config),
     )?;
-    print_weather_report(&report, config.units);
-    Ok(())
+    Ok(format_weather_report(&report, config.units))
 }
 
-fn handle_forecast(config: &Config, city: Option<String>) -> Result<(), String> {
+fn handle_forecast(config: &Config, city: Option<String>) -> Result<String, String> {
     let client = WeatherClient::new();
     let city = resolve_city(config, city, &client)?;
     let report = weather_cache_get_or_fetch(
@@ -510,11 +636,10 @@ fn handle_forecast(config: &Config, city: Option<String>) -> Result<(), String> 
         60,
         || client.forecast(&city, config),
     )?;
-    print_forecast_report(&report, config.units);
-    Ok(())
+    Ok(format_forecast_report(&report, config.units))
 }
 
-fn handle_hourly(config: &Config, city: Option<String>) -> Result<(), String> {
+fn handle_hourly(config: &Config, city: Option<String>) -> Result<String, String> {
     let client = WeatherClient::new();
     let city = resolve_city(config, city, &client)?;
     let report = weather_cache_get_or_fetch(
@@ -526,11 +651,10 @@ fn handle_hourly(config: &Config, city: Option<String>) -> Result<(), String> {
         60,
         || client.hourly(&city, config),
     )?;
-    print_hourly_report(&report, config.units);
-    Ok(())
+    Ok(format_hourly_report(&report, config.units))
 }
 
-fn handle_alerts(config: &Config, city: Option<String>) -> Result<(), String> {
+fn handle_alerts(config: &Config, city: Option<String>) -> Result<String, String> {
     let client = WeatherClient::new();
     let city = resolve_city(config, city, &client)?;
     let report = weather_cache_get_or_fetch(
@@ -542,8 +666,7 @@ fn handle_alerts(config: &Config, city: Option<String>) -> Result<(), String> {
         60,
         || client.alerts(&city, config),
     )?;
-    print_alerts_report(&report);
-    Ok(())
+    Ok(format_alerts_report(&report))
 }
 
 fn handle_location(config: &mut Config, city: Option<String>) -> Result<(), String> {
@@ -1154,132 +1277,181 @@ fn resolve_city_for_now(
     })
 }
 
-pub(crate) fn print_weather_report(report: &WeatherReport, units: Units) {
+pub(crate) fn format_weather_report(report: &WeatherReport, units: Units) -> String {
     if crate::output::json_output() {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(report).unwrap_or_else(|_| "{}".to_string())
-        );
-        return;
+        return serde_json::to_string_pretty(report).unwrap_or_else(|_| "{}".to_string());
     }
-    match crate::output::output_mode() {
-        OutputMode::Compact => {
-            println!(
-                "{}: {}, {:.1}{}, wind {:.1} {}",
-                report.location_name,
-                report.summary,
-                report.temperature,
-                units.temperature_symbol(),
-                report.wind_speed,
-                units.wind_speed_unit()
-            );
-        }
-        OutputMode::Plain => {
-            println!("{} Weather", report.location_name);
-            println!("Weather: {}", report.summary);
-            println!(
-                "Temperature: {:.1}{}",
-                report.temperature,
-                units.temperature_symbol()
-            );
-            println!("Wind: {:.1} {}", report.wind_speed, units.wind_speed_unit());
-            if let Some(humidity) = report.humidity {
-                println!("Humidity: {humidity}%");
-            }
-        }
-        OutputMode::Color => {
-            print_boxed_title(&format!("{} Weather", report.location_name));
-            println!("  {}", report.summary);
-            println!(
-                "  Temperature: {:.1}{}",
-                report.temperature,
-                units.temperature_symbol()
-            );
-            println!(
-                "  Wind: {:.1} {}",
-                report.wind_speed,
-                units.wind_speed_unit()
-            );
-            if let Some(humidity) = report.humidity {
-                println!("  Humidity: {humidity}%");
-            }
-        }
-    }
-}
-
-fn print_forecast_report(report: &ForecastReport, units: Units) {
-    if crate::output::json_output() {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(report).unwrap_or_else(|_| "{}".to_string())
-        );
-        return;
-    }
-    print_boxed_title(&format!("{} Forecast", report.location_name));
-    for day in &report.days {
-        println!(
-            "  {}: {}  {:.1}{} / {:.1}{}",
-            day.label,
-            day.summary,
-            day.high,
+    if matches!(crate::output::output_mode(), OutputMode::Compact) {
+        return format!(
+            "{}: {}, {:.1}{}, wind {:.1} {}",
+            report.location_name,
+            report.summary,
+            report.temperature,
             units.temperature_symbol(),
-            day.low,
-            units.temperature_symbol()
+            report.wind_speed,
+            units.wind_speed_unit()
         );
     }
+
+    let mut rows = vec![
+        ("Location", report.location_name.clone()),
+        ("Weather", report.summary.clone()),
+        (
+            "Temperature",
+            format!("{:.1}{}", report.temperature, units.temperature_symbol()),
+        ),
+        (
+            "Wind",
+            format!("{:.1} {}", report.wind_speed, units.wind_speed_unit()),
+        ),
+    ];
+    if let Some(humidity) = report.humidity {
+        rows.push(("Humidity", format!("{humidity}%")));
+    }
+    format_table(&format!("{} Weather", report.location_name), &rows)
 }
 
-fn print_hourly_report(report: &HourlyReport, units: Units) {
+fn format_forecast_report(report: &ForecastReport, units: Units) -> String {
     if crate::output::json_output() {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(report).unwrap_or_else(|_| "{}".to_string())
-        );
-        return;
+        return serde_json::to_string_pretty(report).unwrap_or_else(|_| "{}".to_string());
     }
-    print_boxed_title(&format!("{} Hourly", report.location_name));
-    for hour in &report.hours {
-        println!(
-            "  {}: {}  {:.1}{}",
-            hour.label,
-            hour.summary,
-            hour.temperature,
-            units.temperature_symbol()
-        );
+    if matches!(crate::output::output_mode(), OutputMode::Compact) {
+        return report
+            .days
+            .iter()
+            .map(|day| {
+                format!(
+                    "{}:{} {:.1}{} / {:.1}{}",
+                    day.label,
+                    day.summary,
+                    day.high,
+                    units.temperature_symbol(),
+                    day.low,
+                    units.temperature_symbol()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" | ");
     }
+    let rows = report
+        .days
+        .iter()
+        .map(|day| {
+            (
+                day.label.as_str(),
+                format!(
+                    "{} {:.1}{} / {:.1}{}",
+                    day.summary,
+                    day.high,
+                    units.temperature_symbol(),
+                    day.low,
+                    units.temperature_symbol()
+                ),
+            )
+        })
+        .collect::<Vec<_>>();
+    format_table(&format!("{} Forecast", report.location_name), &rows)
 }
 
-fn print_alerts_report(report: &AlertsReport) {
+fn format_hourly_report(report: &HourlyReport, units: Units) -> String {
     if crate::output::json_output() {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(report).unwrap_or_else(|_| "{}".to_string())
-        );
-        return;
+        return serde_json::to_string_pretty(report).unwrap_or_else(|_| "{}".to_string());
     }
-    print_boxed_title(&format!("{} Alerts", report.location_name));
-    if report.alerts.is_empty() {
-        println!("  No active alerts.");
-    } else {
-        for alert in &report.alerts {
-            println!("  {}: {}", alert.level, alert.message);
+    if matches!(crate::output::output_mode(), OutputMode::Compact) {
+        return report
+            .hours
+            .iter()
+            .map(|hour| {
+                format!(
+                    "{}:{} {:.1}{}",
+                    hour.label,
+                    hour.summary,
+                    hour.temperature,
+                    units.temperature_symbol()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" | ");
+    }
+    let rows = report
+        .hours
+        .iter()
+        .map(|hour| {
+            (
+                hour.label.as_str(),
+                format!(
+                    "{} {:.1}{}",
+                    hour.summary,
+                    hour.temperature,
+                    units.temperature_symbol()
+                ),
+            )
+        })
+        .collect::<Vec<_>>();
+    format_table(&format!("{} Hourly", report.location_name), &rows)
+}
+
+fn format_alerts_report(report: &AlertsReport) -> String {
+    if crate::output::json_output() {
+        return serde_json::to_string_pretty(report).unwrap_or_else(|_| "{}".to_string());
+    }
+    if matches!(crate::output::output_mode(), OutputMode::Compact) {
+        if report.alerts.is_empty() {
+            return "alerts=none".to_string();
         }
+        return report
+            .alerts
+            .iter()
+            .map(|alert| format!("{}:{}", alert.level, alert.message))
+            .collect::<Vec<_>>()
+            .join(" | ");
     }
+    let rows = if report.alerts.is_empty() {
+        vec![("Alerts", "No active alerts.".to_string())]
+    } else {
+        report
+            .alerts
+            .iter()
+            .map(|alert| (alert.level.as_str(), alert.message.clone()))
+            .collect::<Vec<_>>()
+    };
+    format_table(&format!("{} Alerts", report.location_name), &rows)
 }
 
-pub(crate) fn print_boxed_title(title: &str) {
-    if matches!(
-        crate::output::output_mode(),
-        OutputMode::Plain | OutputMode::Compact
-    ) {
-        println!("{title}");
-        return;
+fn format_table(title: &str, rows: &[(&str, String)]) -> String {
+    let content_width = rows
+        .iter()
+        .map(|(label, value)| label.len() + 2 + value.len())
+        .max()
+        .unwrap_or(0)
+        .max(title.len());
+    let top = format!("┌{}┐", "─".repeat(content_width + 2));
+    let middle = format!("├{}┤", "─".repeat(content_width + 2));
+    let bottom = format!("└{}┘", "─".repeat(content_width + 2));
+    let mut lines = vec![
+        top,
+        format!("│ {} │", center_line(title, content_width)),
+        middle,
+    ];
+    for (label, value) in rows {
+        lines.push(format!(
+            "│ {} │",
+            pad_line(&format!("{label}: {value}"), content_width)
+        ));
     }
-    let inner_width = title.len() + 2;
-    let border = format!("+{}+", "-".repeat(inner_width));
-    println!("{border}");
-    println!("| {title} |");
-    println!("{border}");
+    lines.push(bottom);
+    format!("{}\n", lines.join("\n"))
+}
+
+fn pad_line(value: &str, width: usize) -> String {
+    format!("{value:<width$}")
+}
+
+fn center_line(value: &str, width: usize) -> String {
+    let padding = width.saturating_sub(value.len());
+    let left = padding / 2;
+    let right = padding - left;
+    format!("{}{}{}", " ".repeat(left), value, " ".repeat(right))
 }
 
 fn weather_cache_get_or_fetch<T, F>(key: &str, ttl_secs: u64, fetch: F) -> Result<T, String>

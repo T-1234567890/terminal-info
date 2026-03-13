@@ -9,13 +9,13 @@ Terminal Info plugins use a simple executable model.
 Example:
 
 ```bash
-tinfo docker
+tinfo <plugin-name>
 ```
 
 Terminal Info maps that command to:
 
 ```text
-tinfo-docker
+tinfo-<plugin-name>
 ```
 
 ## Naming Convention
@@ -28,9 +28,9 @@ tinfo-<plugin-name>
 
 Examples:
 
-- `tinfo-docker`
-- `tinfo-github`
-- `tinfo-speedtest`
+- `tinfo-<plugin-name>`
+- `tinfo-<another-plugin>`
+- `tinfo-<tool-plugin>`
 
 ## Command Routing
 
@@ -43,7 +43,7 @@ Search order:
 Example install location:
 
 ```text
-~/.terminal-info/plugins/docker/tinfo-docker
+~/.terminal-info/plugins/<plugin-name>/tinfo-<plugin-name>
 ```
 
 ## Plugin Manifest
@@ -58,12 +58,12 @@ Example:
 
 ```toml
 [plugin]
-name = "docker"
+name = "<plugin-name>"
 version = "0.1.0"
-description = "Docker utilities for Terminal Info"
+description = "<plugin description>"
 
 [command]
-name = "docker"
+name = "<plugin-name>"
 
 [compatibility]
 terminal_info = ">=0.3.0"
@@ -94,8 +94,8 @@ Terminal Info installs reviewed plugins into:
 Each plugin gets its own directory:
 
 ```text
-~/.terminal-info/plugins/docker/
-~/.terminal-info/plugins/github/
+~/.terminal-info/plugins/<plugin-name>/
+~/.terminal-info/plugins/<another-plugin>/
 ```
 
 This keeps the architecture simple, predictable, and extensible.

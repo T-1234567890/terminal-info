@@ -182,7 +182,7 @@ pub fn show_system_info() -> Result<(), String> {
     Ok(())
 }
 
-pub fn show_time(city: Option<String>) -> Result<(), String> {
+pub fn time_output(city: Option<String>) -> Result<String, String> {
     let key = format!(
         "time-{}",
         city.clone().unwrap_or_else(|| "global".to_string())
@@ -210,28 +210,52 @@ pub fn show_time(city: Option<String>) -> Result<(), String> {
     };
 
     if crate::output::json_output() {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&data).unwrap_or_else(|_| "[]".to_string())
-        );
-        return Ok(());
+        return Ok(serde_json::to_string_pretty(&data).unwrap_or_else(|_| "[]".to_string()));
     }
 
-    match city {
+    let rows = match city {
         Some(city) => {
             let (label, formatted) = data.into_iter().next().ok_or_else(|| {
                 format!("Unsupported city '{city}'. Try Tokyo, London, New York, or Local.")
             })?;
-            println!("{label}: {formatted}");
+            vec![(label, formatted)]
         }
-        None => {
-            for (label, formatted) in data {
-                println!("{label}: {formatted}");
-            }
-        }
-    }
+        None => data,
+    };
 
-    Ok(())
+    Ok(format_time_table("Terminal Info Time", &rows))
+}
+
+fn format_time_table(title: &str, rows: &[(String, String)]) -> String {
+    let content_width = rows
+        .iter()
+        .map(|(label, value)| label.len() + 2 + value.len())
+        .max()
+        .unwrap_or(0)
+        .max(title.len());
+    let top = format!("┌{}┐", "─".repeat(content_width + 2));
+    let middle = format!("├{}┤", "─".repeat(content_width + 2));
+    let bottom = format!("└{}┘", "─".repeat(content_width + 2));
+    let mut lines = vec![
+        top,
+        format!("│ {} │", center_line(title, content_width)),
+        middle,
+    ];
+    for (label, value) in rows {
+        lines.push(format!(
+            "│ {:<content_width$} │",
+            format!("{label}: {value}")
+        ));
+    }
+    lines.push(bottom);
+    format!("{}\n", lines.join("\n"))
+}
+
+fn center_line(value: &str, width: usize) -> String {
+    let padding = width.saturating_sub(value.len());
+    let left = padding / 2;
+    let right = padding - left;
+    format!("{}{}{}", " ".repeat(left), value, " ".repeat(right))
 }
 
 pub fn run_diagnostic_all() -> Result<(), String> {
