@@ -28,12 +28,12 @@ jobs:
             archive_name: tinfo-x86_64-unknown-linux-gnu.tar.gz
             binary_name: tinfo
 
-          - os: macos-15-intel
+          - os: macos-latest
             target: x86_64-apple-darwin
             archive_name: tinfo-x86_64-apple-darwin.tar.gz
             binary_name: tinfo
 
-          - os: macos-latest
+          - os: macos-14
             target: aarch64-apple-darwin
             archive_name: tinfo-aarch64-apple-darwin.tar.gz
             binary_name: tinfo
