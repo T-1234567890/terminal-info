@@ -2,11 +2,12 @@ use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::fs::File;
-use std::io::{self, Cursor};
+use std::io::{self, Cursor, IsTerminal};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use dialoguer::{Input, theme::ColorfulTheme};
 use flate2::read::GzDecoder;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -38,6 +39,7 @@ pub struct PluginMetadata {
     pub name: String,
     pub description: String,
     pub repo: String,
+    #[serde(default)]
     pub binary: String,
     pub version: String,
 }
@@ -200,12 +202,29 @@ pub fn list_plugins() -> Result<(), String> {
     Ok(())
 }
 
-pub fn init_plugin_template(name: &str) -> Result<(), String> {
-    validate_plugin_name(name)?;
+pub fn init_plugin_template(name: Option<String>) -> Result<(), String> {
+    let default_name = name.unwrap_or_default();
+    let plugin_name = prompt_value("Plugin name", &default_name)?;
+    let plugin_name = plugin_name.trim().to_string();
+    validate_plugin_name(&plugin_name)?;
+
+    let default_path = format!("./tinfo-{plugin_name}");
+    let project_path = prompt_value("Project path", &default_path)?;
+    let project_path = project_path.trim();
+    if project_path.is_empty() {
+        return Err("Project path cannot be empty.".to_string());
+    }
+
+    let default_description = format!("{plugin_name} tools for Terminal Info");
+    let description = prompt_value("Description", &default_description)?;
+    let description = description.trim().to_string();
+    if description.is_empty() {
+        return Err("Description cannot be empty.".to_string());
+    }
 
     let directory = env::current_dir()
         .map_err(|err| format!("Failed to read current directory: {err}"))?
-        .join(format!("tinfo-{name}"));
+        .join(project_path);
 
     if directory.exists() {
         return Err(format!(
@@ -219,23 +238,60 @@ pub fn init_plugin_template(name: &str) -> Result<(), String> {
 
     fs::write(
         directory.join("plugin.toml"),
-        plugin_manifest_template(name),
+        plugin_manifest_template(&plugin_name, &description),
     )
     .map_err(|err| format!("Failed to write plugin.toml: {err}"))?;
-    fs::write(directory.join("Cargo.toml"), cargo_template(name))
+    fs::write(directory.join("Cargo.toml"), cargo_template(&plugin_name))
         .map_err(|err| format!("Failed to write Cargo.toml: {err}"))?;
-    fs::write(directory.join("src").join("main.rs"), main_template(name))
+    fs::write(directory.join("src").join("main.rs"), main_template())
         .map_err(|err| format!("Failed to write src/main.rs: {err}"))?;
-    fs::write(directory.join("README.md"), readme_template(name))
-        .map_err(|err| format!("Failed to write README.md: {err}"))?;
+    fs::write(
+        directory.join("README.md"),
+        readme_template(&plugin_name, &description),
+    )
+    .map_err(|err| format!("Failed to write README.md: {err}"))?;
+    fs::create_dir_all(directory.join(".github").join("workflows"))
+        .map_err(|err| format!("Failed to create workflow directory: {err}"))?;
+    fs::write(
+        directory
+            .join(".github")
+            .join("workflows")
+            .join("release.yml"),
+        workflow_template(&plugin_name),
+    )
+    .map_err(|err| format!("Failed to write .github/workflows/release.yml: {err}"))?;
 
     println!("Created plugin template at {}.", directory.display());
     println!("Next steps:");
     println!("  cd {}", directory.display());
     println!("  cargo run -- --help");
     println!("  cargo build --release");
-    println!("  ./target/release/tinfo-{name}");
+    println!("  ./target/release/tinfo-{}", plugin_name);
     Ok(())
+}
+
+fn prompt_value(prompt: &str, default: &str) -> Result<String, String> {
+    if io::stdin().is_terminal() && io::stdout().is_terminal() {
+        let theme = ColorfulTheme::default();
+        return Input::with_theme(&theme)
+            .with_prompt(prompt)
+            .with_initial_text(default.to_string())
+            .interact_text()
+            .map_err(|err| format!("Failed to read {}: {err}", prompt.to_ascii_lowercase()));
+    }
+
+    print!("{prompt}: ");
+    io::Write::flush(&mut io::stdout()).map_err(|err| format!("Failed to flush stdout: {err}"))?;
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .map_err(|err| format!("Failed to read {}: {err}", prompt.to_ascii_lowercase()))?;
+    let value = input.trim();
+    if value.is_empty() {
+        Ok(default.to_string())
+    } else {
+        Ok(value.to_string())
+    }
 }
 
 pub fn run_diagnostic_plugins() -> Result<(), String> {
@@ -266,12 +322,8 @@ pub fn run_diagnostic_plugins() -> Result<(), String> {
         }
 
         match index.iter().find(|plugin| plugin.name == name) {
-            Some(plugin) if plugin.binary == format!("tinfo-{name}") => {
-                if plugin.version == "latest" {
-                    println!("{} Plugin \"{name}\" metadata OK", success_prefix());
-                } else {
-                    println!("{} Plugin \"{name}\" version mismatch", error_prefix());
-                }
+            Some(plugin) if plugin_binary_name(plugin) == format!("tinfo-{name}") => {
+                println!("{} Plugin \"{name}\" metadata OK", success_prefix());
             }
             _ => println!("{} Plugin \"{name}\" version mismatch", error_prefix()),
         }
@@ -287,7 +339,15 @@ fn install_or_update_plugin(plugin: &PluginMetadata, action: &str) -> Result<(),
 
     let (owner, repo) = parse_github_repo(&plugin.repo)?;
     let release = fetch_release(&owner, &repo, &plugin.version)?;
-    let asset = select_asset(&release.assets, &plugin.binary).ok_or_else(|| {
+    if release.tag_name != plugin.version {
+        return Err(format!(
+            "Registry version mismatch for plugin '{}': expected {}, got {}.",
+            plugin.name, plugin.version, release.tag_name
+        ));
+    }
+
+    let binary = plugin_binary_name(plugin);
+    let asset = select_asset(&release.assets, &binary).ok_or_else(|| {
         format!(
             "No compatible release asset found for plugin '{}'.",
             plugin.name
@@ -303,12 +363,12 @@ fn install_or_update_plugin(plugin: &PluginMetadata, action: &str) -> Result<(),
         .bytes()
         .map_err(|err| format!("Failed to read plugin asset: {err}"))?;
 
-    let destination = plugin_home.join(binary_filename(&plugin.binary));
-    extract_asset(&asset.name, &plugin.binary, bytes.as_ref(), &destination)?;
+    let destination = plugin_home.join(binary_filename(&binary));
+    extract_asset(&asset.name, &binary, bytes.as_ref(), &destination)?;
     set_executable(&destination)?;
     write_plugin_manifest(plugin, &release.tag_name)?;
 
-    let legacy_path = plugin_dir_path()?.join(binary_filename(&plugin.binary));
+    let legacy_path = plugin_dir_path()?.join(binary_filename(&binary));
     if legacy_path.exists() && legacy_path != destination {
         let _ = fs::remove_file(legacy_path);
     }
@@ -370,7 +430,7 @@ fn plugin_cache_path() -> Result<PathBuf, String> {
 
     let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
     Ok(PathBuf::from(home)
-        .join(".tinfo")
+        .join(".terminal-info")
         .join("cache")
         .join("plugins.json"))
 }
@@ -544,7 +604,6 @@ fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
     if plugin.name.trim().is_empty()
         || plugin.description.trim().is_empty()
         || plugin.repo.trim().is_empty()
-        || plugin.binary.trim().is_empty()
         || plugin.version.trim().is_empty()
     {
         return Err(format!(
@@ -560,17 +619,16 @@ fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
         ));
     }
 
-    let expected_binary = format!("tinfo-{}", plugin.name);
-    if plugin.binary != expected_binary {
-        return Err(format!(
-            "Plugin '{}' must use binary name '{}'.",
-            plugin.name, expected_binary
-        ));
-    }
-
     if !plugin.repo.starts_with("https://github.com/") {
         return Err(format!(
             "Plugin '{}' must use a GitHub repository URL.",
+            plugin.name
+        ));
+    }
+
+    if plugin.version == "latest" {
+        return Err(format!(
+            "Plugin '{}' must pin an exact reviewed version, not 'latest'.",
             plugin.name
         ));
     }
@@ -617,11 +675,7 @@ fn parse_github_repo(url: &str) -> Result<(String, String), String> {
 }
 
 fn fetch_release(owner: &str, repo: &str, version: &str) -> Result<GithubRelease, String> {
-    let url = if version == "latest" {
-        format!("https://api.github.com/repos/{owner}/{repo}/releases/latest")
-    } else {
-        format!("https://api.github.com/repos/{owner}/{repo}/releases/tags/{version}")
-    };
+    let url = format!("https://api.github.com/repos/{owner}/{repo}/releases/tags/{version}");
 
     github_client()?
         .get(url)
@@ -743,6 +797,14 @@ fn binary_filename(binary: &str) -> String {
     #[cfg(not(windows))]
     {
         binary.to_string()
+    }
+}
+
+fn plugin_binary_name(plugin: &PluginMetadata) -> String {
+    if plugin.binary.trim().is_empty() {
+        format!("tinfo-{}", plugin.name)
+    } else {
+        plugin.binary.clone()
     }
 }
 
@@ -872,12 +934,12 @@ fn write_plugin_manifest(plugin: &PluginMetadata, version: &str) -> Result<(), S
         .map_err(|err| format!("Failed to write plugin manifest: {err}"))
 }
 
-fn plugin_manifest_template(name: &str) -> String {
+fn plugin_manifest_template(name: &str, description: &str) -> String {
     format!(
         r#"[plugin]
 name = "{name}"
 version = "0.1.0"
-description = "{name} utilities for Terminal Info"
+description = "{description}"
 
 [command]
 name = "{name}"
@@ -896,53 +958,100 @@ name = "tinfo-{name}"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "tinfo-{name}"
+path = "src/main.rs"
+
 [dependencies]
 "#
     )
 }
 
-fn main_template(name: &str) -> String {
-    format!(
-        r#"fn main() {{
-    let args: Vec<String> = std::env::args().skip(1).collect();
-
-    if args.iter().any(|arg| arg == "--help" || arg == "-h") {{
-        println!("tinfo-{name} - {name} plugin for Terminal Info");
-        println!();
-        println!("Usage: tinfo {name} [args]");
-        return;
-    }}
-
-    if args.is_empty() {{
-        println!("Hello from Terminal Info plugin '{name}'.");
-    }} else {{
-        println!("Hello from Terminal Info plugin '{name}': {{}}", args.join(" "));
-    }}
-}}
+fn main_template() -> &'static str {
+    r#"fn main() {
+    println!("Hello from Terminal Info plugin!");
+}
 "#
-    )
 }
 
-fn readme_template(name: &str) -> String {
+fn readme_template(name: &str, description: &str) -> String {
     format!(
         r#"# tinfo-{name}
 
-This is a Terminal Info plugin template.
+{description}
 
-## Development
+## Build
 
 ```bash
-cargo run -- --help
 cargo build --release
 ```
 
-## Example
+## Run With Terminal Info
 
 ```bash
 tinfo {name}
 ```
 
 Terminal Info will route `tinfo {name}` to the `tinfo-{name}` executable.
+
+## Submit To The Plugin Registry
+
+1. Publish a GitHub release for this plugin
+2. Add or update `plugins/{name}.json` in the Terminal Info repository
+3. Open a pull request for registry review
+"#
+    )
+}
+
+fn workflow_template(name: &str) -> String {
+    format!(
+        r#"name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{{{ matrix.target }}}}
+    runs-on: ${{{{ matrix.os }}}}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{{{ matrix.target }}}}
+
+      - name: Build release binary
+        run: cargo build --release --target ${{{{ matrix.target }}}}
+
+      - name: Package asset
+        run: |
+          mkdir -p dist
+          cp target/${{{{ matrix.target }}}}/release/tinfo-{name} dist/tinfo-{name}-${{{{ matrix.target }}}}
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/tinfo-{name}-${{{{ matrix.target }}}}
+          generate_release_notes: true
 "#
     )
 }

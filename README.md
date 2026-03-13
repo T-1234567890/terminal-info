@@ -214,6 +214,8 @@ tinfo plugin list
 tinfo plugin remove <name>
 ```
 
+Registry-managed plugins are installed from the exact reviewed version pinned in `plugins/<name>.json`. Terminal Info does not install the latest plugin release automatically.
+
 Developer quick start:
 
 ```bash

@@ -1,46 +1,66 @@
 # Terminal Info Plugin Registry
 
-Terminal Info uses a lightweight registry model. The main repository stores plugin metadata, while plugin code lives in each plugin author's own repository.
+Terminal Info maintains a reviewed plugin registry in the repository `plugins/` directory.
 
-## Registry File
+## Registry Layout
 
-The registry can be represented as a `plugins.json` file:
+Each plugin uses one metadata file:
+
+```text
+plugins/<plugin-name>.json
+```
+
+Example:
 
 ```json
 {
-  "plugins": [
-    {
-      "name": "docker",
-      "description": "Docker tools for Terminal Info",
-      "repo": "https://github.com/example/tinfo-docker"
-    }
-  ]
+  "name": "docker",
+  "description": "Docker utilities for Terminal Info",
+  "repo": "https://github.com/example/tinfo-docker",
+  "version": "0.2.1"
 }
 ```
 
-In the current repository, plugin metadata entries are stored as individual JSON files under `plugins/`.
+The registry pins an exact plugin version. Terminal Info does not install the latest release automatically for registry-managed plugins.
+
+## Why Exact Versions
+
+This workflow is intentional:
+
+1. plugin developer publishes a release
+2. developer submits a pull request updating the registry version
+3. maintainer reviews the change
+4. users install or update that reviewed version
+
+This makes plugin installation safer and more predictable.
+
+## Review Process
+
+Registry pull requests should verify:
+
+- plugin name conflicts
+- built-in command conflicts
+- repository legitimacy
+- basic code inspection
+
+This review is not a full security audit.
+
+Maintainers review metadata and obvious risks, but users should still evaluate third-party plugins themselves before installation.
 
 ## User Commands
-
-Terminal Info supports:
 
 ```bash
 tinfo plugin search
 tinfo plugin install <name>
 tinfo plugin update <name>
+tinfo plugin upgrade-all
 tinfo plugin remove <name>
 tinfo plugin list
 ```
 
-## Search
+## Install Behavior
 
-```bash
-tinfo plugin search
-```
-
-This reads the Terminal Info registry metadata and lists available plugins.
-
-## Install
+When a user runs:
 
 ```bash
 tinfo plugin install docker
@@ -48,52 +68,28 @@ tinfo plugin install docker
 
 Terminal Info:
 
-1. reads registry metadata
-2. fetches the plugin release from the plugin repository
-3. downloads a compatible release asset
-4. installs the plugin into:
+1. downloads the plugin registry
+2. reads `plugins/docker.json`
+3. reads the exact version from the registry
+4. downloads that exact GitHub Release tag
+5. installs the plugin into:
 
 ```text
 ~/.terminal-info/plugins/docker/
 ```
 
-## Update
+## Updating Plugins
+
+Updating follows the same reviewed path:
 
 ```bash
 tinfo plugin update docker
 ```
 
-This refreshes the installed plugin from the latest compatible release.
+The installed version changes only when the registry version changes after review.
 
 Update all installed plugins:
 
 ```bash
 tinfo plugin upgrade-all
 ```
-
-## Remove
-
-```bash
-tinfo plugin remove docker
-```
-
-This deletes the managed plugin directory for that plugin.
-
-## Listing Installed Plugins
-
-```bash
-tinfo plugin list
-```
-
-This shows the names of plugins installed in the Terminal Info plugin directory.
-
-## Registry Submission Flow
-
-A typical plugin submission process is:
-
-1. Create a public plugin repository
-2. Publish release assets
-3. Add plugin metadata to the Terminal Info registry
-4. Open a pull request
-
-The main Terminal Info repository does not need to host plugin source code to index a plugin.

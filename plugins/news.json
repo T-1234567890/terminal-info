@@ -2,6 +2,5 @@
   "name": "news",
   "description": "News headlines plugin",
   "repo": "https://github.com/example/tinfo-news",
-  "binary": "tinfo-news",
-  "version": "latest"
+  "version": "0.2.1"
 }

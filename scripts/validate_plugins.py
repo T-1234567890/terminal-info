@@ -10,12 +10,15 @@ RESERVED = {
     "network",
     "system",
     "time",
-    "doctor",
+    "diagnostic",
     "config",
+    "profile",
+    "completion",
     "plugin",
+    "update",
 }
 
-REQUIRED = {"name", "description", "repo", "binary", "version"}
+REQUIRED = {"name", "description", "repo", "version"}
 
 
 def fail(message: str) -> None:
@@ -50,9 +53,16 @@ def main() -> None:
         if name in RESERVED:
             fail(f"{path}: plugin name '{name}' conflicts with a reserved built-in command")
 
-        expected_binary = f"tinfo-{name}"
-        if data["binary"] != expected_binary:
-            fail(f"{path}: binary must be '{expected_binary}'")
+        repo = data["repo"]
+        if not isinstance(repo, str) or not repo.startswith("https://github.com/"):
+            fail(f"{path}: repo must be a GitHub repository URL")
+
+        version = data["version"]
+        if not isinstance(version, str) or not version.strip():
+            fail(f"{path}: version must be a non-empty string")
+
+        if version == "latest":
+            fail(f"{path}: version must pin an exact reviewed release, not 'latest'")
 
         if name in names:
             fail(f"{path}: duplicate plugin name '{name}' also defined in {names[name]}")
