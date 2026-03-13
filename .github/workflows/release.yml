@@ -62,6 +62,11 @@ jobs:
             sudo apt-get install -y minisign
           fi
 
+      - name: Install minisign (Windows)
+        if: runner.os == 'Windows' && env.MINISIGN_SECRET_KEY != ''
+        shell: pwsh
+        run: choco install minisign -y
+
       - name: Package archive (Unix)
         if: runner.os != 'Windows'
         run: |
@@ -83,6 +88,10 @@ jobs:
           Compress-Archive -Path "dist/${{ matrix.binary_name }}" -DestinationPath "${{ matrix.archive_name }}"
           $hash = (Get-FileHash "${{ matrix.archive_name }}" -Algorithm SHA256).Hash.ToLower()
           Set-Content -Path "${{ matrix.archive_name }}.sha256" -Value "$hash  ${{ matrix.archive_name }}"
+          if ($env:MINISIGN_SECRET_KEY) {
+            Set-Content -Path minisign.key -Value $env:MINISIGN_SECRET_KEY -NoNewline
+            minisign -S -s minisign.key -m "${{ matrix.archive_name }}" -x "${{ matrix.archive_name }}.minisig" -t "${{ matrix.archive_name }}"
+          }
 
       - name: Upload release artifact (signed Unix)
         if: runner.os != 'Windows' && env.MINISIGN_SECRET_KEY != ''
@@ -104,10 +113,20 @@ jobs:
           generate_release_notes: true
 
       - name: Upload release artifact (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.MINISIGN_SECRET_KEY == ''
         uses: softprops/action-gh-release@v2
         with:
           files: |
             ${{ matrix.archive_name }}
             ${{ matrix.archive_name }}.sha256
+          generate_release_notes: true
+
+      - name: Upload release artifact (signed Windows)
+        if: runner.os == 'Windows' && env.MINISIGN_SECRET_KEY != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ matrix.archive_name }}
+            ${{ matrix.archive_name }}.sha256
+            ${{ matrix.archive_name }}.minisig
           generate_release_notes: true

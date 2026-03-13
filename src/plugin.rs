@@ -1322,6 +1322,8 @@ jobs:
   build:
     name: Build ${{{{ matrix.target }}}}
     runs-on: ${{{{ matrix.os }}}}
+    env:
+      MINISIGN_SECRET_KEY: ${{{{ secrets.MINISIGN_SECRET_KEY }}}}
     strategy:
       fail-fast: false
       matrix:
@@ -1361,6 +1363,11 @@ jobs:
             sudo apt-get install -y minisign
           fi
 
+      - name: Install minisign (Windows)
+        if: ${{{{ runner.os == 'Windows' && env.MINISIGN_SECRET_KEY != '' }}}}
+        shell: pwsh
+        run: choco install minisign -y
+
       - name: Package asset (Unix)
         if: runner.os != 'Windows'
         run: |
@@ -1368,8 +1375,8 @@ jobs:
           cp target/${{{{ matrix.target }}}}/release/${{{{ matrix.binary_name }}}} dist/${{{{ matrix.binary_name }}}}
           mv dist/${{{{ matrix.binary_name }}}} dist/tinfo-{name}-${{{{ matrix.target }}}}
           shasum -a 256 dist/tinfo-{name}-${{{{ matrix.target }}}} > dist/tinfo-{name}-${{{{ matrix.target }}}}.sha256
-          if [ -n "${{{{ secrets.MINISIGN_SECRET_KEY || '' }}}}" ]; then
-            echo "${{{{ secrets.MINISIGN_SECRET_KEY }}}}" > minisign.key
+          if [ -n "$MINISIGN_SECRET_KEY" ]; then
+            echo "$MINISIGN_SECRET_KEY" > minisign.key
             minisign -S -s minisign.key -m dist/tinfo-{name}-${{{{ matrix.target }}}} -x dist/tinfo-{name}-${{{{ matrix.target }}}}.minisig -t "tinfo-{name}-${{{{ matrix.target }}}}"
           fi
 
@@ -1381,9 +1388,13 @@ jobs:
           Copy-Item "target/${{{{ matrix.target }}}}/release/${{{{ matrix.binary_name }}}}" "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe"
           $hash = (Get-FileHash "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe" -Algorithm SHA256).Hash.ToLower()
           Set-Content -Path "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.sha256" -Value "$hash  tinfo-{name}-${{{{ matrix.target }}}}.exe"
+          if ($env:MINISIGN_SECRET_KEY) {{
+            Set-Content -Path minisign.key -Value $env:MINISIGN_SECRET_KEY -NoNewline
+            minisign -S -s minisign.key -m "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe" -x "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.minisig" -t "tinfo-{name}-${{{{ matrix.target }}}}.exe"
+          }}
 
       - name: Upload release asset (Unix)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && env.MINISIGN_SECRET_KEY != ''
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -1392,13 +1403,32 @@ jobs:
             dist/tinfo-{name}-${{{{ matrix.target }}}}.minisig
           generate_release_notes: true
 
+      - name: Upload release asset (unsigned Unix)
+        if: runner.os != 'Windows' && env.MINISIGN_SECRET_KEY == ''
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/tinfo-{name}-${{{{ matrix.target }}}}
+            dist/tinfo-{name}-${{{{ matrix.target }}}}.sha256
+          generate_release_notes: true
+
       - name: Upload release asset (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.MINISIGN_SECRET_KEY == ''
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/tinfo-{name}-${{{{ matrix.target }}}}.exe
             dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.sha256
+          generate_release_notes: true
+
+      - name: Upload release asset (signed Windows)
+        if: runner.os == 'Windows' && env.MINISIGN_SECRET_KEY != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/tinfo-{name}-${{{{ matrix.target }}}}.exe
+            dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.sha256
+            dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.minisig
           generate_release_notes: true
 "#
     )
