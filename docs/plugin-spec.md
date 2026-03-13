@@ -1,10 +1,10 @@
 # Terminal Info Plugin Specification
 
-This document defines the Terminal Info executable plugin model.
+This document defines the Terminal Info plugin architecture.
 
-## Overview
+## Architecture
 
-Terminal Info plugins are external binaries executed by Terminal Info.
+Terminal Info plugins use a simple executable model.
 
 Example:
 
@@ -20,7 +20,7 @@ tinfo-docker
 
 ## Naming Convention
 
-Plugin binary:
+Plugin executables must use:
 
 ```text
 tinfo-<plugin-name>
@@ -32,34 +32,28 @@ Examples:
 - `tinfo-github`
 - `tinfo-speedtest`
 
-Plugin names should use lowercase letters, numbers, and `-`.
-
 ## Command Routing
 
-If a top-level Terminal Info command is not built in, Terminal Info attempts to resolve a plugin.
+If a top-level command is not built in, Terminal Info searches for a matching plugin.
 
 Search order:
 
-1. managed plugin install directory
+1. `~/.terminal-info/plugins/<plugin-name>/tinfo-<plugin-name>`
 2. `PATH`
 
-Managed plugin directory layout:
+Example install location:
 
 ```text
-~/.terminal-info/plugins/<plugin-name>/
+~/.terminal-info/plugins/docker/tinfo-docker
 ```
 
-Example:
+## Plugin Manifest
+
+Each managed plugin should include:
 
 ```text
-~/.terminal-info/plugins/docker/
-├── plugin.toml
-└── tinfo-docker
+plugin.toml
 ```
-
-## Manifest Format
-
-Each plugin directory should contain a `plugin.toml` manifest.
 
 Example:
 
@@ -76,49 +70,31 @@ name = "docker"
 terminal_info = ">=0.3.0"
 ```
 
-### Required Sections
+## Security Model
 
-`[plugin]`
-- `name`
-- `version`
-- `description`
+Plugins are third-party executables.
 
-`[command]`
-- `name`
+Terminal Info plugin rules:
 
-`[compatibility]`
-- `terminal_info`
+- plugins run as normal user processes
+- plugins must not require root privileges
+- plugins should be installed from trusted sources
 
-## Installation Layout
+Registry review improves safety, but it is not a full security audit.
 
-Managed plugins are stored per plugin:
+## Installation Model
+
+Terminal Info installs reviewed plugins into:
+
+```text
+~/.terminal-info/plugins/
+```
+
+Each plugin gets its own directory:
 
 ```text
 ~/.terminal-info/plugins/docker/
 ~/.terminal-info/plugins/github/
 ```
 
-Each directory may contain:
-
-- `plugin.toml`
-- the plugin executable
-- optional plugin assets
-
-## Compatibility
-
-The `terminal_info` field declares which Terminal Info versions the plugin expects.
-
-Example:
-
-```toml
-[compatibility]
-terminal_info = ">=0.3.0"
-```
-
-Terminal Info keeps the plugin contract intentionally small:
-
-- plugins are executables
-- arguments are passed through directly
-- output is controlled by the plugin
-
-This keeps the architecture simple and easy to extend.
+This keeps the architecture simple, predictable, and extensible.

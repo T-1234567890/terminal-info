@@ -42,6 +42,8 @@ tinfo plugin remove <name>
 tinfo plugin list
 ```
 
+Registry-managed installs always use the exact version pinned in the Terminal Info plugin registry.
+
 ## Related Documentation
 
 - [plugin-spec.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-spec.md)
