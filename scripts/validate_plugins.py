@@ -18,7 +18,7 @@ RESERVED = {
     "update",
 }
 
-REQUIRED = {"name", "description", "repo", "version"}
+REQUIRED = {"name", "description", "repo", "version", "checksums", "public_key"}
 
 
 def fail(message: str) -> None:
@@ -63,6 +63,20 @@ def main() -> None:
 
         if version == "latest":
             fail(f"{path}: version must pin an exact reviewed release, not 'latest'")
+
+        checksums = data["checksums"]
+        if not isinstance(checksums, dict) or not checksums:
+            fail(f"{path}: checksums must be a non-empty object")
+
+        for target, checksum in checksums.items():
+            if not isinstance(target, str) or not target.strip():
+                fail(f"{path}: checksum targets must be non-empty strings")
+            if not isinstance(checksum, str) or len(checksum) != 64 or any(ch not in "0123456789abcdefABCDEF" for ch in checksum):
+                fail(f"{path}: checksum for '{target}' must be a 64-character SHA-256 hex string")
+
+        public_key = data["public_key"]
+        if not isinstance(public_key, str) or not public_key.startswith("RW"):
+            fail(f"{path}: public_key must be a minisign public key string")
 
         if name in names:
             fail(f"{path}: duplicate plugin name '{name}' also defined in {names[name]}")

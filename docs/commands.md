@@ -13,10 +13,16 @@ Shows the default dashboard.
 ## Weather
 
 ```bash
+tinfo weather
 tinfo weather now
 tinfo weather now <city>
 tinfo weather forecast
 tinfo weather forecast <city>
+tinfo weather hourly
+tinfo weather hourly <city>
+tinfo weather alerts
+tinfo weather alerts <city>
+tinfo weather <alias>
 tinfo weather location
 tinfo weather location <city>
 ```
@@ -102,6 +108,7 @@ tinfo config units imperial
 tinfo config api
 tinfo config api show
 tinfo config api set openweather <key>
+tinfo config doctor
 tinfo config reset
 ```
 
@@ -126,6 +133,7 @@ Profiles are defined in `~/.tinfo/config.toml` under `[profile.<name>]`.
 tinfo completion bash
 tinfo completion zsh
 tinfo completion fish
+tinfo completion install
 ```
 
 ## Plugin Management
@@ -135,18 +143,23 @@ tinfo plugin list
 tinfo plugin search
 tinfo plugin init <name>
 tinfo plugin install <name>
+tinfo plugin trust <name>
+tinfo plugin untrust <name>
+tinfo plugin trusted
+tinfo plugin info <name>
+tinfo plugin verify
 tinfo plugin update <name>
 tinfo plugin upgrade-all
 tinfo plugin remove <name>
 ```
 
-`plugin search` reads the local plugin index in `plugins/*.json`.
-`plugin install` downloads the plugin's GitHub release asset and installs it into `~/.tinfo/plugins/`.
-`plugin remove` deletes the installed plugin binary.
+`plugin search` reads the reviewed registry metadata, using the local cache when available.
+`plugin install` downloads the plugin's pinned GitHub release asset and installs it into `~/.terminal-info/plugins/`.
+`plugin remove` deletes the installed plugin directory.
 
 ## External Plugins
 
-Unknown top-level commands are treated as plugin candidates.
+Unknown top-level commands are treated as plugin candidates inside the managed plugin directory.
 
 Example:
 

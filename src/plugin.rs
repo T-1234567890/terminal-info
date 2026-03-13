@@ -9,8 +9,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use dialoguer::{Input, theme::ColorfulTheme};
 use flate2::read::GzDecoder;
+use minisign_verify::{PublicKey, Signature};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tar::Archive;
 use zip::ZipArchive;
 
@@ -42,6 +44,8 @@ pub struct PluginMetadata {
     #[serde(default)]
     pub binary: String,
     pub version: String,
+    pub checksums: std::collections::BTreeMap<String, String>,
+    pub public_key: String,
 }
 
 #[derive(Deserialize)]
@@ -70,31 +74,77 @@ struct PluginCache {
     plugins: Vec<PluginMetadata>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct PluginManifest {
     plugin: PluginSection,
     command: CommandSection,
     compatibility: CompatibilitySection,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    install: Option<InstallSection>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct PluginSection {
     name: String,
     version: String,
     description: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct CommandSection {
     name: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct CompatibilitySection {
     terminal_info: String,
 }
 
+#[derive(Serialize, Deserialize)]
+struct InstallSection {
+    version: String,
+    target: String,
+    asset_checksum: String,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+struct TrustedPlugins {
+    trusted: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct PluginInfoView {
+    name: String,
+    repository: String,
+    installed_version: Option<String>,
+    pinned_version: Option<String>,
+    checksum: String,
+    trusted: bool,
+    install_path: String,
+    manifest: Option<toml::Value>,
+}
+
+#[derive(Serialize)]
+struct PluginVerifyView {
+    name: String,
+    version_ok: bool,
+    checksum_ok: bool,
+    manifest_ok: bool,
+    binary_ok: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PluginWidget {
+    pub title: String,
+    pub content: String,
+}
+
 pub fn run_plugin(command: &str, args: &[String]) -> Result<(), String> {
+    if !is_plugin_trusted(command)? {
+        return Err(format!(
+            "Plugin \"{command}\" is not trusted.\n\nRun:\ntinfo plugin trust {command}\n\nto allow it."
+        ));
+    }
     let binary_name = format!("tinfo-{command}");
     let binary_path = resolve_plugin_binary(&binary_name).ok_or_else(|| {
         format!("Unknown command '{command}'. No plugin named '{binary_name}' found.")
@@ -119,8 +169,177 @@ pub fn run_plugin(command: &str, args: &[String]) -> Result<(), String> {
     }
 }
 
+pub fn set_plugin_trust(name: &str, trusted: bool) -> Result<(), String> {
+    validate_plugin_name(name)?;
+    let mut allowlist = load_trusted_plugins()?;
+    allowlist.trusted.retain(|entry| entry != name);
+    if trusted {
+        allowlist.trusted.push(name.to_string());
+        allowlist.trusted.sort();
+    }
+    save_trusted_plugins(&allowlist)?;
+    println!(
+        "{} plugin '{}'.",
+        if trusted { "Trusted" } else { "Untrusted" },
+        name
+    );
+    Ok(())
+}
+
+pub fn list_trusted_plugins() -> Result<(), String> {
+    let allowlist = load_trusted_plugins()?;
+    if crate::output::json_output() {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&allowlist).unwrap_or_else(|_| "{}".to_string())
+        );
+        return Ok(());
+    }
+    if allowlist.trusted.is_empty() {
+        println!("No trusted plugins.");
+        return Ok(());
+    }
+    for name in allowlist.trusted {
+        println!("{name}");
+    }
+    Ok(())
+}
+
+pub fn info_plugin(name: &str) -> Result<(), String> {
+    validate_plugin_name(name)?;
+    let registry = load_plugin_by_name(name).ok();
+    let install_path = plugin_home_path(name)?;
+    let manifest = read_installed_manifest(name).ok();
+    let installed_version = manifest
+        .as_ref()
+        .and_then(|value| value.get("plugin"))
+        .and_then(|section| section.get("version"))
+        .and_then(|value| value.as_str())
+        .map(str::to_string);
+    let checksum_status = checksum_status(name, registry.as_ref(), manifest.as_ref());
+    let view = PluginInfoView {
+        name: name.to_string(),
+        repository: registry
+            .as_ref()
+            .map(|plugin| plugin.repo.clone())
+            .unwrap_or_else(|| "unknown".to_string()),
+        installed_version,
+        pinned_version: registry.as_ref().map(|plugin| plugin.version.clone()),
+        checksum: checksum_status,
+        trusted: is_plugin_trusted(name)?,
+        install_path: install_path.display().to_string(),
+        manifest,
+    };
+
+    if crate::output::json_output() {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&view).unwrap_or_else(|_| "{}".to_string())
+        );
+    } else {
+        println!("Plugin: {}", view.name);
+        println!();
+        println!("Repository: {}", view.repository);
+        println!(
+            "Installed version: {}",
+            view.installed_version
+                .unwrap_or_else(|| "unknown".to_string())
+        );
+        println!(
+            "Pinned version: {}",
+            view.pinned_version.unwrap_or_else(|| "unknown".to_string())
+        );
+        println!("Checksum: {}", view.checksum);
+        println!("Trusted: {}", if view.trusted { "yes" } else { "no" });
+        println!("Install path:");
+        println!("{}", view.install_path);
+    }
+    Ok(())
+}
+
+pub fn verify_plugins() -> Result<(), String> {
+    let installed = installed_plugin_names()?;
+    let mut results = Vec::new();
+    for name in installed {
+        let registry = load_plugin_by_name(&name).ok();
+        let manifest = read_installed_manifest(&name).ok();
+        let binary_path = plugin_home_path(&name)?.join(binary_filename(&format!("tinfo-{name}")));
+        let version_ok = registry
+            .as_ref()
+            .zip(manifest.as_ref())
+            .and_then(|(plugin, manifest)| {
+                manifest
+                    .get("plugin")
+                    .and_then(|section| section.get("version"))
+                    .and_then(|value| value.as_str())
+                    .map(|version| version == plugin.version)
+            })
+            .unwrap_or(false);
+        let checksum_ok =
+            checksum_status(&name, registry.as_ref(), manifest.as_ref()) == "verified";
+        let manifest_ok = manifest.is_some();
+        let binary_ok = binary_path.exists();
+        results.push(PluginVerifyView {
+            name,
+            version_ok,
+            checksum_ok,
+            manifest_ok,
+            binary_ok,
+        });
+    }
+
+    if crate::output::json_output() {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&results).unwrap_or_else(|_| "[]".to_string())
+        );
+    } else if results.is_empty() {
+        println!("No plugins installed.");
+    } else {
+        for item in results {
+            println!(
+                "{} version={} checksum={} manifest={} binary={}",
+                item.name, item.version_ok, item.checksum_ok, item.manifest_ok, item.binary_ok
+            );
+        }
+    }
+    Ok(())
+}
+
+pub fn dashboard_widgets() -> Vec<PluginWidget> {
+    let Ok(installed) = installed_plugin_names() else {
+        return Vec::new();
+    };
+    let mut widgets = Vec::new();
+    for name in installed {
+        if !matches!(is_plugin_trusted(&name), Ok(true)) {
+            continue;
+        }
+        let binary = match find_in_plugin_dir(&format!("tinfo-{name}")) {
+            Some(path) => path,
+            None => continue,
+        };
+        let output = match Command::new(binary).arg("--widget").output() {
+            Ok(output) if output.status.success() => output,
+            _ => continue,
+        };
+        let text = String::from_utf8_lossy(&output.stdout);
+        if let Ok(widget) = serde_json::from_str::<PluginWidget>(&text) {
+            widgets.push(widget);
+        }
+    }
+    widgets
+}
+
 pub fn search_plugins() -> Result<(), String> {
     let plugins = load_plugin_index()?;
+    if crate::output::json_output() {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&plugins).unwrap_or_else(|_| "[]".to_string())
+        );
+        return Ok(());
+    }
     if plugins.is_empty() {
         println!("No plugins available.");
         return Ok(());
@@ -171,6 +390,7 @@ pub fn upgrade_all_plugins() -> Result<(), String> {
 }
 
 pub fn remove_plugin(name: &str) -> Result<(), String> {
+    validate_plugin_name(name)?;
     let plugin_home = plugin_home_path(name)?;
     let legacy_binary = plugin_dir_path()?.join(binary_filename(&format!("tinfo-{name}")));
 
@@ -190,6 +410,13 @@ pub fn remove_plugin(name: &str) -> Result<(), String> {
 
 pub fn list_plugins() -> Result<(), String> {
     let entries = installed_plugin_names()?;
+    if crate::output::json_output() {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&entries).unwrap_or_else(|_| "[]".to_string())
+        );
+        return Ok(());
+    }
     if entries.is_empty() {
         println!("No plugins installed.");
         return Ok(());
@@ -353,6 +580,8 @@ fn install_or_update_plugin(plugin: &PluginMetadata, action: &str) -> Result<(),
             plugin.name
         )
     })?;
+    let signature_asset = select_signature_asset(&release.assets, &asset.name)
+        .ok_or_else(|| format!("No minisign signature found for plugin '{}'.", plugin.name))?;
 
     let bytes = github_client()?
         .get(&asset.browser_download_url)
@@ -362,11 +591,23 @@ fn install_or_update_plugin(plugin: &PluginMetadata, action: &str) -> Result<(),
         .map_err(|err| format!("Failed to download plugin asset: {err}"))?
         .bytes()
         .map_err(|err| format!("Failed to read plugin asset: {err}"))?;
+    let signature = github_client()?
+        .get(&signature_asset.browser_download_url)
+        .send()
+        .map_err(|err| format!("Failed to download plugin signature: {err}"))?
+        .error_for_status()
+        .map_err(|err| format!("Failed to download plugin signature: {err}"))?
+        .text()
+        .map_err(|err| format!("Failed to read plugin signature: {err}"))?;
+
+    verify_plugin_checksum(plugin, bytes.as_ref())?;
+    verify_minisign_signature(bytes.as_ref(), &signature, &plugin.public_key)
+        .map_err(|err| format!("Plugin signature verification failed: {err}"))?;
 
     let destination = plugin_home.join(binary_filename(&binary));
     extract_asset(&asset.name, &binary, bytes.as_ref(), &destination)?;
     set_executable(&destination)?;
-    write_plugin_manifest(plugin, &release.tag_name)?;
+    write_plugin_manifest(plugin, &release.tag_name, &sha256_hex(bytes.as_ref()))?;
 
     let legacy_path = plugin_dir_path()?.join(binary_filename(&binary));
     if legacy_path.exists() && legacy_path != destination {
@@ -382,7 +623,7 @@ fn install_or_update_plugin(plugin: &PluginMetadata, action: &str) -> Result<(),
 }
 
 fn resolve_plugin_binary(binary_name: &str) -> Option<PathBuf> {
-    find_in_plugin_dir(binary_name).or_else(|| find_in_path(binary_name))
+    find_in_plugin_dir(binary_name)
 }
 
 fn find_in_plugin_dir(binary_name: &str) -> Option<PathBuf> {
@@ -396,19 +637,6 @@ fn find_in_plugin_dir(binary_name: &str) -> Option<PathBuf> {
     let legacy_candidate = dir.join(binary_filename(binary_name));
     if is_executable_file(&legacy_candidate) {
         return Some(legacy_candidate);
-    }
-
-    None
-}
-
-fn find_in_path(binary_name: &str) -> Option<PathBuf> {
-    let paths = env::var_os("PATH")?;
-
-    for dir in env::split_paths(&paths) {
-        let candidate = dir.join(binary_name);
-        if is_executable_file(&candidate) {
-            return Some(candidate);
-        }
     }
 
     None
@@ -633,6 +861,21 @@ fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
         ));
     }
 
+    let checksum = plugin.checksums.get(target_triple()).ok_or_else(|| {
+        format!(
+            "Plugin '{}' is missing a checksum for '{}'.",
+            plugin.name,
+            target_triple()
+        )
+    })?;
+    validate_sha256_hex(checksum).map_err(|err| format!("Plugin '{}': {err}", plugin.name))?;
+    if plugin.public_key.trim().is_empty() {
+        return Err(format!(
+            "Plugin '{}' is missing a minisign public key.",
+            plugin.name
+        ));
+    }
+
     Ok(())
 }
 
@@ -714,6 +957,14 @@ fn select_asset<'a>(assets: &'a [GithubAsset], binary: &str) -> Option<&'a Githu
                     && (asset.name.ends_with(".tar.gz") || asset.name.ends_with(".zip"))
             })
         })
+}
+
+fn select_signature_asset<'a>(
+    assets: &'a [GithubAsset],
+    asset_name: &str,
+) -> Option<&'a GithubAsset> {
+    let signature_name = format!("{asset_name}.minisig");
+    assets.iter().find(|asset| asset.name == signature_name)
 }
 
 fn extract_asset(
@@ -806,6 +1057,49 @@ fn plugin_binary_name(plugin: &PluginMetadata) -> String {
     } else {
         plugin.binary.clone()
     }
+}
+
+fn verify_plugin_checksum(plugin: &PluginMetadata, bytes: &[u8]) -> Result<(), String> {
+    let expected = plugin.checksums.get(target_triple()).ok_or_else(|| {
+        format!(
+            "Plugin '{}' is missing a checksum for '{}'.",
+            plugin.name,
+            target_triple()
+        )
+    })?;
+    let actual = sha256_hex(bytes);
+    if &actual != expected {
+        return Err(format!(
+            "Checksum verification failed for plugin '{}'.",
+            plugin.name
+        ));
+    }
+    Ok(())
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    format!("{digest:x}")
+}
+
+fn validate_sha256_hex(value: &str) -> Result<(), String> {
+    if value.len() != 64 || !value.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err("checksum must be a 64-character SHA-256 hex string.".to_string());
+    }
+    Ok(())
+}
+
+fn verify_minisign_signature(
+    bytes: &[u8],
+    signature: &str,
+    public_key: &str,
+) -> Result<(), String> {
+    let key = PublicKey::from_base64(public_key)
+        .map_err(|err| format!("invalid minisign public key: {err}"))?;
+    let sig =
+        Signature::decode(signature).map_err(|err| format!("invalid minisign signature: {err}"))?;
+    key.verify(bytes, &sig, false)
+        .map_err(|err| format!("signature mismatch: {err}"))
 }
 
 fn target_triple() -> &'static str {
@@ -913,7 +1207,11 @@ fn plugin_manifest_path(name: &str) -> Result<PathBuf, String> {
     Ok(plugin_home_path(name)?.join("plugin.toml"))
 }
 
-fn write_plugin_manifest(plugin: &PluginMetadata, version: &str) -> Result<(), String> {
+fn write_plugin_manifest(
+    plugin: &PluginMetadata,
+    version: &str,
+    asset_checksum: &str,
+) -> Result<(), String> {
     let manifest = PluginManifest {
         plugin: PluginSection {
             name: plugin.name.clone(),
@@ -926,6 +1224,11 @@ fn write_plugin_manifest(plugin: &PluginMetadata, version: &str) -> Result<(), S
         compatibility: CompatibilitySection {
             terminal_info: format!(">={}", env!("CARGO_PKG_VERSION")),
         },
+        install: Some(InstallSection {
+            version: version.to_string(),
+            target: target_triple().to_string(),
+            asset_checksum: asset_checksum.to_string(),
+        }),
     };
 
     let toml = toml::to_string_pretty(&manifest)
@@ -1042,16 +1345,99 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{{{ matrix.target }}}}
 
+      - name: Install minisign
+        if: ${{{{ secrets.MINISIGN_SECRET_KEY != '' }}}}
+        run: |
+          if command -v brew >/dev/null 2>&1; then
+            brew install minisign
+          elif command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y minisign
+          fi
+
       - name: Package asset
         run: |
           mkdir -p dist
           cp target/${{{{ matrix.target }}}}/release/tinfo-{name} dist/tinfo-{name}-${{{{ matrix.target }}}}
+          shasum -a 256 dist/tinfo-{name}-${{{{ matrix.target }}}} > dist/tinfo-{name}-${{{{ matrix.target }}}}.sha256
+          if [ -n "${{{{ secrets.MINISIGN_SECRET_KEY || '' }}}}" ]; then
+            echo "${{{{ secrets.MINISIGN_SECRET_KEY }}}}" > minisign.key
+            minisign -S -s minisign.key -m dist/tinfo-{name}-${{{{ matrix.target }}}} -x dist/tinfo-{name}-${{{{ matrix.target }}}}.minisig -t "tinfo-{name}-${{{{ matrix.target }}}}"
+          fi
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/tinfo-{name}-${{{{ matrix.target }}}}
+          files: |
+            dist/tinfo-{name}-${{{{ matrix.target }}}}
+            dist/tinfo-{name}-${{{{ matrix.target }}}}.sha256
+            dist/tinfo-{name}-${{{{ matrix.target }}}}.minisig
           generate_release_notes: true
 "#
     )
+}
+
+fn trusted_plugins_path() -> Result<PathBuf, String> {
+    let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
+    Ok(PathBuf::from(home)
+        .join(".terminal-info")
+        .join("trusted_plugins.json"))
+}
+
+fn load_trusted_plugins() -> Result<TrustedPlugins, String> {
+    let path = trusted_plugins_path()?;
+    if !path.exists() {
+        return Ok(TrustedPlugins::default());
+    }
+    let contents =
+        fs::read_to_string(path).map_err(|err| format!("Failed to read trusted plugins: {err}"))?;
+    serde_json::from_str(&contents).map_err(|err| format!("Failed to parse trusted plugins: {err}"))
+}
+
+fn save_trusted_plugins(value: &TrustedPlugins) -> Result<(), String> {
+    let path = trusted_plugins_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("Failed to create trusted plugin directory: {err}"))?;
+    }
+    let json = serde_json::to_string_pretty(value)
+        .map_err(|err| format!("Failed to serialize trusted plugins: {err}"))?;
+    fs::write(path, format!("{json}\n"))
+        .map_err(|err| format!("Failed to write trusted plugins: {err}"))
+}
+
+fn is_plugin_trusted(name: &str) -> Result<bool, String> {
+    let allowlist = load_trusted_plugins()?;
+    Ok(allowlist.trusted.iter().any(|entry| entry == name))
+}
+
+fn read_installed_manifest(name: &str) -> Result<toml::Value, String> {
+    let path = plugin_manifest_path(name)?;
+    let contents =
+        fs::read_to_string(path).map_err(|err| format!("Failed to read plugin manifest: {err}"))?;
+    toml::from_str(&contents).map_err(|err| format!("Failed to parse plugin manifest: {err}"))
+}
+
+fn checksum_status(
+    name: &str,
+    registry: Option<&PluginMetadata>,
+    manifest: Option<&toml::Value>,
+) -> String {
+    let Some(registry) = registry else {
+        return "unknown".to_string();
+    };
+    let Some(manifest) = manifest else {
+        return "missing".to_string();
+    };
+    let expected = registry.checksums.get(target_triple());
+    let actual = manifest
+        .get("install")
+        .and_then(|section| section.get("asset_checksum"))
+        .and_then(|value| value.as_str());
+    if expected.map(|value| value.as_str()) == actual {
+        "verified".to_string()
+    } else {
+        let _ = name;
+        "mismatch".to_string()
+    }
 }

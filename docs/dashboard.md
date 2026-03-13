@@ -12,6 +12,7 @@ The dashboard currently displays:
 - `Network`
 - `CPU`
 - `Memory`
+- `Plugins` when trusted plugins expose widgets
 
 Example:
 
@@ -38,17 +39,35 @@ The dashboard is implemented in:
 The dashboard uses lightweight helper logic to gather:
 
 - local time
-- current weather summary when a default location is configured
+- current weather summary when a location or IP detection can resolve a city
 - local network summary
 - CPU usage
 - memory usage
+
+Weather failures are shown with short, actionable hints instead of a generic unavailable state.
+
+## Widget Order
+
+Dashboard widgets can be ordered in the config file:
+
+```toml
+[dashboard]
+widgets = ["weather", "time", "network", "system", "plugins"]
+```
+
+Supported widget names are:
+
+- `weather`
+- `time`
+- `network`
+- `system`
+- `plugins`
 
 ## Future Expansion
 
 The dashboard is intentionally small and could expand later with:
 
 - disk summary
-- plugin-provided widgets
 - upcoming forecast
 - diagnostic status
 - update status

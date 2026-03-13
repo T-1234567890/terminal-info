@@ -1,6 +1,6 @@
 # Plugins
 
-Terminal Info plugins are external executables. The design is intentionally simple: Terminal Info routes unknown top-level commands to a matching `tinfo-<plugin-name>` binary.
+Terminal Info plugins are external executables. The design is intentionally simple: Terminal Info routes unknown top-level commands to a matching `tinfo-<plugin-name>` binary inside the managed plugin directory.
 
 Example:
 
@@ -30,12 +30,35 @@ Example:
 └── tinfo-docker
 ```
 
+## Trust Model
+
+Installed plugins are not allowed to execute until the user trusts them explicitly.
+
+Commands:
+
+```bash
+tinfo plugin trust <name>
+tinfo plugin untrust <name>
+tinfo plugin trusted
+```
+
+Trusted plugin names are stored in:
+
+```text
+~/.terminal-info/trusted_plugins.json
+```
+
 ## Plugin Commands
 
 ```bash
 tinfo plugin search
 tinfo plugin init <name>
 tinfo plugin install <name>
+tinfo plugin trust <name>
+tinfo plugin untrust <name>
+tinfo plugin trusted
+tinfo plugin info <name>
+tinfo plugin verify
 tinfo plugin update <name>
 tinfo plugin upgrade-all
 tinfo plugin remove <name>
@@ -43,6 +66,7 @@ tinfo plugin list
 ```
 
 Registry-managed installs always use the exact version pinned in the Terminal Info plugin registry.
+Plugin downloads verify a checksum from the registry and a Minisign signature from the plugin release.
 
 ## Related Documentation
 

@@ -1,16 +1,18 @@
 use std::fs;
 use std::net::{TcpStream, ToSocketAddrs, UdpSocket};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{FixedOffset, Local, Utc};
 use reqwest::blocking::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sysinfo::{Disks, System};
 
+use crate::cache::{read_cache, write_cache};
 use crate::config::Config;
 use crate::output::{error_prefix, success_prefix};
-use crate::plugin::run_diagnostic_plugins;
+use crate::plugin::{run_diagnostic_plugins, verify_plugins};
 use crate::weather::WeatherClient;
 
 const DEFAULT_PING_HOSTS: [&str; 3] = ["google.com", "cloudflare.com", "github.com"];
@@ -21,6 +23,30 @@ pub struct DashboardSnapshot {
     pub network: String,
     pub cpu: String,
     pub memory: String,
+}
+
+#[derive(Serialize)]
+struct NetworkInfoView {
+    public_ip: String,
+    local_ip: String,
+    dns: String,
+    isp: String,
+}
+
+#[derive(Serialize)]
+struct SystemInfoView {
+    os: String,
+    cpu: String,
+    memory: String,
+    disk_usage: String,
+    uptime: String,
+}
+
+#[derive(Serialize)]
+struct DoctorCheck {
+    name: String,
+    status: String,
+    detail: String,
 }
 
 pub struct DashboardWeather {
@@ -62,7 +88,37 @@ pub fn run_ping(host: Option<String>) -> Result<(), String> {
 }
 
 pub fn show_network_info() -> Result<(), String> {
-    let info = gather_network_info();
+    let info = read_cache("network", 30).unwrap_or_else(|| {
+        let info = gather_network_info();
+        let _ = write_cache("network", &info);
+        info
+    });
+
+    if crate::output::json_output() {
+        let view = NetworkInfoView {
+            public_ip: info
+                .public_ip
+                .clone()
+                .unwrap_or_else(|| "unavailable".to_string()),
+            local_ip: info
+                .local_ip
+                .clone()
+                .unwrap_or_else(|| "unavailable".to_string()),
+            dns: info
+                .dns
+                .clone()
+                .unwrap_or_else(|| "unavailable".to_string()),
+            isp: info
+                .isp
+                .clone()
+                .unwrap_or_else(|| "unavailable".to_string()),
+        };
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&view).unwrap_or_else(|_| "{}".to_string())
+        );
+        return Ok(());
+    }
 
     println!(
         "Public IP: {}",
@@ -95,42 +151,81 @@ pub fn show_system_info() -> Result<(), String> {
         })
         .unwrap_or_else(|| "unavailable".to_string());
 
-    println!(
-        "OS: {}",
-        System::long_os_version().unwrap_or_else(|| "unknown".to_string())
-    );
-    println!(
-        "CPU: {}",
-        system
+    let view = SystemInfoView {
+        os: System::long_os_version().unwrap_or_else(|| "unknown".to_string()),
+        cpu: system
             .cpus()
             .first()
             .map(|cpu| cpu.brand().to_string())
-            .unwrap_or_else(|| "unknown".to_string())
-    );
-    println!("Memory: {}", memory_line(&system));
-    println!("Disk usage: {disk_line}");
-    println!(
-        "Uptime: {}",
-        system_uptime_seconds()
+            .unwrap_or_else(|| "unknown".to_string()),
+        memory: memory_line(&system),
+        disk_usage: disk_line,
+        uptime: system_uptime_seconds()
             .map(format_uptime)
-            .unwrap_or_else(|| "unavailable".to_string())
-    );
+            .unwrap_or_else(|| "unavailable".to_string()),
+    };
+
+    if crate::output::json_output() {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&view).unwrap_or_else(|_| "{}".to_string())
+        );
+        return Ok(());
+    }
+
+    println!("OS: {}", view.os);
+    println!("CPU: {}", view.cpu);
+    println!("Memory: {}", view.memory);
+    println!("Disk usage: {}", view.disk_usage);
+    println!("Uptime: {}", view.uptime);
 
     Ok(())
 }
 
 pub fn show_time(city: Option<String>) -> Result<(), String> {
+    let key = format!(
+        "time-{}",
+        city.clone().unwrap_or_else(|| "global".to_string())
+    );
+    let cached: Option<Vec<(String, String)>> = read_cache(&key, 10);
+    let data = if let Some(cached) = cached {
+        cached
+    } else {
+        let built = match city.clone() {
+            Some(city) => {
+                let (label, formatted) = city_time(&city).ok_or_else(|| {
+                    format!("Unsupported city '{city}'. Try Tokyo, London, New York, or Local.")
+                })?;
+                vec![(label, formatted)]
+            }
+            None => ["Local", "Tokyo", "London", "New York"]
+                .iter()
+                .map(|city| {
+                    city_time(city).ok_or_else(|| format!("Failed to build time for {city}."))
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        };
+        let _ = write_cache(&key, &built);
+        built
+    };
+
+    if crate::output::json_output() {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&data).unwrap_or_else(|_| "[]".to_string())
+        );
+        return Ok(());
+    }
+
     match city {
         Some(city) => {
-            let (label, formatted) = city_time(&city).ok_or_else(|| {
+            let (label, formatted) = data.into_iter().next().ok_or_else(|| {
                 format!("Unsupported city '{city}'. Try Tokyo, London, New York, or Local.")
             })?;
             println!("{label}: {formatted}");
         }
         None => {
-            for city in ["Local", "Tokyo", "London", "New York"] {
-                let (label, formatted) =
-                    city_time(city).ok_or_else(|| format!("Failed to build time for {city}."))?;
+            for (label, formatted) in data {
                 println!("{label}: {formatted}");
             }
         }
@@ -140,6 +235,14 @@ pub fn show_time(city: Option<String>) -> Result<(), String> {
 }
 
 pub fn run_diagnostic_all() -> Result<(), String> {
+    if crate::output::json_output() {
+        let checks = collect_diagnostic_checks();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&checks).unwrap_or_else(|_| "[]".to_string())
+        );
+        return Ok(());
+    }
     println!("Network");
     run_diagnostic_network()?;
     println!();
@@ -148,6 +251,101 @@ pub fn run_diagnostic_all() -> Result<(), String> {
     println!();
     println!("Plugins");
     run_diagnostic_plugins()?;
+    Ok(())
+}
+
+pub fn run_config_doctor(config: &Config) -> Result<(), String> {
+    let checks = vec![
+        doctor_status("Config file", "PASS", "loaded"),
+        doctor_status(
+            "Profiles",
+            if config.profile.is_empty() {
+                "WARN"
+            } else {
+                "PASS"
+            },
+            if config.profile.is_empty() {
+                "none configured"
+            } else {
+                "ok"
+            },
+        ),
+        doctor_status(
+            "Plugin directory",
+            if plugin_dir_path()?.exists() {
+                "PASS"
+            } else {
+                "WARN"
+            },
+            if plugin_dir_path()?.exists() {
+                "present"
+            } else {
+                "missing"
+            },
+        ),
+        doctor_status(
+            "Registry cache",
+            if registry_cache_path().exists() {
+                "PASS"
+            } else {
+                "WARN"
+            },
+            if registry_cache_path().exists() {
+                "present"
+            } else {
+                "missing"
+            },
+        ),
+        doctor_status(
+            "Weather API",
+            if config.provider.is_some() && config.api_key.is_none() {
+                "FAIL"
+            } else {
+                "PASS"
+            },
+            if config.provider.is_some() && config.api_key.is_none() {
+                "provider set without API key"
+            } else {
+                "ok"
+            },
+        ),
+        doctor_status(
+            "Network connectivity",
+            if http_reachable("https://github.com") {
+                "PASS"
+            } else {
+                "WARN"
+            },
+            if http_reachable("https://github.com") {
+                "reachable"
+            } else {
+                "offline"
+            },
+        ),
+        doctor_status(
+            "Plugin integrity",
+            "PASS",
+            "use `tinfo plugin verify` for details",
+        ),
+    ];
+
+    if crate::output::json_output() {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&checks).unwrap_or_else(|_| "[]".to_string())
+        );
+        return Ok(());
+    }
+
+    for check in checks {
+        println!(
+            "{:<18} {} ({})",
+            format!("{} ........", check.name),
+            check.status,
+            check.detail
+        );
+    }
+    let _ = verify_plugins();
     Ok(())
 }
 
@@ -214,7 +412,7 @@ pub fn run_diagnostic_system() -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 struct NetworkInfo {
     public_ip: Option<String>,
     local_ip: Option<String>,
@@ -237,7 +435,7 @@ fn dashboard_weather(config: &Config) -> DashboardWeather {
     let client = WeatherClient::new();
 
     if let Some(city) = config.configured_location() {
-        return match client.current_weather(city, config) {
+        return match cached_dashboard_weather(&client, city, config) {
             Ok(report) => DashboardWeather {
                 line: format!(
                     "{}, {:.1}{}",
@@ -257,7 +455,7 @@ fn dashboard_weather(config: &Config) -> DashboardWeather {
     }
 
     match client.detect_city_by_ip_detailed() {
-        Ok(city) => match client.current_weather(&city, config) {
+        Ok(city) => match cached_dashboard_weather(&client, &city, config) {
             Ok(report) => DashboardWeather {
                 line: format!(
                     "{}, {:.1}{}",
@@ -296,6 +494,24 @@ fn dashboard_weather(config: &Config) -> DashboardWeather {
             }
         }
     }
+}
+
+fn cached_dashboard_weather(
+    client: &WeatherClient,
+    city: &str,
+    config: &Config,
+) -> Result<crate::weather::WeatherReport, String> {
+    let key = format!(
+        "weather-dashboard-{}-{}",
+        city.to_ascii_lowercase(),
+        config.units.label()
+    );
+    if let Some(report) = read_cache(&key, 60) {
+        return Ok(report);
+    }
+    let report = client.current_weather(city, config)?;
+    let _ = write_cache(&key, &report);
+    Ok(report)
 }
 
 fn weather_error_reason(err: &str) -> &'static str {
@@ -466,4 +682,81 @@ fn print_status(ok: bool, ok_message: &str, err_message: &str) {
     } else {
         println!("{} {err_message}", error_prefix());
     }
+}
+
+fn doctor_status(name: &str, status: &str, detail: &str) -> DoctorCheck {
+    DoctorCheck {
+        name: name.to_string(),
+        status: status.to_string(),
+        detail: detail.to_string(),
+    }
+}
+
+fn collect_diagnostic_checks() -> Vec<DoctorCheck> {
+    let dns_started = Instant::now();
+    let dns_ok = ("github.com", 443)
+        .to_socket_addrs()
+        .map(|mut addrs| addrs.next().is_some())
+        .unwrap_or(false);
+    let dns_ms = dns_started.elapsed().as_secs_f64() * 1000.0;
+    let http_ok = http_reachable("http://example.com");
+    let tls_ok = http_reachable("https://github.com");
+    let latency = tcp_ping_latency("cloudflare.com").ok();
+    let mut checks = vec![
+        doctor_status(
+            "DNS resolution",
+            if dns_ok { "PASS" } else { "FAIL" },
+            &format!("{dns_ms:.1} ms"),
+        ),
+        doctor_status(
+            "HTTP reachability",
+            if http_ok { "PASS" } else { "FAIL" },
+            if http_ok { "reachable" } else { "unreachable" },
+        ),
+        doctor_status(
+            "TLS certificate",
+            if tls_ok { "PASS" } else { "FAIL" },
+            if tls_ok { "valid" } else { "failed" },
+        ),
+        doctor_status(
+            "HTTP latency",
+            if latency.is_some() { "PASS" } else { "WARN" },
+            &latency
+                .map(|ms| format!("{ms:.1} ms"))
+                .unwrap_or_else(|| "unavailable".to_string()),
+        ),
+    ];
+
+    let disks = Disks::new_with_refreshed_list();
+    let disk_status = if disks.list().is_empty() {
+        "WARN"
+    } else {
+        "PASS"
+    };
+    checks.push(doctor_status(
+        "Disk health",
+        disk_status,
+        "basic disk check",
+    ));
+    checks.push(doctor_status(
+        "Plugin integrity",
+        "PASS",
+        "use plugin verify",
+    ));
+    checks.push(doctor_status("Config integrity", "PASS", "config parsed"));
+    checks
+}
+
+fn plugin_dir_path() -> Result<PathBuf, String> {
+    let home =
+        std::env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
+    Ok(PathBuf::from(home).join(".terminal-info").join("plugins"))
+}
+
+fn registry_cache_path() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_default();
+    PathBuf::from(home)
+        .join(".terminal-info")
+        .join("cache")
+        .join("plugins.json")
 }

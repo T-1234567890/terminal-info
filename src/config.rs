@@ -31,6 +31,22 @@ pub struct ProfileConfig {
     pub api_key: Option<String>,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct DashboardConfig {
+    #[serde(default = "default_dashboard_widgets")]
+    pub widgets: Vec<String>,
+}
+
+fn default_dashboard_widgets() -> Vec<String> {
+    vec![
+        "weather".to_string(),
+        "time".to_string(),
+        "network".to_string(),
+        "system".to_string(),
+        "plugins".to_string(),
+    ]
+}
+
 impl Units {
     pub fn label(self) -> &'static str {
         match self {
@@ -66,6 +82,10 @@ pub struct Config {
     pub active_profile: Option<String>,
     #[serde(default)]
     pub profile: BTreeMap<String, ProfileConfig>,
+    #[serde(default)]
+    pub dashboard: DashboardConfig,
+    #[serde(default)]
+    pub locations: BTreeMap<String, String>,
     #[serde(
         skip_serializing_if = "Option::is_none",
         rename = "location",
@@ -163,6 +183,13 @@ impl Config {
         self.default_city
             .as_deref()
             .filter(|city| !city.eq_ignore_ascii_case("auto"))
+    }
+
+    pub fn resolve_location_alias<'a>(&'a self, value: &'a str) -> &'a str {
+        self.locations
+            .get(value)
+            .map(String::as_str)
+            .unwrap_or(value)
     }
 
     pub fn uses_auto_location(&self) -> bool {

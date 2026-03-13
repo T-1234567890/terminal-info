@@ -12,6 +12,7 @@ Commands:
 tinfo completion bash
 tinfo completion zsh
 tinfo completion fish
+tinfo completion install
 ```
 
 ## Quick Usage
@@ -28,6 +29,12 @@ Save them manually:
 tinfo completion bash > tinfo.bash
 tinfo completion zsh > _tinfo
 tinfo completion fish > tinfo.fish
+```
+
+Install automatically for the current shell:
+
+```bash
+tinfo completion install
 ```
 
 ## Examples
@@ -66,3 +73,4 @@ They also include global flags like:
 - `--plain`
 - `--compact`
 - `--color`
+- `--json`

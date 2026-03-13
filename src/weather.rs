@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use reqwest::blocking::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::{ApiProvider, Config, Units};
 
@@ -9,6 +9,7 @@ pub struct WeatherClient {
     client: Client,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
 pub struct WeatherReport {
     pub location_name: String,
     pub summary: String,
@@ -17,16 +18,43 @@ pub struct WeatherReport {
     pub humidity: Option<u64>,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
 pub struct ForecastReport {
     pub location_name: String,
     pub days: Vec<ForecastDay>,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
 pub struct ForecastDay {
     pub label: String,
     pub summary: String,
     pub high: f64,
     pub low: f64,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct HourlyReport {
+    pub location_name: String,
+    pub hours: Vec<HourlyPoint>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct HourlyPoint {
+    pub label: String,
+    pub summary: String,
+    pub temperature: f64,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct AlertsReport {
+    pub location_name: String,
+    pub alerts: Vec<WeatherAlert>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct WeatherAlert {
+    pub level: String,
+    pub message: String,
 }
 
 impl WeatherClient {
@@ -83,6 +111,67 @@ impl WeatherClient {
             }
             _ => self.forecast_open_meteo(city, config.units),
         }
+    }
+
+    pub fn hourly(&self, city: &str, config: &Config) -> Result<HourlyReport, String> {
+        let place = self.lookup_city(city)?;
+        let weather: OpenMeteoHourlyResponse = self
+            .client
+            .get("https://api.open-meteo.com/v1/forecast")
+            .query(&[
+                ("latitude", place.latitude.to_string()),
+                ("longitude", place.longitude.to_string()),
+                ("hourly", "temperature_2m,weather_code".to_string()),
+                ("forecast_hours", "6".to_string()),
+                ("timezone", "auto".to_string()),
+                (
+                    "temperature_unit",
+                    open_meteo_temperature_unit(config.units).to_string(),
+                ),
+            ])
+            .send()
+            .map_err(|err| format!("Failed to fetch hourly weather data: {err}"))?
+            .error_for_status()
+            .map_err(|err| format!("Hourly weather API request failed: {err}"))?
+            .json()
+            .map_err(|err| format!("Failed to parse hourly weather response: {err}"))?;
+
+        let hours = weather
+            .hourly
+            .time
+            .iter()
+            .zip(weather.hourly.temperature_2m.iter())
+            .zip(weather.hourly.weather_code.iter())
+            .map(|((label, temp), code)| HourlyPoint {
+                label: label.clone(),
+                summary: weather_code_to_text(*code).to_string(),
+                temperature: *temp,
+            })
+            .collect();
+
+        Ok(HourlyReport {
+            location_name: place.display_name(),
+            hours,
+        })
+    }
+
+    pub fn alerts(&self, city: &str, config: &Config) -> Result<AlertsReport, String> {
+        let forecast = self.forecast(city, config)?;
+        let alerts = forecast
+            .days
+            .iter()
+            .filter_map(|day| {
+                classify_alert(&day.summary).map(|level| WeatherAlert {
+                    level: level.to_string(),
+                    message: format!("{} on {}", day.summary, day.label),
+                })
+            })
+            .collect();
+
+        Ok(AlertsReport {
+            location_name: forecast.location_name,
+            alerts,
+        })
     }
 
     fn current_open_meteo(&self, city: &str, units: Units) -> Result<WeatherReport, String> {
@@ -343,11 +432,23 @@ struct OpenMeteoDailyResponse {
 }
 
 #[derive(Deserialize)]
+struct OpenMeteoHourlyResponse {
+    hourly: OpenMeteoHourly,
+}
+
+#[derive(Deserialize)]
 struct OpenMeteoDaily {
     time: Vec<String>,
     weather_code: Vec<u16>,
     temperature_2m_max: Vec<f64>,
     temperature_2m_min: Vec<f64>,
+}
+
+#[derive(Deserialize)]
+struct OpenMeteoHourly {
+    time: Vec<String>,
+    temperature_2m: Vec<f64>,
+    weather_code: Vec<u16>,
 }
 
 #[derive(Deserialize)]
@@ -403,4 +504,17 @@ struct IpApiLocation {
     city: Option<String>,
     #[allow(dead_code)]
     country: Option<String>,
+}
+
+fn classify_alert(summary: &str) -> Option<&'static str> {
+    let lower = summary.to_ascii_lowercase();
+    if lower.contains("thunderstorm") {
+        Some("high")
+    } else if lower.contains("snow") || lower.contains("hail") {
+        Some("medium")
+    } else if lower.contains("rain") {
+        Some("low")
+    } else {
+        None
+    }
 }

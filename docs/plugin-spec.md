@@ -39,7 +39,6 @@ If a top-level command is not built in, Terminal Info searches for a matching pl
 Search order:
 
 1. `~/.terminal-info/plugins/<plugin-name>/tinfo-<plugin-name>`
-2. `PATH`
 
 Example install location:
 
@@ -79,6 +78,8 @@ Terminal Info plugin rules:
 - plugins run as normal user processes
 - plugins must not require root privileges
 - plugins should be installed from trusted sources
+- plugins must be trusted locally before Terminal Info will execute them
+- plugin downloads are verified with a pinned checksum and a Minisign signature
 
 Registry review improves safety, but it is not a full security audit.
 

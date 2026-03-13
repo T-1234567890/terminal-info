@@ -50,12 +50,27 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
 
+      - name: Install minisign
+        if: runner.os != 'Windows' && secrets.MINISIGN_SECRET_KEY != ''
+        run: |
+          if command -v brew >/dev/null 2>&1; then
+            brew install minisign
+          elif command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y minisign
+          fi
+
       - name: Package archive (Unix)
         if: runner.os != 'Windows'
         run: |
           mkdir -p dist
           cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} dist/${{ matrix.binary_name }}
           tar -czf ${{ matrix.archive_name }} -C dist ${{ matrix.binary_name }}
+          shasum -a 256 ${{ matrix.archive_name }} > ${{ matrix.archive_name }}.sha256
+          if [ -n "${{ secrets.MINISIGN_SECRET_KEY }}" ]; then
+            echo "${{ secrets.MINISIGN_SECRET_KEY }}" > minisign.key
+            minisign -S -s minisign.key -m ${{ matrix.archive_name }} -x ${{ matrix.archive_name }}.minisig -t "${{ matrix.archive_name }}"
+          fi
 
       - name: Package archive (Windows)
         if: runner.os == 'Windows'
@@ -64,9 +79,14 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" "dist/${{ matrix.binary_name }}"
           Compress-Archive -Path "dist/${{ matrix.binary_name }}" -DestinationPath "${{ matrix.archive_name }}"
+          $hash = (Get-FileHash "${{ matrix.archive_name }}" -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path "${{ matrix.archive_name }}.sha256" -Value "$hash  ${{ matrix.archive_name }}"
 
       - name: Upload release artifact
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.archive_name }}
+          files: |
+            ${{ matrix.archive_name }}
+            ${{ matrix.archive_name }}.sha256
+            ${{ matrix.archive_name }}.minisig
           generate_release_notes: true
