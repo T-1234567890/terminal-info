@@ -3,6 +3,7 @@ mod cache;
 mod config;
 mod config_menu;
 mod dashboard;
+mod migration;
 mod output;
 mod plugin;
 mod weather;
@@ -31,8 +32,8 @@ use tar::Archive;
 use zip::ZipArchive;
 
 use crate::builtins::{
-    run_config_doctor, run_diagnostic_all, run_diagnostic_network, run_diagnostic_system, run_ping,
-    show_network_info, show_system_info,
+    run_config_doctor, run_diagnostic_all, run_diagnostic_full, run_diagnostic_network,
+    run_diagnostic_system, run_ping, show_network_info, show_system_info,
 };
 use crate::cache::{read_cache, write_cache};
 use crate::config::{ApiProvider, Config, Units};
@@ -40,8 +41,9 @@ use crate::config_menu::show_config_menu;
 use crate::output::{OutputMode, set_json_output, set_output_mode};
 use crate::plugin::{
     info_plugin, init_plugin_template, install_plugin, list_plugins, list_trusted_plugins,
-    plugin_keygen, plugin_sign, remove_plugin, run_diagnostic_plugins, run_plugin, search_plugins,
-    set_plugin_trust, update_plugin, upgrade_all_plugins, verify_plugins,
+    plugin_doctor, plugin_keygen, plugin_lint, plugin_publish_check, plugin_sign, remove_plugin,
+    run_diagnostic_plugins, run_plugin, search_plugins, set_plugin_trust, update_plugin,
+    upgrade_all_plugins, verify_plugins,
 };
 use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, WeatherReport};
 
@@ -79,6 +81,11 @@ enum Command {
         /// Hostname to test
         host: Option<String>,
     },
+    /// Test network latency using the same probes as ping
+    Latency {
+        /// Hostname to test, or `full` for expanded probes
+        host: Option<String>,
+    },
     /// Show network information
     Network,
     /// Show system information
@@ -108,6 +115,11 @@ enum Command {
         /// Shell to generate completions for
         shell: CompletionCommand,
     },
+    /// Configure dashboard behavior
+    Dashboard {
+        #[command(subcommand)]
+        command: DashboardCommand,
+    },
     /// Manage plugins and scaffold new plugin projects
     Plugin {
         #[command(subcommand)]
@@ -115,6 +127,10 @@ enum Command {
     },
     /// Download and install the latest released version of tinfo
     Update,
+    /// Repair the current installation using the latest release
+    SelfRepair,
+    /// Reinstall the latest release
+    Reinstall,
     /// Remove the Terminal Info binary and optionally its local data
     Uninstall {
         /// Remove the binary only and keep ~/.terminal-info
@@ -182,6 +198,12 @@ enum ProfileCommand {
     Use { name: String },
     /// List profiles
     List,
+    /// Show a profile definition
+    Show { name: String },
+    /// Add a profile from the current effective settings
+    Add { name: String },
+    /// Remove a profile
+    Remove { name: String },
 }
 
 #[derive(Subcommand, Debug)]
@@ -229,6 +251,12 @@ enum PluginCommand {
     Info { name: String },
     /// Verify installed plugins
     Verify,
+    /// Run detailed plugin checks against the current environment
+    Doctor,
+    /// Validate the current plugin project files
+    Lint,
+    /// Validate plugin release artifacts before publishing
+    PublishCheck,
     /// Update a plugin
     Update { name: String },
     /// Update all installed plugins
@@ -245,6 +273,8 @@ enum DiagnosticCommand {
     System,
     /// Run plugin diagnostics
     Plugins,
+    /// Run a comprehensive diagnostic pass
+    Full,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -252,7 +282,18 @@ enum CompletionCommand {
     Bash,
     Zsh,
     Fish,
+    PowerShell,
     Install,
+    Uninstall,
+    Status,
+}
+
+#[derive(Subcommand, Debug)]
+enum DashboardCommand {
+    /// Show dashboard settings
+    Config,
+    /// Reset dashboard settings
+    Reset,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -271,6 +312,13 @@ fn main() {
     set_output_mode(resolve_output_mode(&cli));
     set_json_output(cli.json);
     let freeze = should_freeze(&cli);
+    let _migration_status = match migration::run_startup_migration() {
+        Ok(status) => status,
+        Err(err) => {
+            eprintln!("{err}");
+            process::exit(1);
+        }
+    };
     let mut config = match Config::load_or_create() {
         Ok(config) => config,
         Err(err) => {
@@ -282,6 +330,7 @@ fn main() {
     let result = match cli.command {
         Some(Command::Weather { command }) => handle_weather(&mut config, command, freeze),
         Some(Command::Ping { host }) => run_ping(host),
+        Some(Command::Latency { host }) => run_ping(host),
         Some(Command::Network) => show_network_info(),
         Some(Command::System) => show_system_info(),
         Some(Command::Time { city }) => live_time(city, freeze),
@@ -292,8 +341,11 @@ fn main() {
             handle_completion(shell);
             Ok(())
         }
+        Some(Command::Dashboard { command }) => handle_dashboard(&mut config, command),
         Some(Command::Plugin { command }) => handle_plugin(command),
         Some(Command::Update) => handle_update(),
+        Some(Command::SelfRepair) => handle_self_repair(),
+        Some(Command::Reinstall) => handle_reinstall(),
         Some(Command::Uninstall { keep_data }) => handle_uninstall(keep_data),
         Some(Command::External(args)) => handle_external(args),
         None => live_dashboard(&config, freeze),
@@ -324,6 +376,7 @@ fn handle_diagnostic(command: Option<DiagnosticCommand>) -> Result<(), String> {
         Some(DiagnosticCommand::Network) => run_diagnostic_network(),
         Some(DiagnosticCommand::System) => run_diagnostic_system(),
         Some(DiagnosticCommand::Plugins) => run_diagnostic_plugins(),
+        Some(DiagnosticCommand::Full) => run_diagnostic_full(),
         None => run_diagnostic_all(),
     }
 }
@@ -371,9 +424,12 @@ enum WeatherView {
 }
 
 fn live_dashboard(config: &Config, freeze: bool) -> Result<(), String> {
-    run_live_loop(Duration::from_secs(1), freeze, || {
-        Ok(dashboard::dashboard_output(config))
-    })
+    let effective_dashboard = config.effective_dashboard();
+    run_live_loop(
+        Duration::from_secs(effective_dashboard.refresh_interval.max(1)),
+        freeze,
+        || Ok(dashboard::dashboard_output(config)),
+    )
 }
 
 fn live_time(city: Option<String>, freeze: bool) -> Result<(), String> {
@@ -539,6 +595,84 @@ fn handle_profile(config: &mut Config, command: ProfileCommand) -> Result<(), St
 
             Ok(())
         }
+        ProfileCommand::Show { name } => {
+            let profile = config
+                .profile_named(&name)
+                .ok_or_else(|| format!("Profile '{}' not found.", name))?;
+            if crate::output::json_output() {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(profile).unwrap_or_else(|_| "{}".to_string())
+                );
+                return Ok(());
+            }
+            println!("Profile: {name}");
+            println!(
+                "Location: {}",
+                profile.location.as_deref().unwrap_or("inherit")
+            );
+            println!(
+                "Units: {}",
+                profile
+                    .units
+                    .map(|units| units.label().to_string())
+                    .unwrap_or_else(|| "inherit".to_string())
+            );
+            println!(
+                "Provider: {}",
+                profile
+                    .provider
+                    .map(|provider| match provider {
+                        ApiProvider::OpenWeather => "openweather".to_string(),
+                    })
+                    .unwrap_or_else(|| "inherit".to_string())
+            );
+            println!(
+                "API key: {}",
+                profile
+                    .api_key
+                    .as_deref()
+                    .map(|_| "set")
+                    .unwrap_or("inherit")
+            );
+            if let Some(dashboard) = &profile.dashboard {
+                println!("Dashboard widgets: {}", dashboard.widgets.join(", "));
+                println!("Dashboard refresh: {}s", dashboard.refresh_interval);
+                println!("Dashboard compact: {}", dashboard.compact_mode);
+            } else {
+                println!("Dashboard: inherit");
+            }
+            Ok(())
+        }
+        ProfileCommand::Add { name } => {
+            config.add_profile_from_current(&name)?;
+            config.save()?;
+            println!("Added profile '{}'.", name);
+            Ok(())
+        }
+        ProfileCommand::Remove { name } => {
+            config.remove_profile(&name)?;
+            config.save()?;
+            println!("Removed profile '{}'.", name);
+            Ok(())
+        }
+    }
+}
+
+fn handle_dashboard(config: &mut Config, command: DashboardCommand) -> Result<(), String> {
+    match command {
+        DashboardCommand::Config => {
+            println!("Refresh interval: {}s", config.dashboard.refresh_interval);
+            println!("Compact mode: {}", config.dashboard.compact_mode);
+            println!("Enabled widgets: {}", config.dashboard.widgets.join(", "));
+            Ok(())
+        }
+        DashboardCommand::Reset => {
+            config.dashboard = crate::config::DashboardConfig::default();
+            config.save()?;
+            println!("Dashboard configuration reset.");
+            Ok(())
+        }
     }
 }
 
@@ -549,7 +683,10 @@ fn print_completions(shell: CompletionCommand) {
         CompletionCommand::Bash => generate(Shell::Bash, &mut command, "tinfo", &mut stdout),
         CompletionCommand::Zsh => generate(Shell::Zsh, &mut command, "tinfo", &mut stdout),
         CompletionCommand::Fish => generate(Shell::Fish, &mut command, "tinfo", &mut stdout),
-        CompletionCommand::Install => {}
+        CompletionCommand::PowerShell => {
+            generate(Shell::PowerShell, &mut command, "tinfo", &mut stdout)
+        }
+        CompletionCommand::Install | CompletionCommand::Uninstall | CompletionCommand::Status => {}
     }
 }
 
@@ -561,30 +698,24 @@ fn handle_completion(command: CompletionCommand) {
                 process::exit(1);
             }
         }
+        CompletionCommand::Uninstall => {
+            if let Err(err) = uninstall_completion_for_current_shell() {
+                eprintln!("{err}");
+                process::exit(1);
+            }
+        }
+        CompletionCommand::Status => {
+            if let Err(err) = completion_status_for_current_shell() {
+                eprintln!("{err}");
+                process::exit(1);
+            }
+        }
         shell => print_completions(shell),
     }
 }
 
 fn install_completion_for_current_shell() -> Result<(), String> {
-    let shell = std::env::var("SHELL").unwrap_or_default();
-    let home =
-        std::env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    let (shell_cmd, path) = if shell.ends_with("zsh") {
-        (
-            CompletionCommand::Zsh,
-            PathBuf::from(&home).join(".zsh/completions/_tinfo"),
-        )
-    } else if shell.ends_with("fish") {
-        (
-            CompletionCommand::Fish,
-            PathBuf::from(&home).join(".config/fish/completions/tinfo.fish"),
-        )
-    } else {
-        (
-            CompletionCommand::Bash,
-            PathBuf::from(&home).join(".local/share/bash-completion/completions/tinfo"),
-        )
-    };
+    let (shell_cmd, path) = completion_install_target()?;
 
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -596,11 +727,67 @@ fn install_completion_for_current_shell() -> Result<(), String> {
         CompletionCommand::Bash => generate(Shell::Bash, &mut command, "tinfo", &mut buffer),
         CompletionCommand::Zsh => generate(Shell::Zsh, &mut command, "tinfo", &mut buffer),
         CompletionCommand::Fish => generate(Shell::Fish, &mut command, "tinfo", &mut buffer),
-        CompletionCommand::Install => unreachable!(),
+        CompletionCommand::PowerShell => {
+            generate(Shell::PowerShell, &mut command, "tinfo", &mut buffer)
+        }
+        CompletionCommand::Install | CompletionCommand::Uninstall | CompletionCommand::Status => {
+            unreachable!()
+        }
     }
     fs::write(&path, buffer).map_err(|err| format!("Failed to install completion: {err}"))?;
     println!("Installed completion to {}", path.display());
     Ok(())
+}
+
+fn uninstall_completion_for_current_shell() -> Result<(), String> {
+    let (_, path) = completion_install_target()?;
+    if path.exists() {
+        fs::remove_file(&path)
+            .map_err(|err| format!("Failed to remove completion {}: {err}", path.display()))?;
+        println!("Removed completion from {}", path.display());
+    } else {
+        println!("No installed completion found at {}", path.display());
+    }
+    Ok(())
+}
+
+fn completion_status_for_current_shell() -> Result<(), String> {
+    let (shell, path) = completion_install_target()?;
+    println!("Shell: {:?}", shell);
+    println!("Path: {}", path.display());
+    println!("Installed: {}", path.exists());
+    Ok(())
+}
+
+fn completion_install_target() -> Result<(CompletionCommand, PathBuf), String> {
+    let shell = std::env::var("SHELL").unwrap_or_default();
+    let home =
+        std::env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
+    if shell.ends_with("zsh") {
+        Ok((
+            CompletionCommand::Zsh,
+            PathBuf::from(&home).join(".zsh/completions/_tinfo"),
+        ))
+    } else if shell.ends_with("fish") {
+        Ok((
+            CompletionCommand::Fish,
+            PathBuf::from(&home).join(".config/fish/completions/tinfo.fish"),
+        ))
+    } else if shell.to_ascii_lowercase().contains("powershell") {
+        Ok((
+            CompletionCommand::PowerShell,
+            PathBuf::from(&home)
+                .join("Documents")
+                .join("PowerShell")
+                .join("Completions")
+                .join("tinfo.ps1"),
+        ))
+    } else {
+        Ok((
+            CompletionCommand::Bash,
+            PathBuf::from(&home).join(".local/share/bash-completion/completions/tinfo"),
+        ))
+    }
 }
 
 fn handle_plugin(command: PluginCommand) -> Result<(), String> {
@@ -616,6 +803,9 @@ fn handle_plugin(command: PluginCommand) -> Result<(), String> {
         PluginCommand::Trusted => list_trusted_plugins(),
         PluginCommand::Info { name } => info_plugin(&name),
         PluginCommand::Verify => verify_plugins(),
+        PluginCommand::Doctor => plugin_doctor(),
+        PluginCommand::Lint => plugin_lint(),
+        PluginCommand::PublishCheck => plugin_publish_check(),
         PluginCommand::Update { name } => update_plugin(&name),
         PluginCommand::UpgradeAll => upgrade_all_plugins(),
         PluginCommand::Remove { name } => remove_plugin(&name),
@@ -631,7 +821,7 @@ fn handle_now(config: &Config, city: Option<String>) -> Result<String, String> {
             city.to_ascii_lowercase(),
             config.units.label()
         ),
-        60,
+        config.cache.weather_ttl_secs,
         || client.current_weather(&city, config),
     )?;
     Ok(format_weather_report(&report, config.units))
@@ -646,7 +836,7 @@ fn handle_forecast(config: &Config, city: Option<String>) -> Result<String, Stri
             city.to_ascii_lowercase(),
             config.units.label()
         ),
-        60,
+        config.cache.weather_ttl_secs,
         || client.forecast(&city, config),
     )?;
     Ok(format_forecast_report(&report, config.units))
@@ -661,7 +851,7 @@ fn handle_hourly(config: &Config, city: Option<String>) -> Result<String, String
             city.to_ascii_lowercase(),
             config.units.label()
         ),
-        60,
+        config.cache.weather_ttl_secs,
         || client.hourly(&city, config),
     )?;
     Ok(format_hourly_report(&report, config.units))
@@ -676,7 +866,7 @@ fn handle_alerts(config: &Config, city: Option<String>) -> Result<String, String
             city.to_ascii_lowercase(),
             config.units.label()
         ),
-        60,
+        config.cache.weather_ttl_secs,
         || client.alerts(&city, config),
     )?;
     Ok(format_alerts_report(&report))
@@ -699,6 +889,20 @@ fn handle_location(config: &mut Config, city: Option<String>) -> Result<(), Stri
 }
 
 fn handle_update() -> Result<(), String> {
+    handle_update_inner(false)
+}
+
+fn handle_self_repair() -> Result<(), String> {
+    println!("Running self-repair.");
+    handle_update_inner(true)
+}
+
+fn handle_reinstall() -> Result<(), String> {
+    println!("Reinstalling the latest Terminal Info release.");
+    handle_update_inner(true)
+}
+
+fn handle_update_inner(force: bool) -> Result<(), String> {
     let current_exe = std::env::current_exe()
         .map_err(|err| format!("Failed to locate current executable: {err}"))?;
     let install_dir = current_exe
@@ -722,7 +926,7 @@ fn handle_update() -> Result<(), String> {
 
     println!("Checking latest version");
     let release = fetch_terminal_info_release()?;
-    if release.tag_name == format!("v{}", env!("CARGO_PKG_VERSION")) {
+    if !force && release.tag_name == format!("v{}", env!("CARGO_PKG_VERSION")) {
         println!("Terminal Info is already up to date.");
         return Ok(());
     }

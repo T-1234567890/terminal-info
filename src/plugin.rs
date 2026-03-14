@@ -139,6 +139,14 @@ pub struct PluginWidget {
     pub content: String,
 }
 
+#[derive(Serialize)]
+struct PluginDoctorCheck {
+    name: String,
+    status: String,
+    detail: String,
+    fix: String,
+}
+
 pub fn run_plugin(command: &str, args: &[String]) -> Result<(), String> {
     if !is_plugin_trusted(command)? {
         return Err(format!(
@@ -304,6 +312,186 @@ pub fn verify_plugins() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+pub fn plugin_doctor() -> Result<(), String> {
+    let installed = installed_plugin_names()?;
+    let mut checks = Vec::new();
+
+    if installed.is_empty() {
+        checks.push(PluginDoctorCheck {
+            name: "Installed plugins".to_string(),
+            status: "WARN".to_string(),
+            detail: "no plugins installed".to_string(),
+            fix: "install a plugin with `tinfo plugin install <name>`".to_string(),
+        });
+    }
+
+    for name in installed {
+        let manifest_path = plugin_manifest_path(&name)?;
+        let binary_path = plugin_home_path(&name)?.join(binary_filename(&format!("tinfo-{name}")));
+        let registry = load_plugin_by_name(&name).ok();
+        let manifest_ok = manifest_path.exists() && read_installed_manifest(&name).is_ok();
+        let binary_ok = binary_path.exists();
+        let signature_ok = checksum_status(
+            &name,
+            registry.as_ref(),
+            read_installed_manifest(&name).ok().as_ref(),
+        ) == "verified";
+        checks.push(PluginDoctorCheck {
+            name: format!("{name} manifest"),
+            status: if manifest_ok { "PASS" } else { "FAIL" }.to_string(),
+            detail: if manifest_ok {
+                manifest_path.display().to_string()
+            } else {
+                "plugin manifest missing or invalid".to_string()
+            },
+            fix: "reinstall the plugin or restore plugin.toml".to_string(),
+        });
+        checks.push(PluginDoctorCheck {
+            name: format!("{name} binary"),
+            status: if binary_ok { "PASS" } else { "FAIL" }.to_string(),
+            detail: if binary_ok {
+                binary_path.display().to_string()
+            } else {
+                "plugin binary missing".to_string()
+            },
+            fix: "reinstall the plugin".to_string(),
+        });
+        checks.push(PluginDoctorCheck {
+            name: format!("{name} registry"),
+            status: if registry.is_some() { "PASS" } else { "WARN" }.to_string(),
+            detail: if registry.is_some() {
+                "registry metadata found".to_string()
+            } else {
+                "plugin not found in reviewed registry".to_string()
+            },
+            fix: "run `tinfo plugin search` or update the registry entry".to_string(),
+        });
+        checks.push(PluginDoctorCheck {
+            name: format!("{name} signature"),
+            status: if signature_ok { "PASS" } else { "WARN" }.to_string(),
+            detail: if signature_ok {
+                "installed checksum matches registry".to_string()
+            } else {
+                "installed asset could not be matched to registry metadata".to_string()
+            },
+            fix: "run `tinfo plugin verify` or reinstall the plugin".to_string(),
+        });
+    }
+
+    render_plugin_checks(&checks)
+}
+
+pub fn plugin_lint() -> Result<(), String> {
+    let cwd =
+        env::current_dir().map_err(|err| format!("Failed to read current directory: {err}"))?;
+    let checks = plugin_project_checks(&cwd, false)?;
+    render_plugin_checks(&checks)
+}
+
+pub fn plugin_publish_check() -> Result<(), String> {
+    let cwd =
+        env::current_dir().map_err(|err| format!("Failed to read current directory: {err}"))?;
+    let mut checks = plugin_project_checks(&cwd, true)?;
+    let dist = cwd.join("dist");
+    checks.push(PluginDoctorCheck {
+        name: "Release artifacts".to_string(),
+        status: if dist.exists() { "PASS" } else { "WARN" }.to_string(),
+        detail: if dist.exists() {
+            dist.display().to_string()
+        } else {
+            "dist/ not found".to_string()
+        },
+        fix: "build release artifacts before publishing".to_string(),
+    });
+    render_plugin_checks(&checks)
+}
+
+fn plugin_project_checks(
+    project_dir: &Path,
+    include_workflow: bool,
+) -> Result<Vec<PluginDoctorCheck>, String> {
+    let plugin_manifest = project_dir.join("plugin.toml");
+    let cargo_toml = project_dir.join("Cargo.toml");
+    let readme = project_dir.join("README.md");
+    let workflow = project_dir
+        .join(".github")
+        .join("workflows")
+        .join("release.yml");
+
+    let mut checks = vec![
+        project_file_check("plugin.toml", &plugin_manifest, "create plugin.toml"),
+        project_file_check("Cargo.toml", &cargo_toml, "create Cargo.toml"),
+        project_file_check("README.md", &readme, "create README.md"),
+    ];
+    if include_workflow {
+        checks.push(project_file_check(
+            ".github/workflows/release.yml",
+            &workflow,
+            "add a release workflow for publishing",
+        ));
+    }
+
+    if plugin_manifest.exists() {
+        let contents = fs::read_to_string(&plugin_manifest)
+            .map_err(|err| format!("Failed to read {}: {err}", plugin_manifest.display()))?;
+        let valid = toml::from_str::<toml::Value>(&contents).is_ok();
+        checks.push(PluginDoctorCheck {
+            name: "Manifest schema".to_string(),
+            status: if valid { "PASS" } else { "FAIL" }.to_string(),
+            detail: if valid {
+                "plugin.toml parsed".to_string()
+            } else {
+                "plugin.toml failed to parse".to_string()
+            },
+            fix: "fix plugin.toml syntax and required sections".to_string(),
+        });
+    }
+
+    Ok(checks)
+}
+
+fn project_file_check(name: &str, path: &Path, fix: &str) -> PluginDoctorCheck {
+    PluginDoctorCheck {
+        name: name.to_string(),
+        status: if path.exists() { "PASS" } else { "FAIL" }.to_string(),
+        detail: if path.exists() {
+            path.display().to_string()
+        } else {
+            "missing".to_string()
+        },
+        fix: fix.to_string(),
+    }
+}
+
+fn render_plugin_checks(checks: &[PluginDoctorCheck]) -> Result<(), String> {
+    if crate::output::json_output() {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(checks).unwrap_or_else(|_| "[]".to_string())
+        );
+        return Ok(());
+    }
+
+    for check in checks {
+        println!("{}: {} ({})", check.status, check.name, check.detail);
+        println!("FIX: {}", check.fix);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn project_file_check_marks_missing_files() {
+        let check =
+            project_file_check("plugin.toml", Path::new("/tmp/does-not-exist"), "create it");
+        assert_eq!(check.status, "FAIL");
+        assert_eq!(check.fix, "create it");
+    }
 }
 
 pub fn dashboard_widgets() -> Vec<PluginWidget> {

@@ -12,9 +12,16 @@ pub fn dashboard_output(config: &Config) -> String {
     } else {
         config.configured_location().unwrap_or("unknown")
     };
-    let widgets = normalized_widgets(&config.dashboard.widgets);
+    let effective_dashboard = config.effective_dashboard();
+    let widgets = normalized_widgets(&effective_dashboard.widgets);
 
-    match output_mode() {
+    let compact = effective_dashboard.compact_mode || matches!(output_mode(), OutputMode::Compact);
+
+    match if compact {
+        OutputMode::Compact
+    } else {
+        output_mode()
+    } {
         OutputMode::Compact => {
             let mut fields = vec![format!("location={location}")];
             for widget in &widgets {

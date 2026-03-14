@@ -5,6 +5,7 @@
 - `bash`
 - `zsh`
 - `fish`
+- `powershell`
 
 Commands:
 
@@ -12,7 +13,10 @@ Commands:
 tinfo completion bash
 tinfo completion zsh
 tinfo completion fish
+tinfo completion powershell
 tinfo completion install
+tinfo completion uninstall
+tinfo completion status
 ```
 
 ## Quick Usage
@@ -37,6 +41,18 @@ Install automatically for the current shell:
 tinfo completion install
 ```
 
+Remove the installed file for the current shell:
+
+```bash
+tinfo completion uninstall
+```
+
+Check the current install status:
+
+```bash
+tinfo completion status
+```
+
 ## Examples
 
 Temporary use in a shell session:
@@ -55,6 +71,12 @@ For `fish`:
 
 ```bash
 tinfo completion fish > ~/.config/fish/completions/tinfo.fish
+```
+
+For PowerShell:
+
+```powershell
+tinfo completion powershell > ~/Documents/PowerShell/Completions/tinfo.ps1
 ```
 
 ## Covered Commands
