@@ -11,6 +11,7 @@ use dialoguer::{Input, theme::ColorfulTheme};
 use flate2::read::GzDecoder;
 use minisign_verify::{PublicKey, Signature};
 use reqwest::blocking::Client;
+use reqwest::header::ACCEPT_ENCODING;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tar::Archive;
@@ -888,14 +889,7 @@ fn install_or_update_plugin(plugin: &PluginMetadata, action: &str) -> Result<(),
     let signature_asset = select_signature_asset(&release.assets, &asset.name)
         .ok_or_else(|| format!("No minisign signature found for plugin '{}'.", plugin.name))?;
 
-    let bytes = github_client()?
-        .get(&asset.browser_download_url)
-        .send()
-        .map_err(|err| format!("Failed to download plugin asset: {err}"))?
-        .error_for_status()
-        .map_err(|err| format!("Failed to download plugin asset: {err}"))?
-        .bytes()
-        .map_err(|err| format!("Failed to read plugin asset: {err}"))?;
+    let bytes = download_binary_bytes(&asset.browser_download_url, "plugin asset")?;
     let signature = github_client()?
         .get(&signature_asset.browser_download_url)
         .send()
@@ -1240,6 +1234,22 @@ fn github_client() -> Result<Client, String> {
         .user_agent(format!("tinfo/{}", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|err| format!("Failed to create HTTP client: {err}"))
+}
+
+fn download_binary_bytes(url: &str, label: &str) -> Result<Vec<u8>, String> {
+    let mut response = github_client()?
+        .get(url)
+        .header(ACCEPT_ENCODING, "identity")
+        .send()
+        .map_err(|err| format!("Failed to download {label}: {err}"))?
+        .error_for_status()
+        .map_err(|err| format!("Failed to download {label}: {err}"))?;
+
+    let mut bytes = Vec::new();
+    response
+        .copy_to(&mut bytes)
+        .map_err(|err| format!("Failed to read {label}: {err}"))?;
+    Ok(bytes)
 }
 
 fn select_asset<'a>(assets: &'a [GithubAsset], binary: &str) -> Option<&'a GithubAsset> {

@@ -25,6 +25,7 @@ use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use flate2::read::GzDecoder;
 use minisign_verify::{PublicKey, Signature};
 use reqwest::blocking::Client;
+use reqwest::header::ACCEPT_ENCODING;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use tar::Archive;
@@ -1199,21 +1200,25 @@ fn select_update_checksum_asset<'a>(
 }
 
 fn download_to_path(url: &str, destination: &Path) -> Result<(), String> {
-    let bytes = Client::builder()
+    let mut response = Client::builder()
         .connect_timeout(Duration::from_secs(3))
         .timeout(Duration::from_secs(60))
         .build()
         .map_err(|err| format!("Failed to create HTTP client: {err}"))?
         .get(url)
         .header("User-Agent", format!("tinfo/{}", env!("CARGO_PKG_VERSION")))
+        .header(ACCEPT_ENCODING, "identity")
         .send()
         .map_err(|err| format!("Failed to download update: {err}"))?
         .error_for_status()
-        .map_err(|err| format!("Failed to download update: {err}"))?
-        .bytes()
-        .map_err(|err| format!("Failed to read update archive: {err}"))?;
+        .map_err(|err| format!("Failed to download update: {err}"))?;
 
-    fs::write(destination, &bytes).map_err(|err| format!("Failed to write update archive: {err}"))
+    let mut file = File::create(destination)
+        .map_err(|err| format!("Failed to create update archive: {err}"))?;
+    response
+        .copy_to(&mut file)
+        .map_err(|err| format!("Failed to read update archive: {err}"))?;
+    Ok(())
 }
 
 fn download_text(url: &str, label: &str) -> Result<String, String> {
