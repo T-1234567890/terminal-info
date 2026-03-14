@@ -6,7 +6,7 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20Linux%20Windows-lightgrey)]()
 [![Plugins](https://img.shields.io/badge/plugins-supported-brightgreen)]()
 
-`tinfo` is a lightweight Rust CLI for terminal-friendly system, network, weather, and plugin-driven information.
+A fast Rust-powered terminal information hub and all-in-one developer toolbox.
 
 ## Features
 
