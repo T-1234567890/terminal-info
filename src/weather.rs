@@ -1,13 +1,18 @@
 use std::time::Duration;
 
+use reqwest::StatusCode;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
+use crate::cache::{read_cache, write_cache};
 use crate::config::{ApiProvider, Config, Units};
 
 pub struct WeatherClient {
     client: Client,
 }
+
+const IP_LOCATION_CACHE_TTL_SECS: u64 = 6 * 60 * 60;
+const IP_LOCATION_CACHE_KEY: &str = "ip-location";
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct WeatherReport {
@@ -73,21 +78,8 @@ impl WeatherClient {
     }
 
     pub fn detect_city_by_ip_detailed(&self) -> Result<String, String> {
-        let location: IpApiLocation = self
-            .client
-            .get("https://ipapi.co/json/")
-            .send()
-            .map_err(|err| format!("IP detection request failed: {err}"))?
-            .error_for_status()
-            .map_err(|err| format!("IP detection request failed: {err}"))?
-            .json()
-            .map_err(|err| format!("IP detection response parse failed: {err}"))?;
-
-        let city = location
-            .city
-            .ok_or_else(|| "IP detection did not return a city.".to_string())?
-            .trim()
-            .to_string();
+        let location = self.detect_ip_location()?;
+        let city = location.city.trim().to_string();
         if city.is_empty() {
             Err("IP detection did not return a city.".to_string())
         } else {
@@ -355,6 +347,59 @@ impl WeatherClient {
             .and_then(|mut items| items.drain(..).next())
             .ok_or_else(|| format!("Could not find a location for '{city}'."))
     }
+
+    fn detect_ip_location(&self) -> Result<IpLocationCache, String> {
+        if let Some(cached) = read_cache(IP_LOCATION_CACHE_KEY, IP_LOCATION_CACHE_TTL_SECS) {
+            return Ok(cached);
+        }
+
+        let mut errors = Vec::new();
+        for provider in [IpProvider::IpApi, IpProvider::IpInfo, IpProvider::IpWhoIs] {
+            match self.fetch_ip_location(provider) {
+                Ok(location) => {
+                    let _ = write_cache(IP_LOCATION_CACHE_KEY, &location);
+                    return Ok(location);
+                }
+                Err(err) => errors.push(format!("{}: {err}", provider.label())),
+            }
+        }
+
+        Err(format!(
+            "IP detection failed across all providers: {}",
+            errors.join("; ")
+        ))
+    }
+
+    fn fetch_ip_location(&self, provider: IpProvider) -> Result<IpLocationCache, String> {
+        let response = self
+            .client
+            .get(provider.url())
+            .send()
+            .map_err(|err| format!("request failed: {err}"))?;
+        let status = response.status();
+        let body = response
+            .text()
+            .map_err(|err| format!("response read failed: {err}"))?;
+
+        if is_ip_rate_limited(status, &body) {
+            return Err("rate limited".to_string());
+        }
+        if !status.is_success() {
+            return Err(format!("request failed with HTTP {status}"));
+        }
+
+        let location = match provider {
+            IpProvider::IpApi => parse_ipapi_location(&body)?,
+            IpProvider::IpInfo => parse_ipinfo_location(&body)?,
+            IpProvider::IpWhoIs => parse_ipwhois_location(&body)?,
+        };
+
+        if location.city.trim().is_empty() {
+            Err("provider did not return a city".to_string())
+        } else {
+            Ok(location)
+        }
+    }
 }
 
 fn open_meteo_temperature_unit(units: Units) -> &'static str {
@@ -499,11 +544,141 @@ struct OpenWeatherWind {
     speed: f64,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+struct IpLocationCache {
+    #[serde(default)]
+    ip: Option<String>,
+    city: String,
+    #[serde(default)]
+    country: Option<String>,
+    #[serde(default)]
+    lat: Option<f64>,
+    #[serde(default)]
+    lon: Option<f64>,
+}
+
+#[derive(Copy, Clone)]
+enum IpProvider {
+    IpApi,
+    IpInfo,
+    IpWhoIs,
+}
+
+impl IpProvider {
+    fn url(self) -> &'static str {
+        match self {
+            Self::IpApi => "https://ipapi.co/json/",
+            Self::IpInfo => "https://ipinfo.io/json",
+            Self::IpWhoIs => "https://ipwho.is/",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::IpApi => "ipapi",
+            Self::IpInfo => "ipinfo",
+            Self::IpWhoIs => "ipwho.is",
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct IpApiLocation {
     city: Option<String>,
-    #[allow(dead_code)]
+    ip: Option<String>,
+    country_name: Option<String>,
     country: Option<String>,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    error: Option<bool>,
+    reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct IpInfoLocation {
+    city: Option<String>,
+    ip: Option<String>,
+    country: Option<String>,
+    loc: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct IpWhoIsLocation {
+    success: Option<bool>,
+    city: Option<String>,
+    ip: Option<String>,
+    country: Option<String>,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    message: Option<String>,
+}
+
+fn is_ip_rate_limited(status: StatusCode, body: &str) -> bool {
+    if status == StatusCode::TOO_MANY_REQUESTS {
+        return true;
+    }
+    let lower = body.to_ascii_lowercase();
+    lower.contains("too many requests")
+        || lower.contains("too many rapid requests")
+        || lower.contains("rate limit")
+}
+
+fn parse_ipapi_location(body: &str) -> Result<IpLocationCache, String> {
+    let response: IpApiLocation =
+        serde_json::from_str(body).map_err(|err| format!("response parse failed: {err}"))?;
+    if response.error.unwrap_or(false) {
+        return Err(response
+            .reason
+            .unwrap_or_else(|| "provider returned an error".to_string()));
+    }
+    Ok(IpLocationCache {
+        ip: response.ip,
+        city: response.city.unwrap_or_default(),
+        country: response.country_name.or(response.country),
+        lat: response.latitude,
+        lon: response.longitude,
+    })
+}
+
+fn parse_ipinfo_location(body: &str) -> Result<IpLocationCache, String> {
+    let response: IpInfoLocation =
+        serde_json::from_str(body).map_err(|err| format!("response parse failed: {err}"))?;
+    let (lat, lon) = response
+        .loc
+        .as_deref()
+        .and_then(parse_lat_lon)
+        .unwrap_or((None, None));
+    Ok(IpLocationCache {
+        ip: response.ip,
+        city: response.city.unwrap_or_default(),
+        country: response.country,
+        lat,
+        lon,
+    })
+}
+
+fn parse_ipwhois_location(body: &str) -> Result<IpLocationCache, String> {
+    let response: IpWhoIsLocation =
+        serde_json::from_str(body).map_err(|err| format!("response parse failed: {err}"))?;
+    if matches!(response.success, Some(false)) {
+        return Err(response
+            .message
+            .unwrap_or_else(|| "provider returned an error".to_string()));
+    }
+    Ok(IpLocationCache {
+        ip: response.ip,
+        city: response.city.unwrap_or_default(),
+        country: response.country,
+        lat: response.latitude,
+        lon: response.longitude,
+    })
+}
+
+fn parse_lat_lon(value: &str) -> Option<(Option<f64>, Option<f64>)> {
+    let mut parts = value.split(',');
+    let lat = parts.next()?.trim().parse::<f64>().ok();
+    let lon = parts.next()?.trim().parse::<f64>().ok();
+    Some((lat, lon))
 }
 
 fn classify_alert(summary: &str) -> Option<&'static str> {
@@ -516,5 +691,32 @@ fn classify_alert(summary: &str) -> Option<&'static str> {
         Some("low")
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_rate_limit_text() {
+        assert!(is_ip_rate_limited(
+            StatusCode::OK,
+            "Too many rapid requests. Please try again later."
+        ));
+        assert!(is_ip_rate_limited(StatusCode::TOO_MANY_REQUESTS, ""));
+        assert!(!is_ip_rate_limited(StatusCode::OK, "{\"city\":\"Tokyo\"}"));
+    }
+
+    #[test]
+    fn parses_ipinfo_location() {
+        let parsed = parse_ipinfo_location(
+            r#"{"ip":"1.2.3.4","city":"Tokyo","country":"JP","loc":"35.6895,139.6917"}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed.city, "Tokyo");
+        assert_eq!(parsed.country.as_deref(), Some("JP"));
+        assert_eq!(parsed.lat, Some(35.6895));
+        assert_eq!(parsed.lon, Some(139.6917));
     }
 }

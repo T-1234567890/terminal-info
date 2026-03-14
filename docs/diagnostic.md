@@ -39,6 +39,8 @@ Full mode adds checks such as:
 - cache presence/integrity
 - local config secret exposure checks
 - environment secret exposure checks
+- load average
+- DNS server availability
 - expanded latency probes across more global endpoints
 
 ## Network Checks
@@ -63,6 +65,9 @@ Server mode enhances `tinfo diagnostic network` with:
 - GitHub API reachability
 - weather API reachability
 - IP geolocation API reachability
+- Cloudflare DNS-over-HTTPS reachability
+- Google DNS-over-HTTPS reachability
+- plugin registry reachability
 
 Expanded latency testing is available through:
 
@@ -98,12 +103,20 @@ Server mode enhances system diagnostics with:
 
 - swap usage
 - system uptime
+- load average
+- process count
 
 Performance diagnostics are available in both modes through:
 
 ```bash
 tinfo diagnostic performance
 ```
+
+When server mode is enabled, performance diagnostics also include:
+
+- load average
+- running process count
+- more server-oriented capacity signals
 
 Example output:
 

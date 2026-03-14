@@ -18,6 +18,7 @@ A fast Rust-powered terminal information hub and all-in-one developer toolbox.
 - Shell completions for `bash`, `zsh`, and `fish`
 - Output modes for scripting and interactive use, including `--json`
 - GitHub-based plugin discovery, install, update, trust, verification, and execution
+- IP-based location detection with provider fallback and local caching
 
 ## Installation
 
@@ -211,6 +212,8 @@ tinfo diagnostic leaks
 ```
 
 When server mode is enabled, the enhanced human-readable output prints a clear `[Server Mode Enabled]` indicator.
+
+The enhanced server-mode diagnostics now include broader API endpoint checks, DNS resolver visibility, load average, process count, and a wider full-latency probe set.
 
 See [docs/server-mode.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/server-mode.md).
 

@@ -25,7 +25,7 @@ It also now includes a small dashboard module and an external plugin runner.
   - Resolves cities via geocoding
   - Fetches current weather and forecast data
   - Selects between Open-Meteo and OpenWeather
-  - Handles IP-based location lookup via `ipapi.co`
+  - Handles IP-based location lookup via multiple fallback providers with local caching
 - `src/dashboard.rs`
   - Renders the default startup dashboard
   - Displays location, local time, and a short weather summary when available

@@ -32,7 +32,7 @@ When server mode is enabled, these commands become more server-oriented:
 
 - broader endpoint coverage for full ping and latency tests
 - extra API reachability checks in network diagnostics
-- extra uptime and swap checks in system diagnostics
+- extra DNS resolver, uptime, swap, load-average, and process-count checks
 - deeper full diagnostics
 
 Server mode also unlocks server-only checks:
@@ -107,14 +107,15 @@ The biggest differences are:
 
 - `tinfo diagnostic network`
   - adds common API endpoint connectivity checks
+  - adds DNS resolver visibility when available
 - `tinfo diagnostic system`
-  - adds uptime and swap usage checks
+  - adds uptime, swap usage, load average, and process count
 - `tinfo diagnostic performance`
-  - focuses on CPU, memory, disk, swap, uptime, and process pressure
+  - focuses on CPU, memory, disk, swap, uptime, process pressure, load average, and running process count
 - `tinfo diagnostic full`
-  - combines the broader network, system, config, cache, registry, and latency checks
+  - combines the broader network, system, config, cache, registry, load, DNS, and latency checks
 - `tinfo ping full` and `tinfo latency full`
-  - use a broader server-oriented endpoint set
+  - use a broader server-oriented endpoint set including additional DNS providers, CDNs, and cloud vendors
 
 ## Server-Only Commands
 
