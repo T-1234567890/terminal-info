@@ -87,9 +87,11 @@ jobs:
           if (-not $env:MINISIGN_SECRET_KEY) {
             throw "MINISIGN_SECRET_KEY is required for release signing."
           }
-          $minisignUrl = "https://github.com/jedisct1/minisign/releases/latest/download/minisign-win64.exe"
-          Invoke-WebRequest $minisignUrl -OutFile minisign.exe
-          Move-Item minisign.exe C:\Windows\System32\minisign.exe
+          $zipUrl = "https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-win64.zip"
+          Invoke-WebRequest $zipUrl -OutFile minisign.zip
+          Expand-Archive minisign.zip -DestinationPath minisign
+          $env:PATH += ";$PWD\\minisign"
+          minisign -v
 
       - name: Package archive (Unix)
         if: runner.os != 'Windows'
