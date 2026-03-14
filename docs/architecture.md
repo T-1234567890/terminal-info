@@ -17,9 +17,9 @@ It also now includes a small dashboard module and an external plugin runner.
   - Formats user-facing terminal output
 - `src/config.rs`
   - Resolves the config file path
-  - Creates `~/.tinfo` and `config.json` when missing
-  - Loads and saves JSON configuration through `serde`
-  - Stores provider selection, optional API key, units, and default location
+  - Creates `~/.tinfo` and `config.toml` when missing
+  - Loads and saves TOML configuration through `serde`
+  - Stores provider selection, optional API key, units, default location, profiles, dashboard settings, cache settings, and server mode
 - `src/weather.rs`
   - Builds the shared `reqwest` client
   - Resolves cities via geocoding
@@ -29,8 +29,11 @@ It also now includes a small dashboard module and an external plugin runner.
 - `src/dashboard.rs`
   - Renders the default startup dashboard
   - Displays location, local time, and a short weather summary when available
+- `src/builtins.rs`
+  - Implements system, network, ping, latency, and diagnostic commands
+  - Extends diagnostics when server mode is enabled
 - `src/plugin.rs`
-  - Resolves plugin binaries from `PATH` or `~/.tinfo/plugins/`
+  - Resolves managed plugin binaries
   - Executes plugins for unknown top-level commands
 
 ## Command Flow
@@ -39,7 +42,8 @@ At startup:
 
 1. `clap` parses the command line.
 2. The config is loaded from `~/.tinfo/config.json` or a compatible legacy config path.
-3. The requested subcommand is executed, the dashboard is shown, or a plugin is launched.
+3. Server mode settings are applied from the existing config when diagnostic and latency commands run.
+4. The requested subcommand is executed, the dashboard is shown, or a plugin is launched.
 
 Examples:
 

@@ -13,6 +13,7 @@ A fast Rust-powered terminal information hub and all-in-one developer toolbox.
 - Dashboard view when running `tinfo`
 - Weather, time, ping, network, system, and diagnostic commands
 - TOML configuration with profiles in `~/.tinfo/config.toml`
+- Optional server mode for server and VPS diagnostics
 - Dashboard widget ordering in `~/.tinfo/config.toml`
 - Shell completions for `bash`, `zsh`, and `fish`
 - Output modes for scripting and interactive use, including `--json`
@@ -64,6 +65,7 @@ tinfo network
 tinfo system
 tinfo time
 tinfo diagnostic
+tinfo latency
 ```
 
 ## Example Commands
@@ -81,6 +83,13 @@ tinfo config
 tinfo config units imperial
 tinfo profile list
 tinfo profile use home
+tinfo config server enable
+tinfo diagnostic network
+tinfo diagnostic performance
+tinfo diagnostic security
+tinfo diagnostic leaks
+tinfo diagnostic full
+tinfo latency full
 tinfo completion install
 tinfo completion zsh
 tinfo plugin search
@@ -154,6 +163,56 @@ tinfo profile use travel
 ```
 
 See [docs/config.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/config.md).
+
+## Server Mode
+
+Server mode is optional. It is designed for servers or VPS environments and is not recommended for normal desktop use.
+
+Enable or disable it with:
+
+```bash
+tinfo config server status
+tinfo config server enable
+tinfo config server disable
+```
+
+When enabled, Terminal Info extends the normal toolbox with deeper server-oriented diagnostics. The same commands still work in normal mode, but server mode makes them broader and more server-focused:
+
+```bash
+tinfo diagnostic network
+tinfo diagnostic system
+tinfo diagnostic performance
+tinfo diagnostic security
+tinfo diagnostic leaks
+tinfo diagnostic full
+tinfo ping full
+tinfo latency full
+```
+
+Normal mode still keeps:
+
+```bash
+tinfo diagnostic
+tinfo diagnostic network
+tinfo diagnostic system
+tinfo diagnostic performance
+tinfo diagnostic full
+tinfo ping
+tinfo ping full
+tinfo latency
+tinfo latency full
+```
+
+Server-mode-only commands are:
+
+```bash
+tinfo diagnostic security
+tinfo diagnostic leaks
+```
+
+When server mode is enabled, the enhanced human-readable output prints a clear `[Server Mode Enabled]` indicator.
+
+See [docs/server-mode.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/server-mode.md).
 
 ## Output Modes
 

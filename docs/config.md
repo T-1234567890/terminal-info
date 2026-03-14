@@ -39,6 +39,7 @@ location = "auto"
 Supported top-level fields:
 
 - `config_version`
+- `server_mode`
 - `location`
 - `units`
 - `provider`
@@ -92,6 +93,7 @@ Menu sections:
 - `Location`
 - `Units`
 - `API Keys`
+- `Server Mode`
 - `Reset Config`
 - `Exit`
 
@@ -125,6 +127,18 @@ tinfo config api
 tinfo config api show
 tinfo config api set openweather YOUR_API_KEY
 ```
+
+Server mode:
+
+```bash
+tinfo config server status
+tinfo config server enable
+tinfo config server disable
+```
+
+Server mode is optional. It is intended for servers or VPS environments and is not recommended for regular desktop computers.
+
+See [server-mode.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/server-mode.md) for the full behavior and command scope.
 
 Reset:
 

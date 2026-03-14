@@ -22,6 +22,7 @@ use crossterm::cursor::{Hide, Show};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
+use dialoguer::{Confirm, theme::ColorfulTheme};
 use flate2::read::GzDecoder;
 use minisign_verify::{PublicKey, Signature};
 use reqwest::blocking::Client;
@@ -33,7 +34,8 @@ use tar::Archive;
 use zip::ZipArchive;
 
 use crate::builtins::{
-    run_config_doctor, run_diagnostic_all, run_diagnostic_full, run_diagnostic_network,
+    run_config_doctor, run_diagnostic_all, run_diagnostic_full, run_diagnostic_leaks,
+    run_diagnostic_network, run_diagnostic_performance, run_diagnostic_security,
     run_diagnostic_system, run_ping, show_network_info, show_system_info,
 };
 use crate::cache::{read_cache, write_cache};
@@ -187,6 +189,11 @@ enum ConfigCommand {
         #[command(subcommand)]
         command: Option<ApiCommand>,
     },
+    /// Enable, disable, or inspect server mode
+    Server {
+        #[command(subcommand)]
+        command: Option<ServerCommand>,
+    },
     /// Reset configuration to defaults
     Reset,
     /// Run configuration diagnostics
@@ -213,6 +220,16 @@ enum ApiCommand {
     Set { provider: ProviderArg, key: String },
     /// Show the current API configuration
     Show,
+}
+
+#[derive(Subcommand, Debug)]
+enum ServerCommand {
+    /// Enable server mode
+    Enable,
+    /// Disable server mode
+    Disable,
+    /// Show server mode status
+    Status,
 }
 
 #[derive(Subcommand, Debug)]
@@ -274,6 +291,12 @@ enum DiagnosticCommand {
     System,
     /// Run plugin diagnostics
     Plugins,
+    /// Run server performance diagnostics
+    Performance,
+    /// Run server security diagnostics
+    Security,
+    /// Run local leak detection checks
+    Leaks,
     /// Run a comprehensive diagnostic pass
     Full,
 }
@@ -330,12 +353,12 @@ fn main() {
 
     let result = match cli.command {
         Some(Command::Weather { command }) => handle_weather(&mut config, command, freeze),
-        Some(Command::Ping { host }) => run_ping(host),
-        Some(Command::Latency { host }) => run_ping(host),
+        Some(Command::Ping { host }) => handle_ping(&config, host),
+        Some(Command::Latency { host }) => handle_latency(&config, host),
         Some(Command::Network) => show_network_info(),
         Some(Command::System) => show_system_info(),
         Some(Command::Time { city }) => live_time(city, freeze),
-        Some(Command::Diagnostic { command }) => handle_diagnostic(command),
+        Some(Command::Diagnostic { command }) => handle_diagnostic(&config, command),
         Some(Command::Config { command }) => handle_config(&mut config, command),
         Some(Command::Profile { command }) => handle_profile(&mut config, command),
         Some(Command::Completion { shell }) => {
@@ -372,14 +395,43 @@ fn resolve_output_mode(cli: &Cli) -> OutputMode {
     }
 }
 
-fn handle_diagnostic(command: Option<DiagnosticCommand>) -> Result<(), String> {
+fn handle_diagnostic(config: &Config, command: Option<DiagnosticCommand>) -> Result<(), String> {
     match command {
-        Some(DiagnosticCommand::Network) => run_diagnostic_network(),
-        Some(DiagnosticCommand::System) => run_diagnostic_system(),
+        Some(DiagnosticCommand::Network) => run_diagnostic_network(config.server_mode),
+        Some(DiagnosticCommand::System) => run_diagnostic_system(config.server_mode),
         Some(DiagnosticCommand::Plugins) => run_diagnostic_plugins(),
-        Some(DiagnosticCommand::Full) => run_diagnostic_full(),
+        Some(DiagnosticCommand::Performance) => run_diagnostic_performance(config.server_mode),
+        Some(DiagnosticCommand::Security) => {
+            ensure_server_mode_enabled(config)?;
+            run_diagnostic_security(config)
+        }
+        Some(DiagnosticCommand::Leaks) => {
+            ensure_server_mode_enabled(config)?;
+            run_diagnostic_leaks(config)
+        }
+        Some(DiagnosticCommand::Full) => run_diagnostic_full(config, config.server_mode),
         None => run_diagnostic_all(),
     }
+}
+
+fn handle_ping(config: &Config, host: Option<String>) -> Result<(), String> {
+    if config.server_mode && is_full_probe_request(host.as_deref()) && !crate::output::json_output()
+    {
+        println!("[Server Mode Enabled]");
+    }
+    run_ping(host, config.server_mode)
+}
+
+fn handle_latency(config: &Config, host: Option<String>) -> Result<(), String> {
+    if config.server_mode && is_full_probe_request(host.as_deref()) && !crate::output::json_output()
+    {
+        println!("[Server Mode Enabled]");
+    }
+    run_ping(host, config.server_mode)
+}
+
+fn is_full_probe_request(host: Option<&str>) -> bool {
+    matches!(host, Some(value) if value.eq_ignore_ascii_case("full"))
 }
 
 fn handle_external(args: Vec<String>) -> Result<(), String> {
@@ -561,6 +613,7 @@ fn handle_config(config: &mut Config, command: Option<ConfigCommand>) -> Result<
                 Ok(())
             }
         },
+        Some(ConfigCommand::Server { command }) => handle_server_mode(config, command),
         Some(ConfigCommand::Reset) => {
             config.reset();
             config.save()?;
@@ -569,6 +622,65 @@ fn handle_config(config: &mut Config, command: Option<ConfigCommand>) -> Result<
         }
         Some(ConfigCommand::Doctor) => run_config_doctor(config),
         None => show_config_menu(config),
+    }
+}
+
+fn handle_server_mode(config: &mut Config, command: Option<ServerCommand>) -> Result<(), String> {
+    match command.unwrap_or(ServerCommand::Status) {
+        ServerCommand::Enable => enable_server_mode(config),
+        ServerCommand::Disable => {
+            config.server_mode = false;
+            config.save()?;
+            println!("Server mode disabled.");
+            Ok(())
+        }
+        ServerCommand::Status => {
+            println!(
+                "Server mode: {}",
+                if config.server_mode {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
+            Ok(())
+        }
+    }
+}
+
+fn enable_server_mode(config: &mut Config) -> Result<(), String> {
+    if config.server_mode {
+        println!("Server mode is already enabled.");
+        return Ok(());
+    }
+
+    println!(
+        "Server mode is designed for servers or VPS environments and is not recommended for regular desktop computers."
+    );
+    let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt("Enable server mode?")
+        .default(false)
+        .interact()
+        .map_err(|err| format!("Failed to read confirmation: {err}"))?;
+    if !confirmed {
+        println!("Server mode was not changed.");
+        return Ok(());
+    }
+
+    config.server_mode = true;
+    config.save()?;
+    println!("Server mode enabled.");
+    Ok(())
+}
+
+fn ensure_server_mode_enabled(config: &Config) -> Result<(), String> {
+    if config.server_mode {
+        Ok(())
+    } else {
+        Err(
+            "This feature requires server mode.\nEnable it using: tinfo config server enable"
+                .to_string(),
+        )
     }
 }
 
