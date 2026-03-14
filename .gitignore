@@ -27,3 +27,8 @@
 *.dll
 *.so
 *.dylib
+
+# VHS artifacts
+*.cast
+/demos/vhs/*.gif
+/demos/vhs/*.mp4
