@@ -21,7 +21,6 @@
 ## Installation
 
 ![Latest Release](https://img.shields.io/github/v/release/T-1234567890/terminal-info)
-[![Release](https://github.com/T-1234567890/terminal-info/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/T-1234567890/terminal-info/actions/workflows/release.yml)
 ![Downloads](https://img.shields.io/github/downloads/T-1234567890/terminal-info/total)
 ### Install script
 
