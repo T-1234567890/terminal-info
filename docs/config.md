@@ -226,9 +226,13 @@ When no explicit city is provided, `tinfo` can detect a city from:
 
 ```text
 https://ipapi.co/json/
+https://ipinfo.io/json
+https://ipwho.is/
 ```
 
 This is a network lookup only. It does not request GPS or OS location permissions.
+
+Detected IP location is cached locally for 6 hours to reduce rate limits and improve dashboard reliability.
 
 ## Output Modes
 

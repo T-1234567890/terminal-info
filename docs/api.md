@@ -1,6 +1,6 @@
 # APIs
 
-`tinfo` currently supports one default weather provider, one optional weather provider, and one IP geolocation service.
+`tinfo` currently supports one default weather provider, one optional weather provider, and multiple IP geolocation services.
 
 ## Open-Meteo
 
@@ -45,16 +45,22 @@ Endpoints used:
 
 ## IP Geolocation
 
-For automatic location detection, `tinfo` uses:
+For automatic location detection, `tinfo` uses this provider order:
 
 - `https://ipapi.co/json/`
+- `https://ipinfo.io/json`
+- `https://ipwho.is/`
 
 This service is only used to infer the city for `tinfo weather now` when:
 
 1. no city argument is provided
 2. no saved default location exists
 
-If the request fails, times out, or returns no usable city, `tinfo` falls back to a clear manual-configuration message.
+`tinfo` caches IP-based location results for 6 hours to avoid repeated API calls and reduce rate-limit issues.
+
+If a provider fails, times out, returns invalid data, or reports rate limiting, `tinfo` automatically falls back to the next provider.
+
+If all providers fail or return no usable city, `tinfo` falls back to a clear manual-configuration message.
 
 ## Provider Selection Rules
 
@@ -70,3 +76,4 @@ If OpenWeather is selected without a key, the CLI cannot complete OpenWeather re
 - The HTTP client uses short timeouts to keep the CLI responsive.
 - API failures are surfaced as concise terminal errors.
 - IP-based detection should be treated as a convenience fallback, not as a guaranteed source of location data.
+- Cached IP location helps keep dashboard and weather startup behavior more reliable under API rate limits.

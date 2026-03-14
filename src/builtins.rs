@@ -47,6 +47,17 @@ const SERVER_FULL_PING_HOSTS: [&str; 15] = [
     "apple.com",
     "oracle.com",
 ];
+const SERVER_API_ENDPOINTS: [(&str, &str); 6] = [
+    ("GitHub API", "https://api.github.com"),
+    ("Weather API", "https://api.open-meteo.com/v1/forecast"),
+    ("IP geolocation API", "https://ipapi.co/json/"),
+    ("Cloudflare DoH", "https://cloudflare-dns.com/dns-query"),
+    ("Google DoH", "https://dns.google/resolve"),
+    (
+        "Plugin registry",
+        "https://api.github.com/repos/T-1234567890/terminal-info/contents/plugins",
+    ),
+];
 
 pub struct DashboardSnapshot {
     pub time: String,
@@ -589,17 +600,17 @@ pub fn run_diagnostic_network(server_mode: bool) -> Result<(), String> {
     let tls_ok = http_reachable("https://github.com");
     print_status(tls_ok, "TLS handshake OK", "TLS handshake failed");
     if server_mode {
-        for (label, url) in [
-            ("GitHub API", "https://api.github.com"),
-            ("Weather API", "https://api.open-meteo.com/v1/forecast"),
-            ("ipapi", "https://ipapi.co/json/"),
-        ] {
+        for (label, url) in SERVER_API_ENDPOINTS {
             let ok = http_reachable(url);
             print_status(
                 ok,
                 &format!("{label} reachable"),
                 &format!("{label} unreachable"),
             );
+        }
+        match dns_server() {
+            Ok(server) => println!("{} DNS server {}", success_prefix(), server),
+            Err(_) => println!("{} DNS server unavailable", warn_prefix()),
         }
         print_server_mode_footer();
     }
@@ -664,6 +675,19 @@ pub fn run_diagnostic_system(server_mode: bool) -> Result<(), String> {
             &format!("Swap usage {:.1}%", swap_ratio * 100.0),
             &format!("Swap usage high {:.1}%", swap_ratio * 100.0),
         );
+        let load = System::load_average();
+        println!(
+            "{} Load average {:.2} {:.2} {:.2}",
+            success_prefix(),
+            load.one,
+            load.five,
+            load.fifteen
+        );
+        println!(
+            "{} Process count {}",
+            success_prefix(),
+            system.processes().len()
+        );
         print_server_mode_footer();
     }
 
@@ -698,6 +722,7 @@ pub fn run_diagnostic_performance(server_mode: bool) -> Result<(), String> {
     } else {
         0.0
     };
+    let load = System::load_average();
 
     let checks = vec![
         doctor_status(
@@ -773,6 +798,32 @@ pub fn run_diagnostic_performance(server_mode: bool) -> Result<(), String> {
             "review long-running services if the host feels overloaded",
         ),
     ];
+
+    let mut checks = checks;
+    if server_mode {
+        checks.push(doctor_status(
+            "Load average",
+            if load.one < 8.0 { "PASS" } else { "WARN" },
+            if load.one < 8.0 { "info" } else { "warning" },
+            &format!("{:.2} {:.2} {:.2}", load.one, load.five, load.fifteen),
+            "investigate sustained host load if these values stay high",
+        ));
+        checks.push(doctor_status(
+            "Running processes",
+            if system.processes().len() < 1024 {
+                "PASS"
+            } else {
+                "WARN"
+            },
+            if system.processes().len() < 1024 {
+                "info"
+            } else {
+                "warning"
+            },
+            &system.processes().len().to_string(),
+            "review runaway worker or service counts",
+        ));
+    }
 
     print_doctor_checks(&checks)?;
     if server_mode {
@@ -1227,49 +1278,18 @@ fn collect_diagnostic_checks() -> Vec<DoctorCheck> {
 
 fn collect_full_diagnostic_checks(config: &Config, server_mode: bool) -> Vec<DoctorCheck> {
     let mut checks = collect_diagnostic_checks();
-    checks.push(doctor_status(
-        "Weather API connectivity",
-        if http_reachable("https://api.open-meteo.com/v1/forecast") {
-            "PASS"
-        } else {
-            "WARN"
-        },
-        if http_reachable("https://api.open-meteo.com/v1/forecast") {
-            "info"
-        } else {
-            "warning"
-        },
-        if http_reachable("https://api.open-meteo.com/v1/forecast") {
-            "reachable"
-        } else {
-            "unreachable"
-        },
-        "check outbound HTTPS access to the weather provider",
-    ));
-    checks.push(doctor_status(
-        "Plugin registry access",
-        if http_reachable(
-            "https://api.github.com/repos/T-1234567890/terminal-info/contents/plugins",
-        ) {
-            "PASS"
-        } else {
-            "WARN"
-        },
-        if http_reachable(
-            "https://api.github.com/repos/T-1234567890/terminal-info/contents/plugins",
-        ) {
-            "info"
-        } else {
-            "warning"
-        },
-        if http_reachable(
-            "https://api.github.com/repos/T-1234567890/terminal-info/contents/plugins",
-        ) {
-            "reachable"
-        } else {
-            "unreachable"
-        },
-        "check GitHub connectivity or rely on the plugin registry cache",
+    checks.extend(collect_endpoint_doctor_checks(
+        &[
+            (
+                "Weather API connectivity",
+                "https://api.open-meteo.com/v1/forecast",
+            ),
+            (
+                "Plugin registry access",
+                "https://api.github.com/repos/T-1234567890/terminal-info/contents/plugins",
+            ),
+        ],
+        "check outbound HTTPS access or rely on cached data",
     ));
     let registry_cache = registry_cache_path();
     let cache_detail = if registry_cache.exists() {
@@ -1293,6 +1313,29 @@ fn collect_full_diagnostic_checks(config: &Config, server_mode: bool) -> Vec<Doc
         "run `tinfo plugin search` to refresh the cache",
     ));
     if server_mode {
+        checks.extend(collect_endpoint_doctor_checks(
+            &SERVER_API_ENDPOINTS,
+            "check outbound HTTPS access, DNS, or firewall rules",
+        ));
+        let load = System::load_average();
+        checks.push(doctor_status(
+            "Load average",
+            if load.one < 8.0 { "PASS" } else { "WARN" },
+            if load.one < 8.0 { "info" } else { "warning" },
+            &format!("{:.2} {:.2} {:.2}", load.one, load.five, load.fifteen),
+            "investigate sustained host load if the one-minute value stays high",
+        ));
+        checks.push(doctor_status(
+            "DNS server availability",
+            if dns_server().is_ok() { "PASS" } else { "WARN" },
+            if dns_server().is_ok() {
+                "info"
+            } else {
+                "warning"
+            },
+            &dns_server().unwrap_or_else(|_| "unavailable".to_string()),
+            "check local DNS resolver configuration",
+        ));
         checks.extend(collect_security_checks(config));
         checks.extend(collect_leak_checks(config));
         for latency in collect_latency_checks(Some("full"), true) {
@@ -1314,6 +1357,26 @@ fn collect_full_diagnostic_checks(config: &Config, server_mode: bool) -> Vec<Doc
     }
 
     checks
+}
+
+fn collect_endpoint_doctor_checks(endpoints: &[(&str, &str)], fix: &str) -> Vec<DoctorCheck> {
+    endpoints
+        .iter()
+        .map(|(label, url)| {
+            let reachable = http_reachable(url);
+            doctor_status(
+                label,
+                if reachable { "PASS" } else { "WARN" },
+                if reachable { "info" } else { "warning" },
+                if reachable {
+                    "reachable"
+                } else {
+                    "unreachable"
+                },
+                if reachable { "none" } else { fix },
+            )
+        })
+        .collect()
 }
 
 fn collect_security_checks(config: &Config) -> Vec<DoctorCheck> {
@@ -1515,5 +1578,12 @@ mod tests {
                 .iter()
                 .any(|check| check.name.starts_with("Latency "))
         );
+        assert!(checks.iter().any(|check| check.name == "Load average"));
+        assert!(
+            checks
+                .iter()
+                .any(|check| check.name == "DNS server availability")
+        );
+        assert!(checks.iter().any(|check| check.name == "GitHub API"));
     }
 }
