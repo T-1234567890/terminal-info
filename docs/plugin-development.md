@@ -10,6 +10,12 @@ Generate a new plugin template:
 tinfo plugin init
 ```
 
+Generate plugin signing keys:
+
+```bash
+tinfo plugin keygen --output-dir ./keys
+```
+
 This creates:
 
 ```text
@@ -82,13 +88,32 @@ tinfo-<plugin-name>-x86_64-pc-windows-msvc.exe.minisig
 
 Each plugin author signs their own plugin releases.
 
-Generate a Minisign keypair:
+Generate a Minisign keypair with Terminal Info:
+
+```bash
+tinfo plugin keygen --output-dir ./keys
+```
+
+This writes:
+
+```text
+./keys/minisign.key
+./keys/minisign.pub
+```
+
+You can also use Minisign directly:
 
 ```bash
 minisign -G
 ```
 
-Sign each published release asset:
+Sign each published release asset with Terminal Info:
+
+```bash
+tinfo plugin sign dist/tinfo-<plugin-name>-x86_64-apple-darwin --key ./keys/minisign.key
+```
+
+Or use Minisign directly:
 
 ```bash
 minisign -S -s minisign.key -m dist/tinfo-<plugin-name>-x86_64-apple-darwin

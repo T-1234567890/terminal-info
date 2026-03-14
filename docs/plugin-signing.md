@@ -11,12 +11,26 @@ This keeps the plugin ecosystem decentralized while allowing Terminal Info to ve
 1. Generate a Minisign keypair:
 
 ```bash
+tinfo plugin keygen --output-dir ./keys
+```
+
+This writes `minisign.key` and `minisign.pub` into the selected directory.
+
+You can also generate keys with Minisign directly:
+
+```bash
 minisign -G
 ```
 
 2. Build the plugin release assets.
 
 3. Sign each asset:
+
+```bash
+tinfo plugin sign dist/tinfo-<plugin-name>-x86_64-apple-darwin --key ./keys/minisign.key
+```
+
+Or use Minisign directly:
 
 ```bash
 minisign -S -s minisign.key -m dist/tinfo-<plugin-name>-x86_64-apple-darwin

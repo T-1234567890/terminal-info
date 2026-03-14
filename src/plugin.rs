@@ -497,6 +497,123 @@ pub fn init_plugin_template(name: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
+pub fn plugin_keygen(output_dir: Option<PathBuf>) -> Result<(), String> {
+    let output_dir = match output_dir {
+        Some(path) => path,
+        None => {
+            env::current_dir().map_err(|err| format!("Failed to read current directory: {err}"))?
+        }
+    };
+    fs::create_dir_all(&output_dir)
+        .map_err(|err| format!("Failed to create key output directory: {err}"))?;
+
+    let secret_key = output_dir.join("minisign.key");
+    let public_key = output_dir.join("minisign.pub");
+
+    if secret_key.exists() || public_key.exists() {
+        return Err(format!(
+            "Refusing to overwrite existing Minisign keys in '{}'.",
+            output_dir.display()
+        ));
+    }
+
+    let secret_key_str = secret_key.to_string_lossy().to_string();
+    let public_key_str = public_key.to_string_lossy().to_string();
+    let args = [
+        "-G".to_string(),
+        "-W".to_string(),
+        "-s".to_string(),
+        secret_key_str,
+        "-p".to_string(),
+        public_key_str,
+    ];
+    run_minisign(&args)?;
+
+    println!("Created Minisign keys:");
+    println!("  {}", secret_key.display());
+    println!("  {}", public_key.display());
+    Ok(())
+}
+
+pub fn plugin_sign(file: &Path, key: Option<&Path>) -> Result<(), String> {
+    if !file.exists() {
+        return Err(format!("File '{}' does not exist.", file.display()));
+    }
+    if !file.is_file() {
+        return Err(format!("'{}' is not a file.", file.display()));
+    }
+
+    let key_path = match key {
+        Some(path) => path.to_path_buf(),
+        None => env::current_dir()
+            .map_err(|err| format!("Failed to read current directory: {err}"))?
+            .join("minisign.key"),
+    };
+
+    if !key_path.exists() {
+        return Err(format!(
+            "Minisign secret key '{}' was not found.",
+            key_path.display()
+        ));
+    }
+
+    let signature_path = PathBuf::from(format!("{}.minisig", file.display()));
+    let trusted_comment = file
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("plugin-artifact")
+        .to_string();
+
+    let key_path_str = key_path.to_string_lossy().to_string();
+    let file_str = file.to_string_lossy().to_string();
+    let signature_path_str = signature_path.to_string_lossy().to_string();
+    let args = [
+        "-S".to_string(),
+        "-s".to_string(),
+        key_path_str,
+        "-m".to_string(),
+        file_str,
+        "-x".to_string(),
+        signature_path_str,
+        "-t".to_string(),
+        trusted_comment,
+    ];
+    run_minisign(&args)?;
+
+    println!("Created plugin signature:");
+    println!("  {}", signature_path.display());
+    Ok(())
+}
+
+fn run_minisign(args: &[String]) -> Result<(), String> {
+    let output = Command::new("minisign")
+        .args(args)
+        .output()
+        .map_err(|err| {
+            if err.kind() == io::ErrorKind::NotFound {
+                "minisign was not found in PATH. Install minisign and try again.".to_string()
+            } else {
+                format!("Failed to run minisign: {err}")
+            }
+        })?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let detail = if !stderr.is_empty() {
+        stderr
+    } else if !stdout.is_empty() {
+        stdout
+    } else {
+        "minisign exited with an unknown error".to_string()
+    };
+
+    Err(format!("minisign failed: {detail}"))
+}
+
 fn prompt_value(prompt: &str, default: &str) -> Result<String, String> {
     if io::stdin().is_terminal() && io::stdout().is_terminal() {
         let theme = ColorfulTheme::default();

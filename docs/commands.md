@@ -142,6 +142,8 @@ tinfo completion install
 tinfo plugin list
 tinfo plugin search
 tinfo plugin init <name>
+tinfo plugin keygen [--output-dir <dir>]
+tinfo plugin sign <file> [--key <path>]
 tinfo plugin install <name>
 tinfo plugin trust <name>
 tinfo plugin untrust <name>
@@ -154,6 +156,8 @@ tinfo plugin remove <name>
 ```
 
 `plugin search` reads the reviewed registry metadata, using the local cache when available.
+`plugin keygen` creates `minisign.key` and `minisign.pub` for plugin release signing.
+`plugin sign` signs a plugin artifact and writes a sibling `.minisig` file.
 `plugin install` downloads the plugin's pinned GitHub release asset and installs it into `~/.terminal-info/plugins/`.
 `plugin remove` deletes the installed plugin directory.
 
