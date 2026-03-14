@@ -240,6 +240,8 @@ Plugin management commands:
 ```bash
 tinfo plugin search
 tinfo plugin init <name>
+tinfo plugin keygen
+tinfo plugin sign <file>
 tinfo plugin install <name>
 tinfo plugin trust <name>
 tinfo plugin untrust <name>
@@ -262,7 +264,9 @@ Developer quick start:
 ```bash
 tinfo plugin init hello
 cd tinfo-hello
+tinfo plugin keygen --output-dir ./keys
 cargo build --release
+tinfo plugin sign dist/tinfo-hello-x86_64-apple-darwin --key ./keys/minisign.key
 ```
 
 See:

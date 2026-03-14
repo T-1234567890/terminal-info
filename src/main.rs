@@ -40,8 +40,8 @@ use crate::config_menu::show_config_menu;
 use crate::output::{OutputMode, set_json_output, set_output_mode};
 use crate::plugin::{
     info_plugin, init_plugin_template, install_plugin, list_plugins, list_trusted_plugins,
-    remove_plugin, run_diagnostic_plugins, run_plugin, search_plugins, set_plugin_trust,
-    update_plugin, upgrade_all_plugins, verify_plugins,
+    plugin_keygen, plugin_sign, remove_plugin, run_diagnostic_plugins, run_plugin, search_plugins,
+    set_plugin_trust, update_plugin, upgrade_all_plugins, verify_plugins,
 };
 use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, WeatherReport};
 
@@ -202,6 +202,20 @@ enum PluginCommand {
     Init {
         /// Optional plugin name used as the default prompt value
         name: Option<String>,
+    },
+    /// Generate a Minisign keypair for plugin releases
+    Keygen {
+        /// Directory to write minisign.key and minisign.pub into
+        #[arg(long)]
+        output_dir: Option<PathBuf>,
+    },
+    /// Sign a plugin release artifact with Minisign
+    Sign {
+        /// File to sign, such as a plugin archive or binary
+        file: PathBuf,
+        /// Path to the Minisign secret key
+        #[arg(long)]
+        key: Option<PathBuf>,
     },
     /// Install a plugin
     Install { name: String },
@@ -594,6 +608,8 @@ fn handle_plugin(command: PluginCommand) -> Result<(), String> {
         PluginCommand::List => list_plugins(),
         PluginCommand::Search => search_plugins(),
         PluginCommand::Init { name } => init_plugin_template(name),
+        PluginCommand::Keygen { output_dir } => plugin_keygen(output_dir),
+        PluginCommand::Sign { file, key } => plugin_sign(&file, key.as_deref()),
         PluginCommand::Install { name } => install_plugin(&name),
         PluginCommand::Trust { name } => set_plugin_trust(&name, true),
         PluginCommand::Untrust { name } => set_plugin_trust(&name, false),
