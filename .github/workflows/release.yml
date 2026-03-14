@@ -96,9 +96,13 @@ jobs:
           cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} dist/${{ matrix.binary_name }}
           tar -czf ${{ matrix.archive_name }} -C dist ${{ matrix.binary_name }}
           shasum -a 256 ${{ matrix.archive_name }} > ${{ matrix.archive_name }}.sha256
-          printf '%s' "$MINISIGN_SECRET_KEY" > minisign.key
+          echo "$MINISIGN_SECRET_KEY" > minisign.key
           chmod 600 minisign.key
-          minisign -S -W -s minisign.key -m ${{ matrix.archive_name }} -x ${{ matrix.archive_name }}.minisig -t "${{ matrix.archive_name }}"
+          minisign -S \
+            -s minisign.key \
+            -m ${{ matrix.archive_name }} \
+            -x ${{ matrix.archive_name }}.minisig \
+            -t "${{ matrix.archive_name }}"
 
       - name: Package archive (Windows)
         if: runner.os == 'Windows'
@@ -109,9 +113,12 @@ jobs:
           Compress-Archive -Path "dist/${{ matrix.binary_name }}" -DestinationPath "${{ matrix.archive_name }}"
           $hash = (Get-FileHash "${{ matrix.archive_name }}" -Algorithm SHA256).Hash.ToLower()
           Set-Content -Path "${{ matrix.archive_name }}.sha256" -Value "$hash  ${{ matrix.archive_name }}"
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllText("minisign.key", $env:MINISIGN_SECRET_KEY, $utf8NoBom)
-          minisign -S -W -s minisign.key -m "${{ matrix.archive_name }}" -x "${{ matrix.archive_name }}.minisig" -t "${{ matrix.archive_name }}"
+          Set-Content minisign.key $env:MINISIGN_SECRET_KEY
+          minisign -S `
+            -s minisign.key `
+            -m "${{ matrix.archive_name }}" `
+            -x "${{ matrix.archive_name }}.minisig" `
+            -t "${{ matrix.archive_name }}"
 
       - name: Upload release artifact
         uses: softprops/action-gh-release@v2
