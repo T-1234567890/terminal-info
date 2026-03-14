@@ -1,4 +1,4 @@
-use dialoguer::{Input, Password, Select, theme::ColorfulTheme};
+use dialoguer::{Confirm, Input, Password, Select, theme::ColorfulTheme};
 
 use crate::config::{ApiProvider, Config, Units};
 use crate::weather::WeatherClient;
@@ -7,7 +7,14 @@ pub fn show_config_menu(config: &mut Config) -> Result<(), String> {
     let theme = ColorfulTheme::default();
 
     loop {
-        let items = ["Location", "Units", "API Keys", "Reset Config", "Exit"];
+        let items = [
+            "Location",
+            "Units",
+            "API Keys",
+            "Server Mode",
+            "Reset Config",
+            "Exit",
+        ];
         let selection = Select::with_theme(&theme)
             .with_prompt("Terminal Info Configuration")
             .items(&items)
@@ -19,12 +26,13 @@ pub fn show_config_menu(config: &mut Config) -> Result<(), String> {
             Some(0) => show_location_menu(config, &theme)?,
             Some(1) => show_units_menu(config, &theme)?,
             Some(2) => show_api_menu(config, &theme)?,
-            Some(3) => {
+            Some(3) => show_server_mode_menu(config, &theme)?,
+            Some(4) => {
                 config.reset();
                 config.save()?;
                 println!("Configuration reset.");
             }
-            Some(4) | None => break,
+            Some(5) | None => break,
             Some(_) => {}
         }
     }
@@ -153,6 +161,61 @@ fn show_api_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), Strin
                     config
                         .masked_api_key()
                         .unwrap_or_else(|| "Not set".to_string())
+                );
+            }
+            Some(3) | None => break,
+            Some(_) => {}
+        }
+    }
+
+    Ok(())
+}
+
+fn show_server_mode_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
+    loop {
+        let items = ["Enable", "Disable", "Status", "Back"];
+        let selection = Select::with_theme(theme)
+            .with_prompt("Server Mode")
+            .items(&items)
+            .default(0)
+            .interact_opt()
+            .map_err(|err| format!("Failed to read server mode selection: {err}"))?;
+
+        match selection {
+            Some(0) => {
+                if config.server_mode {
+                    println!("Server mode is already enabled.");
+                    continue;
+                }
+                println!(
+                    "Server mode is designed for servers or VPS environments and is not recommended for regular desktop computers."
+                );
+                let confirmed = Confirm::with_theme(theme)
+                    .with_prompt("Enable server mode?")
+                    .default(false)
+                    .interact()
+                    .map_err(|err| format!("Failed to read confirmation: {err}"))?;
+                if confirmed {
+                    config.server_mode = true;
+                    config.save()?;
+                    println!("Server mode enabled.");
+                } else {
+                    println!("Server mode was not changed.");
+                }
+            }
+            Some(1) => {
+                config.server_mode = false;
+                config.save()?;
+                println!("Server mode disabled.");
+            }
+            Some(2) => {
+                println!(
+                    "Server mode: {}",
+                    if config.server_mode {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
                 );
             }
             Some(3) | None => break,

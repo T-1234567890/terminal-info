@@ -89,6 +89,9 @@ tinfo latency full
 tinfo diagnostic
 tinfo diagnostic full
 tinfo diagnostic network
+tinfo diagnostic performance
+tinfo diagnostic security
+tinfo diagnostic leaks
 tinfo diagnostic system
 tinfo diagnostic plugins
 ```
@@ -98,6 +101,20 @@ Runs grouped diagnostics for:
 - network checks
 - system checks
 - plugin checks
+
+Normal mode keeps `tinfo diagnostic`, `tinfo diagnostic network`, `tinfo diagnostic system`, `tinfo diagnostic performance`, `tinfo diagnostic full`, `tinfo ping`, `tinfo ping full`, `tinfo latency`, and `tinfo latency full`.
+
+Server mode is required for:
+- `tinfo diagnostic security`
+- `tinfo diagnostic leaks`
+
+## Server Mode
+
+```bash
+tinfo config server status
+tinfo config server enable
+tinfo config server disable
+```
 
 ## Config
 

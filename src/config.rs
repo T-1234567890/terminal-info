@@ -128,6 +128,8 @@ impl Units {
 pub struct Config {
     #[serde(default = "default_config_version")]
     pub config_version: u32,
+    #[serde(default)]
+    pub server_mode: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<ApiProvider>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -160,6 +162,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             config_version: CURRENT_CONFIG_VERSION,
+            server_mode: false,
             provider: None,
             api_key: None,
             units: Units::default(),
@@ -388,6 +391,7 @@ mod tests {
     fn default_config_uses_current_version() {
         let config = Config::default();
         assert_eq!(config.config_version, CURRENT_CONFIG_VERSION);
+        assert!(!config.server_mode);
         assert_eq!(config.dashboard.refresh_interval, 1);
         assert_eq!(config.cache.weather_ttl_secs, 60);
         assert_eq!(config.cache.network_ttl_secs, 30);
