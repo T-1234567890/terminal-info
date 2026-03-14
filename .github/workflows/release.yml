@@ -87,7 +87,9 @@ jobs:
           if (-not $env:MINISIGN_SECRET_KEY) {
             throw "MINISIGN_SECRET_KEY is required for release signing."
           }
-          choco install minisign -y
+          $minisignUrl = "https://github.com/jedisct1/minisign/releases/latest/download/minisign-win64.exe"
+          Invoke-WebRequest $minisignUrl -OutFile minisign.exe
+          Move-Item minisign.exe C:\Windows\System32\minisign.exe
 
       - name: Package archive (Unix)
         if: runner.os != 'Windows'
