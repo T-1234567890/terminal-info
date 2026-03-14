@@ -38,6 +38,7 @@ location = "auto"
 
 Supported top-level fields:
 
+- `config_version`
 - `location`
 - `units`
 - `provider`
@@ -46,6 +47,11 @@ Supported top-level fields:
 - `profile.<name>`
 - `locations.<alias>`
 - `dashboard.widgets`
+- `dashboard.refresh_interval`
+- `dashboard.compact_mode`
+- `cache.weather_ttl_secs`
+- `cache.network_ttl_secs`
+- `cache.time_ttl_secs`
 
 `location = "auto"` means weather commands should try IP-based city detection.
 
@@ -62,6 +68,13 @@ Dashboard widget order:
 ```toml
 [dashboard]
 widgets = ["weather", "time", "network", "system", "plugins"]
+refresh_interval = 1
+compact_mode = false
+ 
+[cache]
+weather_ttl_secs = 60
+network_ttl_secs = 30
+time_ttl_secs = 10
 ```
 
 ## Interactive Configuration
@@ -125,6 +138,13 @@ Doctor:
 tinfo config doctor
 ```
 
+Dashboard settings:
+
+```bash
+tinfo dashboard config
+tinfo dashboard reset
+```
+
 ## Profiles
 
 Profiles are named configuration blocks stored under `[profile.<name>]`.
@@ -133,10 +153,58 @@ Commands:
 
 ```bash
 tinfo profile list
+tinfo profile show home
 tinfo profile use home
+tinfo profile add home
+tinfo profile remove work
 ```
 
-`tinfo profile use <name>` applies the stored profile values to the active config and saves `active_profile`.
+`tinfo profile use <name>` activates the stored profile values as runtime overrides and saves `active_profile`.
+`tinfo profile add <name>` saves the current effective config values into a named profile.
+`tinfo profile show <name>` prints the stored values for that profile.
+`tinfo profile remove <name>` deletes the named profile.
+
+Example home/office setup:
+
+```toml
+location = "Shenzhen"
+
+[dashboard]
+widgets = ["weather", "time", "network", "system", "plugins"]
+refresh_interval = 1
+compact_mode = false
+
+[profile.home]
+location = "Shenzhen"
+units = "metric"
+
+[profile.home.dashboard]
+widgets = ["weather", "time", "plugins"]
+refresh_interval = 1
+compact_mode = false
+
+[profile.office]
+location = "Tokyo"
+units = "metric"
+
+[profile.office.dashboard]
+widgets = ["weather", "time", "network"]
+refresh_interval = 2
+compact_mode = true
+```
+
+When no profile is active, Terminal Info uses the top-level config values.
+When a profile is active, profile values override the top-level config for supported fields while leaving the base config intact.
+
+## Migration
+
+On startup, Terminal Info automatically checks for:
+
+- legacy `~/.tw/config.json`
+- older config schema versions
+- legacy plugin paths under `~/.tinfo/plugins`
+
+When a migration changes files, Terminal Info writes a backup first.
 
 ## IP-Based Location
 

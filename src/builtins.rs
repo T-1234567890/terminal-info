@@ -11,11 +11,24 @@ use sysinfo::{Disks, System};
 
 use crate::cache::{read_cache, write_cache};
 use crate::config::Config;
-use crate::output::{error_prefix, success_prefix};
+use crate::migration::inspect_migration_status;
+use crate::output::{error_prefix, success_prefix, warn_prefix};
 use crate::plugin::{run_diagnostic_plugins, verify_plugins};
 use crate::weather::WeatherClient;
 
 const DEFAULT_PING_HOSTS: [&str; 3] = ["google.com", "cloudflare.com", "github.com"];
+const FULL_PING_HOSTS: [&str; 10] = [
+    "google.com",
+    "cloudflare.com",
+    "github.com",
+    "1.1.1.1",
+    "8.8.8.8",
+    "dns.google",
+    "fastly.com",
+    "amazon.com",
+    "microsoft.com",
+    "apple.com",
+];
 
 pub struct DashboardSnapshot {
     pub time: String,
@@ -46,7 +59,17 @@ struct SystemInfoView {
 struct DoctorCheck {
     name: String,
     status: String,
+    severity: String,
     detail: String,
+    fix: String,
+}
+
+#[derive(Serialize)]
+struct LatencyCheck {
+    endpoint: String,
+    latency_ms: Option<f64>,
+    status: String,
+    error: Option<String>,
 }
 
 pub struct DashboardWeather {
@@ -69,18 +92,28 @@ pub fn build_dashboard_snapshot(config: &Config) -> DashboardSnapshot {
 }
 
 pub fn run_ping(host: Option<String>) -> Result<(), String> {
-    let hosts: Vec<String> = match host {
-        Some(host) => vec![host],
-        None => DEFAULT_PING_HOSTS
-            .iter()
-            .map(|host| (*host).to_string())
-            .collect(),
-    };
+    let checks = collect_latency_checks(host.as_deref());
+    if crate::output::json_output() {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&checks).unwrap_or_else(|_| "[]".to_string())
+        );
+        return Ok(());
+    }
 
-    for host in hosts {
-        match tcp_ping_latency(&host) {
-            Ok(latency_ms) => println!("{host}: {latency_ms:.1} ms"),
-            Err(err) => println!("{host}: failed ({err})"),
+    for check in checks {
+        match (check.latency_ms, check.error) {
+            (Some(latency_ms), _) => {
+                println!(
+                    "{} {}: {latency_ms:.1} ms",
+                    success_prefix(),
+                    check.endpoint
+                )
+            }
+            (None, Some(err)) => {
+                println!("{} {}: failed ({err})", error_prefix(), check.endpoint)
+            }
+            (None, None) => println!("{} {}: failed", error_prefix(), check.endpoint),
         }
     }
 
@@ -88,7 +121,8 @@ pub fn run_ping(host: Option<String>) -> Result<(), String> {
 }
 
 pub fn show_network_info() -> Result<(), String> {
-    let info = read_cache("network", 30).unwrap_or_else(|| {
+    let config = Config::load_or_create().unwrap_or_default();
+    let info = read_cache("network", config.cache.network_ttl_secs).unwrap_or_else(|| {
         let info = gather_network_info();
         let _ = write_cache("network", &info);
         info
@@ -187,7 +221,7 @@ pub fn time_output(city: Option<String>) -> Result<String, String> {
         "time-{}",
         city.clone().unwrap_or_else(|| "global".to_string())
     );
-    let cached: Option<Vec<(String, String)>> = read_cache(&key, 10);
+    let cached: Option<Vec<(String, String)>> = read_cache(&key, 1);
     let data = if let Some(cached) = cached {
         cached
     } else {
@@ -278,9 +312,38 @@ pub fn run_diagnostic_all() -> Result<(), String> {
     Ok(())
 }
 
+pub fn run_diagnostic_full() -> Result<(), String> {
+    let checks = collect_full_diagnostic_checks();
+    if crate::output::json_output() {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&checks).unwrap_or_else(|_| "[]".to_string())
+        );
+        return Ok(());
+    }
+
+    println!("Running full diagnostic. This may take longer.");
+    for check in checks {
+        let prefix = match check.status.as_str() {
+            "PASS" => success_prefix(),
+            "WARN" => warn_prefix(),
+            _ => error_prefix(),
+        };
+        println!(
+            "{} {} [{}] ({})",
+            prefix, check.name, check.severity, check.detail
+        );
+        if check.fix != "none" {
+            println!("FIX: {}", check.fix);
+        }
+    }
+    Ok(())
+}
+
 pub fn run_config_doctor(config: &Config) -> Result<(), String> {
+    let migration = inspect_migration_status()?;
     let checks = vec![
-        doctor_status("Config file", "PASS", "loaded"),
+        doctor_status("Config file", "PASS", "info", "loaded", "none"),
         doctor_status(
             "Profiles",
             if config.profile.is_empty() {
@@ -289,9 +352,19 @@ pub fn run_config_doctor(config: &Config) -> Result<(), String> {
                 "PASS"
             },
             if config.profile.is_empty() {
+                "warning"
+            } else {
+                "info"
+            },
+            if config.profile.is_empty() {
                 "none configured"
             } else {
                 "ok"
+            },
+            if config.profile.is_empty() {
+                "add profiles under [profile.<name>] if needed"
+            } else {
+                "none"
             },
         ),
         doctor_status(
@@ -302,10 +375,16 @@ pub fn run_config_doctor(config: &Config) -> Result<(), String> {
                 "WARN"
             },
             if plugin_dir_path()?.exists() {
+                "info"
+            } else {
+                "warning"
+            },
+            if plugin_dir_path()?.exists() {
                 "present"
             } else {
                 "missing"
             },
+            "run a plugin install to create it automatically",
         ),
         doctor_status(
             "Registry cache",
@@ -315,10 +394,16 @@ pub fn run_config_doctor(config: &Config) -> Result<(), String> {
                 "WARN"
             },
             if registry_cache_path().exists() {
+                "info"
+            } else {
+                "warning"
+            },
+            if registry_cache_path().exists() {
                 "present"
             } else {
                 "missing"
             },
+            "run `tinfo plugin search` to refresh the registry cache",
         ),
         doctor_status(
             "Weather API",
@@ -328,10 +413,16 @@ pub fn run_config_doctor(config: &Config) -> Result<(), String> {
                 "PASS"
             },
             if config.provider.is_some() && config.api_key.is_none() {
+                "error"
+            } else {
+                "info"
+            },
+            if config.provider.is_some() && config.api_key.is_none() {
                 "provider set without API key"
             } else {
                 "ok"
             },
+            "set an API key with `tinfo config api set openweather <key>` or clear the provider",
         ),
         doctor_status(
             "Network connectivity",
@@ -341,15 +432,42 @@ pub fn run_config_doctor(config: &Config) -> Result<(), String> {
                 "WARN"
             },
             if http_reachable("https://github.com") {
+                "info"
+            } else {
+                "warning"
+            },
+            if http_reachable("https://github.com") {
                 "reachable"
             } else {
                 "offline"
             },
+            "check your network connection or rely on cached data",
         ),
         doctor_status(
             "Plugin integrity",
             "PASS",
+            "info",
             "use `tinfo plugin verify` for details",
+            "run `tinfo plugin verify` or `tinfo plugin doctor`",
+        ),
+        doctor_status(
+            "Migration status",
+            if migration.status == "up-to-date" {
+                "PASS"
+            } else {
+                "WARN"
+            },
+            if migration.status == "up-to-date" {
+                "info"
+            } else {
+                "warning"
+            },
+            &migration.status,
+            if migration.status == "up-to-date" {
+                "none"
+            } else {
+                "restart tinfo to run startup migration automatically"
+            },
         ),
     ];
 
@@ -362,12 +480,21 @@ pub fn run_config_doctor(config: &Config) -> Result<(), String> {
     }
 
     for check in checks {
+        let prefix = match check.status.as_str() {
+            "PASS" => success_prefix(),
+            "WARN" => warn_prefix(),
+            _ => error_prefix(),
+        };
         println!(
-            "{:<18} {} ({})",
+            "{} {:<18} [{}] ({})",
+            prefix,
             format!("{} ........", check.name),
-            check.status,
+            check.severity,
             check.detail
         );
+        if check.fix != "none" {
+            println!("  FIX: {}", check.fix);
+        }
     }
     let _ = verify_plugins();
     Ok(())
@@ -530,7 +657,7 @@ fn cached_dashboard_weather(
         city.to_ascii_lowercase(),
         config.units.label()
     );
-    if let Some(report) = read_cache(&key, 60) {
+    if let Some(report) = read_cache(&key, config.cache.weather_ttl_secs) {
         return Ok(report);
     }
     let report = client.current_weather(city, config)?;
@@ -708,11 +835,48 @@ fn print_status(ok: bool, ok_message: &str, err_message: &str) {
     }
 }
 
-fn doctor_status(name: &str, status: &str, detail: &str) -> DoctorCheck {
+fn doctor_status(name: &str, status: &str, severity: &str, detail: &str, fix: &str) -> DoctorCheck {
     DoctorCheck {
         name: name.to_string(),
         status: status.to_string(),
+        severity: severity.to_string(),
         detail: detail.to_string(),
+        fix: fix.to_string(),
+    }
+}
+
+fn collect_latency_checks(mode: Option<&str>) -> Vec<LatencyCheck> {
+    let targets = latency_targets(mode);
+    targets
+        .into_iter()
+        .map(|endpoint| match tcp_ping_latency(&endpoint) {
+            Ok(latency_ms) => LatencyCheck {
+                endpoint,
+                latency_ms: Some(latency_ms),
+                status: "PASS".to_string(),
+                error: None,
+            },
+            Err(err) => LatencyCheck {
+                endpoint,
+                latency_ms: None,
+                status: "FAIL".to_string(),
+                error: Some(err),
+            },
+        })
+        .collect()
+}
+
+fn latency_targets(mode: Option<&str>) -> Vec<String> {
+    match mode {
+        Some("full") => FULL_PING_HOSTS
+            .iter()
+            .map(|host| (*host).to_string())
+            .collect(),
+        Some(host) => vec![host.to_string()],
+        None => DEFAULT_PING_HOSTS
+            .iter()
+            .map(|host| (*host).to_string())
+            .collect(),
     }
 }
 
@@ -730,24 +894,48 @@ fn collect_diagnostic_checks() -> Vec<DoctorCheck> {
         doctor_status(
             "DNS resolution",
             if dns_ok { "PASS" } else { "FAIL" },
+            if dns_ok { "info" } else { "error" },
             &format!("{dns_ms:.1} ms"),
+            if dns_ok {
+                "none"
+            } else {
+                "check your DNS settings or network connection"
+            },
         ),
         doctor_status(
             "HTTP reachability",
             if http_ok { "PASS" } else { "FAIL" },
+            if http_ok { "info" } else { "error" },
             if http_ok { "reachable" } else { "unreachable" },
+            if http_ok {
+                "none"
+            } else {
+                "verify outbound HTTP access"
+            },
         ),
         doctor_status(
             "TLS certificate",
             if tls_ok { "PASS" } else { "FAIL" },
+            if tls_ok { "info" } else { "error" },
             if tls_ok { "valid" } else { "failed" },
+            if tls_ok {
+                "none"
+            } else {
+                "verify system certificates and outbound HTTPS access"
+            },
         ),
         doctor_status(
             "HTTP latency",
             if latency.is_some() { "PASS" } else { "WARN" },
+            if latency.is_some() { "info" } else { "warning" },
             &latency
                 .map(|ms| format!("{ms:.1} ms"))
                 .unwrap_or_else(|| "unavailable".to_string()),
+            if latency.is_some() {
+                "none"
+            } else {
+                "check network connectivity to cloudflare.com"
+            },
         ),
     ];
 
@@ -760,14 +948,99 @@ fn collect_diagnostic_checks() -> Vec<DoctorCheck> {
     checks.push(doctor_status(
         "Disk health",
         disk_status,
+        if disk_status == "PASS" {
+            "info"
+        } else {
+            "warning"
+        },
         "basic disk check",
+        "inspect disk usage and free space",
     ));
     checks.push(doctor_status(
         "Plugin integrity",
         "PASS",
+        "info",
         "use plugin verify",
+        "run `tinfo plugin verify` for a full plugin integrity check",
     ));
-    checks.push(doctor_status("Config integrity", "PASS", "config parsed"));
+    checks.push(doctor_status(
+        "Config integrity",
+        "PASS",
+        "info",
+        "config parsed",
+        "none",
+    ));
+    checks
+}
+
+fn collect_full_diagnostic_checks() -> Vec<DoctorCheck> {
+    let mut checks = collect_diagnostic_checks();
+    checks.push(doctor_status(
+        "Weather API connectivity",
+        if http_reachable("https://api.open-meteo.com/v1/forecast") {
+            "PASS"
+        } else {
+            "WARN"
+        },
+        if http_reachable("https://api.open-meteo.com/v1/forecast") {
+            "info"
+        } else {
+            "warning"
+        },
+        if http_reachable("https://api.open-meteo.com/v1/forecast") {
+            "reachable"
+        } else {
+            "unreachable"
+        },
+        "check outbound HTTPS access to the weather provider",
+    ));
+    checks.push(doctor_status(
+        "Plugin registry access",
+        if http_reachable(
+            "https://api.github.com/repos/T-1234567890/terminal-info/contents/plugins",
+        ) {
+            "PASS"
+        } else {
+            "WARN"
+        },
+        if http_reachable(
+            "https://api.github.com/repos/T-1234567890/terminal-info/contents/plugins",
+        ) {
+            "info"
+        } else {
+            "warning"
+        },
+        if http_reachable(
+            "https://api.github.com/repos/T-1234567890/terminal-info/contents/plugins",
+        ) {
+            "reachable"
+        } else {
+            "unreachable"
+        },
+        "check GitHub connectivity or rely on the plugin registry cache",
+    ));
+    let registry_cache = registry_cache_path();
+    let cache_detail = if registry_cache.exists() {
+        registry_cache.display().to_string()
+    } else {
+        "registry cache missing".to_string()
+    };
+    checks.push(doctor_status(
+        "Cache integrity",
+        if registry_cache.exists() {
+            "PASS"
+        } else {
+            "WARN"
+        },
+        if registry_cache.exists() {
+            "info"
+        } else {
+            "warning"
+        },
+        &cache_detail,
+        "run `tinfo plugin search` to refresh the cache",
+    ));
+
     checks
 }
 
@@ -783,4 +1056,29 @@ fn registry_cache_path() -> PathBuf {
         .join(".terminal-info")
         .join("cache")
         .join("plugins.json")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quick_latency_targets_use_default_endpoints() {
+        assert_eq!(latency_targets(None).len(), 3);
+        assert!(latency_targets(None).contains(&"google.com".to_string()));
+    }
+
+    #[test]
+    fn full_latency_targets_include_additional_endpoints() {
+        let targets = latency_targets(Some("full"));
+        assert!(targets.len() > 3);
+        assert!(targets.contains(&"1.1.1.1".to_string()));
+        assert!(targets.contains(&"apple.com".to_string()));
+    }
+
+    #[test]
+    fn full_diagnostic_does_not_include_latency_checks() {
+        let checks = collect_full_diagnostic_checks();
+        assert!(!checks.iter().any(|check| check.name.starts_with("Latency ")));
+    }
 }

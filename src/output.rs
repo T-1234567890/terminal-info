@@ -39,3 +39,10 @@ pub fn error_prefix() -> &'static str {
         OutputMode::Color => "✖",
     }
 }
+
+pub fn warn_prefix() -> &'static str {
+    match output_mode() {
+        OutputMode::Plain | OutputMode::Compact => "[WARN]",
+        OutputMode::Color => "▲",
+    }
+}

@@ -84,7 +84,10 @@ Without a city, it shows:
 ## Diagnostic
 
 ```bash
+tinfo latency
+tinfo latency full
 tinfo diagnostic
+tinfo diagnostic full
 tinfo diagnostic network
 tinfo diagnostic system
 tinfo diagnostic plugins
@@ -133,8 +136,37 @@ Profiles are defined in `~/.tinfo/config.toml` under `[profile.<name>]`.
 tinfo completion bash
 tinfo completion zsh
 tinfo completion fish
+tinfo completion powershell
 tinfo completion install
+tinfo completion uninstall
+tinfo completion status
 ```
+
+`completion install` installs completions for the detected shell.
+`completion uninstall` removes the installed completion file for the detected shell.
+`completion status` shows the detected shell, install path, and whether a completion file exists.
+
+## Dashboard
+
+```bash
+tinfo dashboard config
+tinfo dashboard reset
+```
+
+## Profiles
+
+```bash
+tinfo profile list
+tinfo profile show <name>
+tinfo profile use <name>
+tinfo profile add <name>
+tinfo profile remove <name>
+```
+
+`profile add` captures the current effective settings into a named reusable profile.
+`profile use` activates a profile as a runtime overlay without overwriting the base config.
+`profile show` displays the stored profile values.
+`profile remove` deletes the named profile and clears it if it was active.
 
 ## Plugin Management
 
@@ -150,6 +182,9 @@ tinfo plugin untrust <name>
 tinfo plugin trusted
 tinfo plugin info <name>
 tinfo plugin verify
+tinfo plugin doctor
+tinfo plugin lint
+tinfo plugin publish-check
 tinfo plugin update <name>
 tinfo plugin upgrade-all
 tinfo plugin remove <name>
@@ -158,6 +193,9 @@ tinfo plugin remove <name>
 `plugin search` reads the reviewed registry metadata, using the local cache when available.
 `plugin keygen` creates `minisign.key` and `minisign.pub` for plugin release signing.
 `plugin sign` signs a plugin artifact and writes a sibling `.minisig` file.
+`plugin doctor` checks installed plugins for manifest, registry, path, checksum, and binary issues.
+`plugin lint` validates the current plugin project files.
+`plugin publish-check` validates plugin project files and release layout before publishing.
 `plugin install` downloads the plugin's pinned GitHub release asset and installs it into `~/.terminal-info/plugins/`.
 `plugin remove` deletes the installed plugin directory.
 
@@ -181,4 +219,8 @@ tinfo-news tech
 
 ```bash
 tinfo update
+tinfo self-repair
+tinfo reinstall
 ```
+
+`self-repair` and `reinstall` force a fresh download of the latest release instead of skipping when the current version already matches.

@@ -248,6 +248,9 @@ tinfo plugin untrust <name>
 tinfo plugin trusted
 tinfo plugin info <name>
 tinfo plugin verify
+tinfo plugin doctor
+tinfo plugin lint
+tinfo plugin publish-check
 tinfo plugin update <name>
 tinfo plugin upgrade-all
 tinfo plugin list
@@ -275,6 +278,28 @@ See:
 - [docs/plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md)
 - [docs/plugin-registry.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-registry.md)
 - [docs/plugin-security.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-security.md)
+
+Additional stability commands:
+
+```bash
+tinfo config doctor
+tinfo dashboard config
+tinfo dashboard reset
+tinfo completion status
+tinfo completion uninstall
+tinfo self-repair
+tinfo reinstall
+```
+
+Profile commands:
+
+```bash
+tinfo profile list
+tinfo profile show home
+tinfo profile use home
+tinfo profile add home
+tinfo profile remove office
+```
 
 ## Disclaimer
 
