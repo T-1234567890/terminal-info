@@ -18,7 +18,7 @@ Example:
   "description": "<plugin description>",
   "repo": "https://github.com/example/tinfo-<plugin-name>",
   "version": "0.2.1",
-  "pubkey": "RW...",
+  "pubkey": "RWRgzvl/IRChlCdww8KtvuohEfnRA++x8Ro1hql1KOvVAVItAXEsC0jN",
   "checksums": {
     "x86_64-unknown-linux-gnu": "<sha256>",
     "x86_64-pc-windows-msvc": "<sha256>"

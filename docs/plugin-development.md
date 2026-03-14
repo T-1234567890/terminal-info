@@ -102,7 +102,7 @@ Add the public key to the Terminal Info registry entry:
   "repo": "https://github.com/example/tinfo-<plugin-name>",
   "description": "<plugin description>",
   "version": "0.1.0",
-  "pubkey": "RW..."
+  "pubkey": "RWRgzvl/IRChlCdww8KtvuohEfnRA++x8Ro1hql1KOvVAVItAXEsC0jN"
 }
 ```
 
