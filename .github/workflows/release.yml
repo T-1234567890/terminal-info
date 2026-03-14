@@ -90,7 +90,17 @@ jobs:
           $zipUrl = "https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-win64.zip"
           Invoke-WebRequest $zipUrl -OutFile minisign.zip
           Expand-Archive minisign.zip -DestinationPath minisign
-          echo "$PWD\\minisign" >> $env:GITHUB_PATH
+          $minisignExe = Get-ChildItem -Path minisign -Recurse -Filter minisign.exe | Select-Object -First 1
+          if (-not $minisignExe) {
+            throw "minisign.exe was not found after extracting minisign.zip"
+          }
+          $minisignDir = $minisignExe.DirectoryName
+          echo $minisignDir >> $env:GITHUB_PATH
+
+      - name: Verify minisign (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: minisign -v
 
       - name: Package archive (Unix)
         if: runner.os != 'Windows'
