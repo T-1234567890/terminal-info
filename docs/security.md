@@ -18,8 +18,8 @@ Core release assets are published as:
 The GitHub Actions release workflow builds each target on a native runner:
 
 - Linux on `ubuntu-latest`
-- macOS Intel on `macos-15-intel`
-- macOS Apple Silicon on `macos-latest`
+- macOS Intel on `macos-latest`
+- macOS Apple Silicon on `macos-14`
 - Windows on `windows-latest`
 
 The `tinfo update` command downloads the release archive and its `.minisig` file, then verifies the signature using the public key embedded in the Terminal Info binary from `keys/minisign.pub`.
@@ -30,14 +30,18 @@ If the signature does not verify, the update is aborted.
 
 Core releases use the `MINISIGN_SECRET_KEY` GitHub Actions secret.
 
-That secret must contain the raw contents of an unencrypted Minisign secret key file. For CI signing, generate or convert the key so it can be used with `minisign -W` in a non-interactive environment.
+That secret must contain the full raw contents of an unencrypted Minisign secret key file, including the comment line. Generate the key without a password so GitHub Actions does not need interactive input:
+
+```bash
+minisign -G -W
+```
 
 For each release artifact, the workflow:
 
 1. builds the target-specific binary
 2. packages the archive with the exact name `tinfo-<target>.tar.gz` or `tinfo-<target>.zip`
 3. writes the secret key to `minisign.key`
-4. runs `minisign -S -W` to produce `archive.minisig`
+4. runs `minisign -S` to produce `archive.minisig`
 5. uploads both the archive and the signature to the GitHub release
 
 The `.sha256` file is optional extra metadata. Signature verification is the required trust check.
@@ -47,7 +51,7 @@ The `.sha256` file is optional extra metadata. Signature verification is the req
 To rotate the Terminal Info core signing key:
 
 1. generate a new Minisign keypair
-2. convert it to an unencrypted CI key if needed, for example with `minisign -C -W -s minisign.key`
+2. use `minisign -G -W` so the new secret key is not password protected
 3. update the private key stored in the GitHub Actions secret `MINISIGN_SECRET_KEY`
 4. replace the public key in `keys/minisign.pub`
 5. cut a new signed Terminal Info release
