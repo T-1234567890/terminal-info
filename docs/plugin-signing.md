@@ -43,7 +43,7 @@ minisign -S -s minisign.key -m dist/tinfo-<plugin-name>-x86_64-apple-darwin
   "description": "<plugin description>",
   "repo": "https://github.com/example/tinfo-<plugin-name>",
   "version": "0.1.0",
-  "pubkey": "RW...",
+  "pubkey": "RWRgzvl/IRChlCdww8KtvuohEfnRA++x8Ro1hql1KOvVAVItAXEsC0jN",
   "checksums": {
     "x86_64-unknown-linux-gnu": "<sha256>",
     "x86_64-apple-darwin": "<sha256>",
