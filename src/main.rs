@@ -13,6 +13,7 @@ use std::fs::File;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process;
+use std::{env, ffi::OsString};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -39,7 +40,7 @@ use crate::builtins::{
     run_diagnostic_system, run_ping, show_network_info, show_system_info,
 };
 use crate::cache::{read_cache, write_cache};
-use crate::config::{ApiProvider, Config, Units};
+use crate::config::{ApiProvider, Config, Units, config_path};
 use crate::config_menu::show_config_menu;
 use crate::output::{OutputMode, set_json_output, set_output_mode};
 use crate::plugin::{
@@ -194,6 +195,10 @@ enum ConfigCommand {
         #[command(subcommand)]
         command: Option<ServerCommand>,
     },
+    /// Open the TOML config file with the system default app
+    Open,
+    /// Edit the TOML config file in $EDITOR, nano, or vim
+    Edit,
     /// Reset configuration to defaults
     Reset,
     /// Run configuration diagnostics
@@ -614,6 +619,8 @@ fn handle_config(config: &mut Config, command: Option<ConfigCommand>) -> Result<
             }
         },
         Some(ConfigCommand::Server { command }) => handle_server_mode(config, command),
+        Some(ConfigCommand::Open) => handle_config_open(config),
+        Some(ConfigCommand::Edit) => handle_config_edit(config),
         Some(ConfigCommand::Reset) => {
             config.reset();
             config.save()?;
@@ -621,8 +628,113 @@ fn handle_config(config: &mut Config, command: Option<ConfigCommand>) -> Result<
             Ok(())
         }
         Some(ConfigCommand::Doctor) => run_config_doctor(config),
-        None => show_config_menu(config),
+        None => {
+            show_config_menu(config)?;
+            print_advanced_config_hint()?;
+            Ok(())
+        }
     }
+}
+
+pub(crate) fn handle_config_open(config: &Config) -> Result<(), String> {
+    let path = config_path()?;
+    if !path.exists() {
+        config.save()?;
+    }
+
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = process::Command::new("open");
+        command.arg(&path);
+        command
+    };
+
+    #[cfg(target_os = "linux")]
+    let mut command = {
+        let mut command = process::Command::new("xdg-open");
+        command.arg(&path);
+        command
+    };
+
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = process::Command::new("cmd");
+        command.arg("/C").arg("start").arg("").arg(&path);
+        command
+    };
+
+    let status = command
+        .status()
+        .map_err(|err| format!("Failed to open config file '{}': {err}", path.display()))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Open command exited with status {}.",
+            status
+                .code()
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "unknown".to_string())
+        ))
+    }
+}
+
+pub(crate) fn handle_config_edit(config: &Config) -> Result<(), String> {
+    let path = config_path()?;
+    if !path.exists() {
+        config.save()?;
+    }
+    let editor = preferred_editor()
+        .ok_or_else(|| "No editor found. Set $EDITOR or install nano/vim.".to_string())?;
+
+    let status = process::Command::new(&editor)
+        .arg(&path)
+        .status()
+        .map_err(|err| format!("Failed to launch editor '{}': {err}", editor.to_string_lossy()))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Editor '{}' exited with status {}.",
+            editor.to_string_lossy(),
+            status
+                .code()
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "unknown".to_string())
+        ))
+    }
+}
+
+fn preferred_editor() -> Option<OsString> {
+    if let Some(editor) = env::var_os("EDITOR").filter(|value| !value.is_empty()) {
+        return Some(editor);
+    }
+
+    ["nano", "vim"]
+        .into_iter()
+        .find(|candidate| command_in_path(candidate))
+        .map(OsString::from)
+}
+
+fn command_in_path(command: &str) -> bool {
+    let Some(path) = env::var_os("PATH") else {
+        return false;
+    };
+
+    env::split_paths(&path).any(|dir| dir.join(command).exists())
+}
+
+pub(crate) fn print_advanced_config_hint() -> Result<(), String> {
+    let path = config_path()?;
+    println!();
+    println!("Advanced / more configuration");
+    println!("Config file:");
+    println!("{}", path.display());
+    println!("Use `tinfo config open` to open the TOML config file.");
+    println!("Use `tinfo config edit` to open it in $EDITOR, nano, or vim.");
+    Ok(())
 }
 
 fn handle_server_mode(config: &mut Config, command: Option<ServerCommand>) -> Result<(), String> {

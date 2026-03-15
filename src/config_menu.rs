@@ -1,6 +1,7 @@
 use dialoguer::{Confirm, Input, Password, Select, theme::ColorfulTheme};
 
-use crate::config::{ApiProvider, Config, Units};
+use crate::config::{ApiProvider, Config, Units, config_path};
+use crate::{handle_config_edit, handle_config_open};
 use crate::weather::WeatherClient;
 
 pub fn show_config_menu(config: &mut Config) -> Result<(), String> {
@@ -12,6 +13,7 @@ pub fn show_config_menu(config: &mut Config) -> Result<(), String> {
             "Units",
             "API Keys",
             "Server Mode",
+            "Advanced and More Config",
             "Reset Config",
             "Exit",
         ];
@@ -27,12 +29,13 @@ pub fn show_config_menu(config: &mut Config) -> Result<(), String> {
             Some(1) => show_units_menu(config, &theme)?,
             Some(2) => show_api_menu(config, &theme)?,
             Some(3) => show_server_mode_menu(config, &theme)?,
-            Some(4) => {
+            Some(4) => show_advanced_config_menu(config, &theme)?,
+            Some(5) => {
                 config.reset();
                 config.save()?;
                 println!("Configuration reset.");
             }
-            Some(5) | None => break,
+            Some(6) | None => break,
             Some(_) => {}
         }
     }
@@ -217,6 +220,32 @@ fn show_server_mode_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(
                         "disabled"
                     }
                 );
+            }
+            Some(3) | None => break,
+            Some(_) => {}
+        }
+    }
+
+    Ok(())
+}
+
+fn show_advanced_config_menu(config: &Config, theme: &ColorfulTheme) -> Result<(), String> {
+    loop {
+        let items = ["RunEdit", "RunOpen", "Show config path", "Back"];
+        let selection = Select::with_theme(theme)
+            .with_prompt("Advanced and More Config")
+            .items(&items)
+            .default(0)
+            .interact_opt()
+            .map_err(|err| format!("Failed to read advanced config selection: {err}"))?;
+
+        match selection {
+            Some(0) => handle_config_edit(config)?,
+            Some(1) => handle_config_open(config)?,
+            Some(2) => {
+                let path = config_path()?;
+                println!("Config file:");
+                println!("{}", path.display());
             }
             Some(3) | None => break,
             Some(_) => {}

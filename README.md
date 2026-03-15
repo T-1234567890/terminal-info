@@ -69,6 +69,40 @@ tinfo diagnostic
 tinfo latency
 ```
 
+## Example Commands
+
+```bash
+tinfo --compact
+tinfo weather now tokyo
+tinfo weather home
+tinfo weather forecast
+tinfo weather hourly
+tinfo weather alerts
+tinfo diagnostic plugins
+tinfo config doctor
+tinfo config
+tinfo config open
+tinfo config units imperial
+tinfo config edit
+tinfo profile list
+tinfo profile use home
+tinfo config server enable
+tinfo diagnostic network
+tinfo diagnostic performance
+tinfo diagnostic security
+tinfo diagnostic leaks
+tinfo diagnostic full
+tinfo latency full
+tinfo completion install
+tinfo completion zsh
+tinfo plugin search
+tinfo plugin install news
+tinfo plugin trust news
+tinfo plugin info news
+tinfo plugin verify
+tinfo news tech
+```
+
 ## Dashboard
 
 Running `tinfo` with no arguments shows a simple dashboard with:

@@ -128,6 +128,8 @@ tinfo config units imperial
 tinfo config api
 tinfo config api show
 tinfo config api set openweather <key>
+tinfo config open
+tinfo config edit
 tinfo config doctor
 tinfo config reset
 ```

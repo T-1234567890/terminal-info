@@ -134,6 +134,8 @@ Server mode:
 tinfo config server status
 tinfo config server enable
 tinfo config server disable
+tinfo config open
+tinfo config edit
 ```
 
 Server mode is optional. It is intended for servers or VPS environments and is not recommended for regular desktop computers.
@@ -146,11 +148,33 @@ Reset:
 tinfo config reset
 ```
 
+Open with the system default app:
+
+```bash
+tinfo config open
+```
+
+`tinfo config open` opens the TOML config file directly with the operating system default app.
+
+Edit in terminal editor:
+
+```bash
+tinfo config edit
+```
+
+`tinfo config edit` opens the TOML config file using:
+
+1. `$EDITOR`
+2. `nano`
+3. `vim`
+
 Doctor:
 
 ```bash
 tinfo config doctor
 ```
+
+After the interactive `tinfo config` menu exits, Terminal Info also prints a short advanced-configuration hint with the config file path plus `tinfo config open` and `tinfo config edit`.
 
 Dashboard settings:
 
