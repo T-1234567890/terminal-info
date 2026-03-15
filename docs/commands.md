@@ -87,7 +87,9 @@ Without a city, it shows:
 tinfo latency
 tinfo latency full
 tinfo diagnostic
+tinfo diagnostic --markdown-out ./diagnostic.md
 tinfo diagnostic full
+tinfo diagnostic --markdown-out ./diagnostic-full.md full
 tinfo diagnostic network
 tinfo diagnostic performance
 tinfo diagnostic security
@@ -107,6 +109,30 @@ Normal mode keeps `tinfo diagnostic`, `tinfo diagnostic network`, `tinfo diagnos
 Server mode is required for:
 - `tinfo diagnostic security`
 - `tinfo diagnostic leaks`
+
+## Disk
+
+```bash
+tinfo disk
+tinfo disk health
+tinfo disk smart
+tinfo disk temperature
+tinfo disk reliability
+```
+
+`disk` focuses on hardware health and reliability signals such as disk model, type, interface, capacity, SMART status, temperature, media errors, wear level, power-on hours, and health interpretation.
+
+## Storage
+
+```bash
+tinfo storage
+tinfo storage usage
+tinfo storage largest
+tinfo storage analyze
+tinfo storage optimize
+```
+
+`storage` focuses on filesystem usage, filesystem type, used/free space, large directories, large files, and cleanup suggestions such as caches, logs, temporary files, and build artifacts.
 
 ## Server Mode
 

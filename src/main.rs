@@ -3,9 +3,11 @@ mod cache;
 mod config;
 mod config_menu;
 mod dashboard;
+mod disk;
 mod migration;
 mod output;
 mod plugin;
+mod storage;
 mod weather;
 
 use std::fs;
@@ -92,6 +94,16 @@ enum Command {
     },
     /// Show network information
     Network,
+    /// Inspect physical disk health and reliability
+    Disk {
+        #[command(subcommand)]
+        command: Option<DiskCommand>,
+    },
+    /// Analyze filesystem usage and storage optimization opportunities
+    Storage {
+        #[command(subcommand)]
+        command: Option<StorageCommand>,
+    },
     /// Show system information
     System,
     /// Show local or global times
@@ -101,6 +113,9 @@ enum Command {
     },
     /// Run diagnostics
     Diagnostic {
+        /// Export the diagnostic result as Markdown to the given path
+        #[arg(long, value_name = "PATH")]
+        markdown_out: Option<PathBuf>,
         #[command(subcommand)]
         command: Option<DiagnosticCommand>,
     },
@@ -306,6 +321,30 @@ enum DiagnosticCommand {
     Full,
 }
 
+#[derive(Subcommand, Debug)]
+enum DiskCommand {
+    /// Show a quick disk health overview
+    Health,
+    /// Show detailed SMART attributes
+    Smart,
+    /// Show disk temperature and thermal status
+    Temperature,
+    /// Analyze reliability indicators
+    Reliability,
+}
+
+#[derive(Subcommand, Debug)]
+enum StorageCommand {
+    /// Show filesystem usage overview
+    Usage,
+    /// Identify the largest directories or files
+    Largest,
+    /// Analyze storage consumption
+    Analyze,
+    /// Suggest storage cleanup opportunities
+    Optimize,
+}
+
 #[derive(Copy, Clone, Debug, ValueEnum)]
 enum CompletionCommand {
     Bash,
@@ -361,9 +400,14 @@ fn main() {
         Some(Command::Ping { host }) => handle_ping(&config, host),
         Some(Command::Latency { host }) => handle_latency(&config, host),
         Some(Command::Network) => show_network_info(),
+        Some(Command::Disk { command }) => handle_disk(command),
+        Some(Command::Storage { command }) => handle_storage(command),
         Some(Command::System) => show_system_info(),
         Some(Command::Time { city }) => live_time(city, freeze),
-        Some(Command::Diagnostic { command }) => handle_diagnostic(&config, command),
+        Some(Command::Diagnostic {
+            command,
+            markdown_out,
+        }) => handle_diagnostic(&config, command, markdown_out),
         Some(Command::Config { command }) => handle_config(&mut config, command),
         Some(Command::Profile { command }) => handle_profile(&mut config, command),
         Some(Command::Completion { shell }) => {
@@ -400,7 +444,22 @@ fn resolve_output_mode(cli: &Cli) -> OutputMode {
     }
 }
 
-fn handle_diagnostic(config: &Config, command: Option<DiagnosticCommand>) -> Result<(), String> {
+fn handle_diagnostic(
+    config: &Config,
+    command: Option<DiagnosticCommand>,
+    markdown_out: Option<PathBuf>,
+) -> Result<(), String> {
+    if let Some(path) = markdown_out {
+        return match command {
+            None => builtins::write_diagnostic_markdown(&path, config, false),
+            Some(DiagnosticCommand::Full) => builtins::write_diagnostic_markdown(&path, config, true),
+            _ => Err(
+                "Markdown export is only supported for `tinfo diagnostic` and `tinfo diagnostic full`."
+                    .to_string(),
+            ),
+        };
+    }
+
     match command {
         Some(DiagnosticCommand::Network) => run_diagnostic_network(config.server_mode),
         Some(DiagnosticCommand::System) => run_diagnostic_system(config.server_mode),
@@ -425,6 +484,24 @@ fn handle_ping(config: &Config, host: Option<String>) -> Result<(), String> {
         println!("[Server Mode Enabled]");
     }
     run_ping(host, config.server_mode)
+}
+
+fn handle_disk(command: Option<DiskCommand>) -> Result<(), String> {
+    match command {
+        None | Some(DiskCommand::Health) => disk::show_disk_health(),
+        Some(DiskCommand::Smart) => disk::show_disk_smart(),
+        Some(DiskCommand::Temperature) => disk::show_disk_temperature(),
+        Some(DiskCommand::Reliability) => disk::show_disk_reliability(),
+    }
+}
+
+fn handle_storage(command: Option<StorageCommand>) -> Result<(), String> {
+    match command {
+        None | Some(StorageCommand::Usage) => storage::show_storage_usage(),
+        Some(StorageCommand::Largest) => storage::show_storage_largest(),
+        Some(StorageCommand::Analyze) => storage::show_storage_analyze(),
+        Some(StorageCommand::Optimize) => storage::show_storage_optimize(),
+    }
 }
 
 fn handle_latency(config: &Config, host: Option<String>) -> Result<(), String> {

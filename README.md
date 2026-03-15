@@ -12,6 +12,7 @@ A fast Rust-powered terminal information hub and all-in-one developer toolbox.
 
 - Dashboard view when running `tinfo`
 - Weather, time, ping, network, system, and diagnostic commands
+- Separate `disk` and `storage` command groups for hardware health and filesystem usage
 - TOML configuration with profiles in `~/.tinfo/config.toml`
 - Optional server mode for server and VPS diagnostics
 - Dashboard widget ordering in `~/.tinfo/config.toml`

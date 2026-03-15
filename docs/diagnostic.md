@@ -16,7 +16,9 @@ tinfo config server enable
 
 ```bash
 tinfo diagnostic
+tinfo diagnostic --markdown-out ./diagnostic.md
 tinfo diagnostic full
+tinfo diagnostic --markdown-out ./diagnostic-full.md full
 tinfo diagnostic network
 tinfo diagnostic performance
 tinfo diagnostic security
@@ -31,6 +33,7 @@ tinfo diagnostic plugins
 - `tinfo diagnostic network` and `tinfo diagnostic system` run in normal mode and add extra checks automatically when server mode is enabled.
 - `tinfo diagnostic performance` and `tinfo diagnostic full` run in normal mode and become deeper when server mode is enabled.
 - `tinfo diagnostic security` and `tinfo diagnostic leaks` require server mode.
+- Markdown export is available for `tinfo diagnostic` and `tinfo diagnostic full` with `--markdown-out <path>`.
 
 Full mode adds checks such as:
 
@@ -50,6 +53,17 @@ Quick `tinfo diagnostic` checks:
 - DNS resolution
 - HTTP reachability
 - TLS handshake
+- OS version
+- architecture
+- shell detection
+- tinfo version
+- core API reachability
+- proxy detection
+- config file syntax
+- missing required fields
+- invalid values
+- unknown plugins
+- broken plugin paths
 
 Normal `tinfo latency` uses the basic endpoints:
 
@@ -95,9 +109,17 @@ FIX: verify outbound HTTP access
 
 System diagnostics currently check:
 
+- OS version
+- architecture
+- shell
+- tinfo version
 - disk usage
 - memory usage
 - CPU load
+- SMART status
+- disk errors
+- battery health
+- cycle count
 
 Server mode enhances system diagnostics with:
 
@@ -133,6 +155,8 @@ Plugin diagnostics currently check:
 - plugin directory integrity
 - missing plugin binaries
 - plugin version mismatch against index metadata
+- unknown installed plugins that are not present in the reviewed registry
+- broken plugin home, manifest, or binary paths
 
 Example output:
 
@@ -161,7 +185,9 @@ These checks run locally and focus on:
 
 - The command is designed to work on macOS, Linux, and Windows.
 - Some network checks may fail in restricted or offline environments.
+- Some hardware checks such as SMART or battery health are best-effort and may report `unavailable` on unsupported systems or when platform tools are missing.
 - Plugin version mismatch is based on installed plugin names compared to plugin index metadata.
 - `tinfo config doctor` includes migration, cache, plugin directory, and weather configuration status.
 - `--json` returns structured objects for both quick and full diagnostic and latency modes.
+- `--markdown-out <path>` writes a Markdown report for `tinfo diagnostic` and `tinfo diagnostic full`.
 - Human-readable server diagnostics print `[Server Mode Enabled]` so the mode is obvious in CLI output.

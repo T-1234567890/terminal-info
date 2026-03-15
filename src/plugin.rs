@@ -148,6 +148,11 @@ struct PluginDoctorCheck {
     fix: String,
 }
 
+pub struct PluginDiagnosticSummary {
+    pub unknown_plugins: Vec<String>,
+    pub broken_paths: Vec<String>,
+}
+
 pub fn run_plugin(command: &str, args: &[String]) -> Result<(), String> {
     if !is_plugin_trusted(command)? {
         return Err(format!(
@@ -862,7 +867,63 @@ pub fn run_diagnostic_plugins() -> Result<(), String> {
         }
     }
 
+    let summary = plugin_diagnostic_summary()?;
+    if summary.unknown_plugins.is_empty() {
+        println!("{} No unknown plugins", success_prefix());
+    } else {
+        println!(
+            "{} Unknown plugins: {}",
+            error_prefix(),
+            summary.unknown_plugins.join(", ")
+        );
+    }
+    if summary.broken_paths.is_empty() {
+        println!("{} No broken plugin paths", success_prefix());
+    } else {
+        for path in summary.broken_paths {
+            println!("{} Broken plugin path: {}", error_prefix(), path);
+        }
+    }
+
     Ok(())
+}
+
+pub fn plugin_diagnostic_summary() -> Result<PluginDiagnosticSummary, String> {
+    let installed = installed_plugin_names()?;
+    let index = load_plugin_index().unwrap_or_default();
+    let known: HashSet<_> = index.iter().map(|plugin| plugin.name.as_str()).collect();
+
+    let mut unknown_plugins = Vec::new();
+    let mut broken_paths = Vec::new();
+
+    for name in &installed {
+        if !known.contains(name.as_str()) {
+            unknown_plugins.push(name.clone());
+        }
+
+        let home = plugin_home_path(name)?;
+        let binary = home.join(binary_filename(&format!("tinfo-{name}")));
+        let manifest = plugin_manifest_path(name)?;
+
+        if home.exists() {
+            if !binary.exists() {
+                broken_paths.push(binary.display().to_string());
+            }
+            if !manifest.exists() {
+                broken_paths.push(manifest.display().to_string());
+            }
+        } else {
+            let legacy_binary = plugin_dir_path()?.join(binary_filename(&format!("tinfo-{name}")));
+            if !legacy_binary.exists() {
+                broken_paths.push(home.display().to_string());
+            }
+        }
+    }
+
+    Ok(PluginDiagnosticSummary {
+        unknown_plugins,
+        broken_paths,
+    })
 }
 
 fn install_or_update_plugin(plugin: &PluginMetadata, action: &str) -> Result<(), String> {

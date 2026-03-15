@@ -1,7 +1,8 @@
 use std::env;
 use std::fs;
 use std::net::{TcpStream, ToSocketAddrs, UdpSocket};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{Duration, Instant};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -14,7 +15,7 @@ use crate::cache::{read_cache, write_cache};
 use crate::config::{Config, config_path};
 use crate::migration::inspect_migration_status;
 use crate::output::{error_prefix, success_prefix, warn_prefix};
-use crate::plugin::{run_diagnostic_plugins, verify_plugins};
+use crate::plugin::{plugin_diagnostic_summary, run_diagnostic_plugins, verify_plugins};
 use crate::weather::WeatherClient;
 
 const DEFAULT_PING_HOSTS: [&str; 3] = ["google.com", "cloudflare.com", "github.com"];
@@ -57,6 +58,10 @@ const SERVER_API_ENDPOINTS: [(&str, &str); 6] = [
         "Plugin registry",
         "https://api.github.com/repos/T-1234567890/terminal-info/contents/plugins",
     ),
+];
+const NORMAL_API_ENDPOINTS: [(&str, &str); 2] = [
+    ("GitHub API", "https://api.github.com"),
+    ("Weather API", "https://api.open-meteo.com/v1/forecast"),
 ];
 
 pub struct DashboardSnapshot {
@@ -408,6 +413,36 @@ pub fn run_diagnostic_full(config: &Config, server_mode: bool) -> Result<(), Str
     Ok(())
 }
 
+pub fn write_diagnostic_markdown(path: &Path, config: &Config, full: bool) -> Result<(), String> {
+    let checks = if full {
+        collect_full_diagnostic_checks(config, config.server_mode)
+    } else {
+        collect_diagnostic_checks()
+    };
+    let title = if full {
+        "Terminal Info Full Diagnostic"
+    } else {
+        "Terminal Info Diagnostic"
+    };
+    let markdown = render_diagnostic_markdown(title, &checks, full, config.server_mode);
+
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|err| {
+                format!(
+                    "Failed to create diagnostic export directory {}: {err}",
+                    parent.display()
+                )
+            })?;
+        }
+    }
+
+    fs::write(path, markdown)
+        .map_err(|err| format!("Failed to write diagnostic markdown {}: {err}", path.display()))?;
+    println!("Diagnostic markdown written to {}", path.display());
+    Ok(())
+}
+
 pub fn run_config_doctor(config: &Config) -> Result<(), String> {
     let migration = inspect_migration_status()?;
     let checks = vec![
@@ -588,30 +623,78 @@ pub fn run_config_doctor(config: &Config) -> Result<(), String> {
 }
 
 pub fn run_diagnostic_network(server_mode: bool) -> Result<(), String> {
+    let mut checks = Vec::new();
     let dns_ok = ("github.com", 443)
         .to_socket_addrs()
         .map(|mut addrs| addrs.next().is_some())
         .unwrap_or(false);
-    print_status(dns_ok, "DNS OK", "DNS resolution failed");
+    checks.push(doctor_status(
+        "DNS resolution",
+        if dns_ok { "PASS" } else { "FAIL" },
+        if dns_ok { "info" } else { "error" },
+        if dns_ok { "ok" } else { "failed" },
+        if dns_ok {
+            "none"
+        } else {
+            "check your DNS settings or network connection"
+        },
+    ));
 
     let http_ok = http_reachable("http://example.com");
-    print_status(http_ok, "HTTP reachable", "HTTP unreachable");
+    checks.push(doctor_status(
+        "HTTP reachability",
+        if http_ok { "PASS" } else { "FAIL" },
+        if http_ok { "info" } else { "error" },
+        if http_ok { "reachable" } else { "unreachable" },
+        if http_ok {
+            "none"
+        } else {
+            "verify outbound HTTP access"
+        },
+    ));
 
     let tls_ok = http_reachable("https://github.com");
-    print_status(tls_ok, "TLS handshake OK", "TLS handshake failed");
+    checks.push(doctor_status(
+        "TLS handshake",
+        if tls_ok { "PASS" } else { "FAIL" },
+        if tls_ok { "info" } else { "error" },
+        if tls_ok { "ok" } else { "failed" },
+        if tls_ok {
+            "none"
+        } else {
+            "verify system certificates and outbound HTTPS access"
+        },
+    ));
+    checks.push(api_reachability_check());
+    checks.push(proxy_detection_check());
+
     if server_mode {
         for (label, url) in SERVER_API_ENDPOINTS {
-            let ok = http_reachable(url);
-            print_status(
-                ok,
-                &format!("{label} reachable"),
-                &format!("{label} unreachable"),
-            );
+            checks.push(endpoint_doctor_check(
+                label,
+                url,
+                "check outbound HTTPS access, DNS, or firewall rules",
+            ));
         }
         match dns_server() {
-            Ok(server) => println!("{} DNS server {}", success_prefix(), server),
-            Err(_) => println!("{} DNS server unavailable", warn_prefix()),
+            Ok(server) => checks.push(doctor_status(
+                "DNS server",
+                "PASS",
+                "info",
+                &server,
+                "none",
+            )),
+            Err(_) => checks.push(doctor_status(
+                "DNS server",
+                "WARN",
+                "warning",
+                "unavailable",
+                "check local DNS resolver configuration",
+            )),
         }
+    }
+    print_doctor_checks(&checks)?;
+    if server_mode {
         print_server_mode_footer();
     }
 
@@ -641,21 +724,92 @@ pub fn run_diagnostic_system(server_mode: bool) -> Result<(), String> {
         0.0
     };
 
-    print_status(
-        disk_usage_ratio < 0.9,
-        &format!("Disk usage {:.1}%", disk_usage_ratio * 100.0),
-        &format!("Disk usage high {:.1}%", disk_usage_ratio * 100.0),
-    );
-    print_status(
-        memory_ratio < 0.9,
-        &format!("Memory usage {:.1}%", memory_ratio * 100.0),
-        &format!("Memory usage high {:.1}%", memory_ratio * 100.0),
-    );
-    print_status(
-        cpu < 90.0,
-        &format!("CPU load {:.1}%", cpu),
-        &format!("CPU load high {:.1}%", cpu),
-    );
+    let mut checks = vec![
+        doctor_status(
+            "OS version",
+            "PASS",
+            "info",
+            &System::long_os_version().unwrap_or_else(|| "unknown".to_string()),
+            "none",
+        ),
+        doctor_status(
+            "Architecture",
+            "PASS",
+            "info",
+            env::consts::ARCH,
+            "none",
+        ),
+        doctor_status(
+            "Shell",
+            if current_shell().is_empty() { "WARN" } else { "PASS" },
+            if current_shell().is_empty() {
+                "warning"
+            } else {
+                "info"
+            },
+            &if current_shell().is_empty() {
+                "unknown".to_string()
+            } else {
+                current_shell()
+            },
+            if current_shell().is_empty() {
+                "set SHELL or COMSPEC if you rely on shell-specific behavior"
+            } else {
+                "none"
+            },
+        ),
+        doctor_status(
+            "tinfo version",
+            "PASS",
+            "info",
+            env!("CARGO_PKG_VERSION"),
+            "none",
+        ),
+        doctor_status(
+            "Disk usage",
+            if disk_usage_ratio < 0.9 { "PASS" } else { "WARN" },
+            if disk_usage_ratio < 0.9 {
+                "info"
+            } else {
+                "warning"
+            },
+            &format!("{:.1}%", disk_usage_ratio * 100.0),
+            if disk_usage_ratio < 0.9 {
+                "none"
+            } else {
+                "free disk space before usage becomes critical"
+            },
+        ),
+        doctor_status(
+            "Memory usage",
+            if memory_ratio < 0.9 { "PASS" } else { "WARN" },
+            if memory_ratio < 0.9 {
+                "info"
+            } else {
+                "warning"
+            },
+            &format!("{:.1}%", memory_ratio * 100.0),
+            if memory_ratio < 0.9 {
+                "none"
+            } else {
+                "reduce memory pressure or add capacity"
+            },
+        ),
+        doctor_status(
+            "CPU load",
+            if cpu < 90.0 { "PASS" } else { "WARN" },
+            if cpu < 90.0 { "info" } else { "warning" },
+            &format!("{cpu:.1}%"),
+            if cpu < 90.0 {
+                "none"
+            } else {
+                "investigate sustained CPU-heavy processes"
+            },
+        ),
+        smart_status_check(),
+        disk_errors_check(),
+    ];
+    checks.extend(battery_checks());
     if server_mode {
         let uptime = system_uptime_seconds()
             .map(format_uptime)
@@ -665,29 +819,62 @@ pub fn run_diagnostic_system(server_mode: bool) -> Result<(), String> {
         } else {
             0.0
         };
-        print_status(
-            system_uptime_seconds().is_some(),
-            &format!("System uptime {uptime}"),
-            "System uptime unavailable",
-        );
-        print_status(
-            system.total_swap() == 0 || swap_ratio < 0.9,
-            &format!("Swap usage {:.1}%", swap_ratio * 100.0),
-            &format!("Swap usage high {:.1}%", swap_ratio * 100.0),
-        );
+        checks.push(doctor_status(
+            "System uptime",
+            if system_uptime_seconds().is_some() {
+                "PASS"
+            } else {
+                "WARN"
+            },
+            if system_uptime_seconds().is_some() {
+                "info"
+            } else {
+                "warning"
+            },
+            &uptime,
+            if system_uptime_seconds().is_some() {
+                "none"
+            } else {
+                "verify the host exposes uptime information"
+            },
+        ));
+        checks.push(doctor_status(
+            "Swap usage",
+            if system.total_swap() == 0 || swap_ratio < 0.9 {
+                "PASS"
+            } else {
+                "WARN"
+            },
+            if system.total_swap() == 0 || swap_ratio < 0.9 {
+                "info"
+            } else {
+                "warning"
+            },
+            &format!("{:.1}%", swap_ratio * 100.0),
+            if system.total_swap() == 0 || swap_ratio < 0.9 {
+                "none"
+            } else {
+                "high swap usage usually indicates memory pressure"
+            },
+        ));
         let load = System::load_average();
-        println!(
-            "{} Load average {:.2} {:.2} {:.2}",
-            success_prefix(),
-            load.one,
-            load.five,
-            load.fifteen
-        );
-        println!(
-            "{} Process count {}",
-            success_prefix(),
-            system.processes().len()
-        );
+        checks.push(doctor_status(
+            "Load average",
+            "PASS",
+            "info",
+            &format!("{:.2} {:.2} {:.2}", load.one, load.five, load.fifteen),
+            "none",
+        ));
+        checks.push(doctor_status(
+            "Process count",
+            "PASS",
+            "info",
+            &system.processes().len().to_string(),
+            "none",
+        ));
+    }
+    print_doctor_checks(&checks)?;
+    if server_mode {
         print_server_mode_footer();
     }
 
@@ -1110,16 +1297,47 @@ fn http_reachable(url: &str) -> bool {
         .is_some()
 }
 
-fn print_status(ok: bool, ok_message: &str, err_message: &str) {
-    if ok {
-        println!("{} {ok_message}", success_prefix());
-    } else {
-        println!("{} {err_message}", error_prefix());
-    }
-}
-
 fn print_server_mode_footer() {
     println!("[Server Mode Enabled]");
+}
+
+fn render_diagnostic_markdown(
+    title: &str,
+    checks: &[DoctorCheck],
+    full: bool,
+    server_mode: bool,
+) -> String {
+    let mut output = String::new();
+    output.push_str(&format!("# {title}\n\n"));
+    output.push_str(&format!(
+        "- Generated: {}\n",
+        Local::now().format("%Y-%m-%d %H:%M:%S %Z")
+    ));
+    output.push_str(&format!(
+        "- Mode: {}\n",
+        if full { "full" } else { "quick" }
+    ));
+    output.push_str(&format!(
+        "- Server mode: {}\n\n",
+        if server_mode { "enabled" } else { "disabled" }
+    ));
+    output.push_str("| Check | Status | Severity | Detail | Fix |\n");
+    output.push_str("| --- | --- | --- | --- | --- |\n");
+    for check in checks {
+        output.push_str(&format!(
+            "| {} | {} | {} | {} | {} |\n",
+            escape_markdown_table(&check.name),
+            escape_markdown_table(&check.status),
+            escape_markdown_table(&check.severity),
+            escape_markdown_table(&check.detail),
+            escape_markdown_table(&check.fix),
+        ));
+    }
+    output
+}
+
+fn escape_markdown_table(value: &str) -> String {
+    value.replace('|', "\\|").replace('\n', "<br>")
 }
 
 fn print_doctor_checks(checks: &[DoctorCheck]) -> Result<(), String> {
@@ -1240,6 +1458,51 @@ fn collect_diagnostic_checks() -> Vec<DoctorCheck> {
                 "verify system certificates and outbound HTTPS access"
             },
         ),
+        doctor_status(
+            "OS version",
+            "PASS",
+            "info",
+            &System::long_os_version().unwrap_or_else(|| "unknown".to_string()),
+            "none",
+        ),
+        doctor_status(
+            "Architecture",
+            "PASS",
+            "info",
+            env::consts::ARCH,
+            "none",
+        ),
+        doctor_status(
+            "Shell",
+            if current_shell().is_empty() { "WARN" } else { "PASS" },
+            if current_shell().is_empty() {
+                "warning"
+            } else {
+                "info"
+            },
+            &if current_shell().is_empty() {
+                "unknown".to_string()
+            } else {
+                current_shell()
+            },
+            if current_shell().is_empty() {
+                "set SHELL or COMSPEC if you rely on shell-specific behavior"
+            } else {
+                "none"
+            },
+        ),
+        doctor_status(
+            "tinfo version",
+            "PASS",
+            "info",
+            env!("CARGO_PKG_VERSION"),
+            "none",
+        ),
+        api_reachability_check(),
+        proxy_detection_check(),
+        config_syntax_check(),
+        config_required_fields_check(),
+        config_invalid_values_check(),
     ];
 
     let disks = Disks::new_with_refreshed_list();
@@ -1266,6 +1529,8 @@ fn collect_diagnostic_checks() -> Vec<DoctorCheck> {
         "use plugin verify",
         "run `tinfo plugin verify` for a full plugin integrity check",
     ));
+    checks.push(unknown_plugins_check());
+    checks.push(broken_paths_check());
     checks.push(doctor_status(
         "Config integrity",
         "PASS",
@@ -1362,21 +1627,529 @@ fn collect_full_diagnostic_checks(config: &Config, server_mode: bool) -> Vec<Doc
 fn collect_endpoint_doctor_checks(endpoints: &[(&str, &str)], fix: &str) -> Vec<DoctorCheck> {
     endpoints
         .iter()
-        .map(|(label, url)| {
-            let reachable = http_reachable(url);
-            doctor_status(
-                label,
-                if reachable { "PASS" } else { "WARN" },
-                if reachable { "info" } else { "warning" },
-                if reachable {
-                    "reachable"
-                } else {
-                    "unreachable"
-                },
-                if reachable { "none" } else { fix },
-            )
-        })
+        .map(|(label, url)| endpoint_doctor_check(label, url, fix))
         .collect()
+}
+
+fn endpoint_doctor_check(label: &str, url: &str, fix: &str) -> DoctorCheck {
+    let reachable = http_reachable(url);
+    doctor_status(
+        label,
+        if reachable { "PASS" } else { "WARN" },
+        if reachable { "info" } else { "warning" },
+        if reachable {
+            "reachable"
+        } else {
+            "unreachable"
+        },
+        if reachable { "none" } else { fix },
+    )
+}
+
+fn api_reachability_check() -> DoctorCheck {
+    let reachable = NORMAL_API_ENDPOINTS
+        .iter()
+        .filter(|(_, url)| http_reachable(url))
+        .count();
+    let total = NORMAL_API_ENDPOINTS.len();
+    doctor_status(
+        "API reachability",
+        if reachable == total {
+            "PASS"
+        } else if reachable > 0 {
+            "WARN"
+        } else {
+            "FAIL"
+        },
+        if reachable == total {
+            "info"
+        } else if reachable > 0 {
+            "warning"
+        } else {
+            "error"
+        },
+        &format!("{reachable}/{total} core APIs reachable"),
+        if reachable == total {
+            "none"
+        } else {
+            "check outbound HTTPS access or rely on cached data"
+        },
+    )
+}
+
+fn proxy_detection_check() -> DoctorCheck {
+    let proxies = detected_proxies();
+    doctor_status(
+        "Proxy detection",
+        if proxies.is_empty() { "PASS" } else { "WARN" },
+        if proxies.is_empty() {
+            "info"
+        } else {
+            "warning"
+        },
+        if proxies.is_empty() {
+            "no proxy variables detected".to_string()
+        } else {
+            format!("detected {}", proxies.join(", "))
+        }
+        .as_str(),
+        if proxies.is_empty() {
+            "none"
+        } else {
+            "verify proxy settings if requests fail unexpectedly"
+        },
+    )
+}
+
+fn config_syntax_check() -> DoctorCheck {
+    match config_path()
+        .map_err(|err| err.to_string())
+        .and_then(|path| fs::read_to_string(&path).map_err(|err| format!("{err}")))
+    {
+        Ok(contents) => {
+            let status = toml::from_str::<toml::Value>(&contents).is_ok();
+            doctor_status(
+                "Config file syntax",
+                if status { "PASS" } else { "FAIL" },
+                if status { "info" } else { "error" },
+                if status { "valid TOML" } else { "invalid TOML" },
+                if status {
+                    "none"
+                } else {
+                    "fix TOML syntax with `tinfo config edit`"
+                },
+            )
+        }
+        Err(err) => doctor_status(
+            "Config file syntax",
+            "WARN",
+            "warning",
+            &err,
+            "ensure the config file exists and is readable",
+        ),
+    }
+}
+
+fn config_required_fields_check() -> DoctorCheck {
+    match Config::load_or_create() {
+        Ok(config) => {
+            let mut missing = Vec::new();
+            if config.config_version == 0 {
+                missing.push("config_version");
+            }
+            if config.dashboard.widgets.is_empty() {
+                missing.push("dashboard.widgets");
+            }
+            if let Some(active) = &config.active_profile {
+                if !config.profile.contains_key(active) {
+                    missing.push("active_profile target");
+                }
+            }
+            doctor_status(
+                "Missing required fields",
+                if missing.is_empty() { "PASS" } else { "WARN" },
+                if missing.is_empty() {
+                    "info"
+                } else {
+                    "warning"
+                },
+                if missing.is_empty() {
+                    "none missing".to_string()
+                } else {
+                    missing.join(", ")
+                }
+                .as_str(),
+                if missing.is_empty() {
+                    "none"
+                } else {
+                    "restore the missing config fields or run `tinfo config reset`"
+                },
+            )
+        }
+        Err(err) => doctor_status(
+            "Missing required fields",
+            "WARN",
+            "warning",
+            &err,
+            "fix the config file first",
+        ),
+    }
+}
+
+fn config_invalid_values_check() -> DoctorCheck {
+    match Config::load_or_create() {
+        Ok(config) => {
+            let mut invalid = Vec::new();
+            if config.dashboard.refresh_interval == 0 {
+                invalid.push("dashboard.refresh_interval");
+            }
+            if config.cache.weather_ttl_secs == 0 {
+                invalid.push("cache.weather_ttl_secs");
+            }
+            if config.cache.network_ttl_secs == 0 {
+                invalid.push("cache.network_ttl_secs");
+            }
+            if config.cache.time_ttl_secs == 0 {
+                invalid.push("cache.time_ttl_secs");
+            }
+            for (alias, value) in &config.locations {
+                if value.trim().is_empty() {
+                    invalid.push(alias);
+                }
+            }
+            doctor_status(
+                "Invalid values",
+                if invalid.is_empty() { "PASS" } else { "WARN" },
+                if invalid.is_empty() {
+                    "info"
+                } else {
+                    "warning"
+                },
+                if invalid.is_empty() {
+                    "none detected".to_string()
+                } else {
+                    invalid.join(", ")
+                }
+                .as_str(),
+                if invalid.is_empty() {
+                    "none"
+                } else {
+                    "correct the invalid config values with `tinfo config edit`"
+                },
+            )
+        }
+        Err(err) => doctor_status(
+            "Invalid values",
+            "WARN",
+            "warning",
+            &err,
+            "fix the config file first",
+        ),
+    }
+}
+
+fn unknown_plugins_check() -> DoctorCheck {
+    match plugin_diagnostic_summary() {
+        Ok(summary) => doctor_status(
+            "Unknown plugins",
+            if summary.unknown_plugins.is_empty() {
+                "PASS"
+            } else {
+                "WARN"
+            },
+            if summary.unknown_plugins.is_empty() {
+                "info"
+            } else {
+                "warning"
+            },
+            if summary.unknown_plugins.is_empty() {
+                "none".to_string()
+            } else {
+                summary.unknown_plugins.join(", ")
+            }
+            .as_str(),
+            if summary.unknown_plugins.is_empty() {
+                "none"
+            } else {
+                "remove unknown plugins or add them to the reviewed registry"
+            },
+        ),
+        Err(err) => doctor_status(
+            "Unknown plugins",
+            "WARN",
+            "warning",
+            &err,
+            "check the plugin directory and registry cache",
+        ),
+    }
+}
+
+fn broken_paths_check() -> DoctorCheck {
+    match plugin_diagnostic_summary() {
+        Ok(summary) => doctor_status(
+            "Broken paths",
+            if summary.broken_paths.is_empty() {
+                "PASS"
+            } else {
+                "FAIL"
+            },
+            if summary.broken_paths.is_empty() {
+                "info"
+            } else {
+                "error"
+            },
+            if summary.broken_paths.is_empty() {
+                "none".to_string()
+            } else {
+                summary.broken_paths.join(", ")
+            }
+            .as_str(),
+            if summary.broken_paths.is_empty() {
+                "none"
+            } else {
+                "reinstall affected plugins or repair the missing paths"
+            },
+        ),
+        Err(err) => doctor_status(
+            "Broken paths",
+            "WARN",
+            "warning",
+            &err,
+            "check the plugin directory and config paths",
+        ),
+    }
+}
+
+fn current_shell() -> String {
+    env::var("SHELL")
+        .or_else(|_| env::var("COMSPEC"))
+        .unwrap_or_default()
+}
+
+fn detected_proxies() -> Vec<String> {
+    [
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ]
+    .into_iter()
+    .filter(|name| env::var(name).ok().filter(|value| !value.is_empty()).is_some())
+    .map(str::to_string)
+    .collect()
+}
+
+fn smart_status_check() -> DoctorCheck {
+    match smart_info() {
+        Some((status, _errors)) => doctor_status(
+            "SMART status",
+            if status.eq_ignore_ascii_case("verified") || status.eq_ignore_ascii_case("passed") {
+                "PASS"
+            } else {
+                "WARN"
+            },
+            if status.eq_ignore_ascii_case("verified") || status.eq_ignore_ascii_case("passed") {
+                "info"
+            } else {
+                "warning"
+            },
+            &status,
+            if status.eq_ignore_ascii_case("verified") || status.eq_ignore_ascii_case("passed") {
+                "none"
+            } else {
+                "inspect disk health with platform disk tools"
+            },
+        ),
+        None => doctor_status(
+            "SMART status",
+            "WARN",
+            "warning",
+            "unavailable",
+            "install smartmontools or use your platform disk utility",
+        ),
+    }
+}
+
+fn disk_errors_check() -> DoctorCheck {
+    match smart_info() {
+        Some((_status, Some(errors))) => doctor_status(
+            "Disk errors",
+            if errors == 0 { "PASS" } else { "WARN" },
+            if errors == 0 { "info" } else { "warning" },
+            &format!("{errors} reported"),
+            if errors == 0 {
+                "none"
+            } else {
+                "check the disk SMART report and back up important data"
+            },
+        ),
+        Some((_status, None)) => doctor_status(
+            "Disk errors",
+            "WARN",
+            "warning",
+            "not reported by the platform",
+            "use a platform-specific disk utility for a deeper disk scan",
+        ),
+        None => doctor_status(
+            "Disk errors",
+            "WARN",
+            "warning",
+            "unavailable",
+            "install smartmontools or use your platform disk utility",
+        ),
+    }
+}
+
+fn smart_info() -> Option<(String, Option<u64>)> {
+    if cfg!(target_os = "macos") {
+        let output = Command::new("diskutil").args(["info", "/"]).output().ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        let status = text
+            .lines()
+            .find_map(|line| line.split_once("SMART Status:").map(|(_, value)| value.trim()))
+            .map(str::to_string)?;
+        return Some((status, None));
+    }
+
+    if cfg!(target_os = "linux") {
+        let scan = Command::new("smartctl").arg("--scan-open").output().ok()?;
+        if !scan.status.success() {
+            return None;
+        }
+        let device = String::from_utf8_lossy(&scan.stdout)
+            .lines()
+            .next()?
+            .split_whitespace()
+            .next()?
+            .to_string();
+        let health = Command::new("smartctl")
+            .args(["-H", "-A", &device])
+            .output()
+            .ok()?;
+        if !health.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&health.stdout);
+        let status = text
+            .lines()
+            .find_map(|line| {
+                line.split(':')
+                    .next_back()
+                    .filter(|_| line.contains("SMART overall-health"))
+                    .map(str::trim)
+            })
+            .or_else(|| {
+                text.lines().find_map(|line| {
+                    line.split(':')
+                        .next_back()
+                        .filter(|_| line.contains("SMART Health Status"))
+                        .map(str::trim)
+                })
+            })?
+            .to_string();
+        let errors = text.lines().find_map(parse_disk_error_line);
+        return Some((status, errors));
+    }
+
+    None
+}
+
+fn parse_disk_error_line(line: &str) -> Option<u64> {
+    if !(line.contains("Reported_Uncorrect")
+        || line.contains("Media and Data Integrity Errors")
+        || line.contains("Error Information Log Entries"))
+    {
+        return None;
+    }
+    line.split_whitespace().last()?.parse().ok()
+}
+
+fn battery_checks() -> Vec<DoctorCheck> {
+    match battery_info() {
+        Some((health, cycle_count)) => vec![
+            doctor_status(
+                "Battery health",
+                if health.eq_ignore_ascii_case("normal")
+                    || health.eq_ignore_ascii_case("good")
+                    || health.eq_ignore_ascii_case("ok")
+                {
+                    "PASS"
+                } else {
+                    "WARN"
+                },
+                if health.eq_ignore_ascii_case("normal")
+                    || health.eq_ignore_ascii_case("good")
+                    || health.eq_ignore_ascii_case("ok")
+                {
+                    "info"
+                } else {
+                    "warning"
+                },
+                &health,
+                if health.eq_ignore_ascii_case("normal")
+                    || health.eq_ignore_ascii_case("good")
+                    || health.eq_ignore_ascii_case("ok")
+                {
+                    "none"
+                } else {
+                    "check battery service health if this is a laptop"
+                },
+            ),
+            doctor_status(
+                "Cycle count",
+                "PASS",
+                "info",
+                &cycle_count
+                    .map(|count| count.to_string())
+                    .unwrap_or_else(|| "unavailable".to_string()),
+                "none",
+            ),
+        ],
+        None => vec![
+            doctor_status(
+                "Battery health",
+                "WARN",
+                "warning",
+                "unavailable",
+                "battery health is only available on supported laptop hardware",
+            ),
+            doctor_status(
+                "Cycle count",
+                "WARN",
+                "warning",
+                "unavailable",
+                "cycle count is only available on supported laptop hardware",
+            ),
+        ],
+    }
+}
+
+fn battery_info() -> Option<(String, Option<u64>)> {
+    if cfg!(target_os = "macos") {
+        let output = Command::new("system_profiler")
+            .arg("SPPowerDataType")
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        let health = text
+            .lines()
+            .find_map(|line| line.split_once("Condition:").map(|(_, value)| value.trim()))
+            .map(str::to_string)?;
+        let cycle_count = text.lines().find_map(|line| {
+            line.split_once("Cycle Count:")
+                .and_then(|(_, value)| value.trim().parse::<u64>().ok())
+        });
+        return Some((health, cycle_count));
+    }
+
+    if cfg!(target_os = "linux") {
+        let power_supply = fs::read_dir("/sys/class/power_supply").ok()?;
+        for entry in power_supply.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.starts_with("BAT") {
+                continue;
+            }
+            let health = fs::read_to_string(path.join("health"))
+                .ok()
+                .map(|value| value.trim().to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            let cycle_count = fs::read_to_string(path.join("cycle_count"))
+                .ok()
+                .and_then(|value| value.trim().parse::<u64>().ok());
+            return Some((health, cycle_count));
+        }
+    }
+
+    None
 }
 
 fn collect_security_checks(config: &Config) -> Vec<DoctorCheck> {
@@ -1585,5 +2358,21 @@ mod tests {
                 .any(|check| check.name == "DNS server availability")
         );
         assert!(checks.iter().any(|check| check.name == "GitHub API"));
+    }
+
+    #[test]
+    fn diagnostic_markdown_contains_table_and_title() {
+        let checks = vec![doctor_status(
+            "DNS resolution",
+            "PASS",
+            "info",
+            "1.0 ms",
+            "none",
+        )];
+        let rendered =
+            render_diagnostic_markdown("Terminal Info Diagnostic", &checks, false, false);
+        assert!(rendered.contains("# Terminal Info Diagnostic"));
+        assert!(rendered.contains("| Check | Status | Severity | Detail | Fix |"));
+        assert!(rendered.contains("| DNS resolution | PASS | info | 1.0 ms | none |"));
     }
 }
