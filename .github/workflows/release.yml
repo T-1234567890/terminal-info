@@ -53,7 +53,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} --package tinfo --bin tinfo
 
       - name: Install minisign
         if: runner.os != 'Windows'
