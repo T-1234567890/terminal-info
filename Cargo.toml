@@ -28,7 +28,6 @@ exclude = [
 "demos/",
 "docs/",
 "examples/",
-"keys/",
 "plugins/",
 "scripts/",
 "target/"
