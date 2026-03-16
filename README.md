@@ -6,10 +6,75 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20Linux%20Windows-lightgrey)]()
 [![Plugins](https://img.shields.io/badge/plugins-supported-brightgreen)]()
 
-A fast Rust-powered terminal information hub and all-in-one developer toolbox.
+The extensible terminal information CLI. <br>
+A fast Rust-powered toolbox for system information,
+diagnostics, and developer utilities.
+
+## Demo
+
+Running `tinfo`:
+
+```text
+┌──────────────────────────────────┐
+│           Terminal Info          │
+├──────────────────────────────────┤
+│ Location: Shenzhen               │
+│ Weather: Clear sky, 20.3°C       │
+│ Time: 2026-03-16 xx:xx:xx        │
+│ Network: xxx.xxx.x.xx            │
+│ CPU: 19.3%                       │
+│ Memory: 16.2 GiB / 24.0 GiB used │
+└──────────────────────────────────┘
+```
+The dashboard is only the default overview. <br>
+Terminal Info provides many additional commands and plugins
+for diagnostics, networking, system information, and developer tools.
+
+Example commands:
+
+```bash
+tinfo weather now
+tinfo diagnostic network
+tinfo ping
+tinfo plugin search
+```
+
+## Installation
+
+![Latest Release](https://img.shields.io/github/v/release/T-1234567890/terminal-info)
+![Downloads](https://img.shields.io/github/downloads/T-1234567890/terminal-info/total)
+### Install script
+
+You can inspect the install script before running it:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash
+```
+
+Supported release assets include:
+
+- macOS Intel `x86_64`
+- macOS Apple Silicon `arm64`/`aarch64`
+- Linux `x86_64`
+- Windows `x86_64`
+
+### Build from source
+
+```bash
+git clone https://github.com/T-1234567890/terminal-info
+cd terminal-info
+cargo build --release
+```
+
+### Cargo install
+
+```bash
+cargo install tinfo
+```
 
 ## Features
 
+- **A Plugin Platform**
 - Dashboard view when running `tinfo`
 - Weather, time, ping, network, system, and diagnostic commands
 - Separate `disk` and `storage` command groups for hardware health and filesystem usage
@@ -21,6 +86,85 @@ A fast Rust-powered terminal information hub and all-in-one developer toolbox.
 - GitHub-based plugin discovery, install, update, trust, verification, and execution
 - A reusable `tinfo-plugin` SDK crate and plugin developer workflow
 - IP-based location detection with provider fallback and local caching
+
+## Why not other tools?
+
+There are already many great terminal tools.  
+So why use **terminal-info**?
+
+### System info tools
+
+| Tool | Description | Plugin system | Extensible | Ecosystem |
+|-----|-------------|--------------|-----------|-----------|
+| neofetch | Classic system info tool with ASCII logos | ❌ | Limited | ❌ |
+| fastfetch | Modern and faster alternative to neofetch | ❌ | Limited | ❌ |
+| terminal-info | Modular terminal toolbox | ✅ | Yes | Join us |
+
+Tools like **neofetch** or **fastfetch** are excellent for displaying system information in the terminal.  
+However, they are primarily **single-purpose tools** focused on presenting system details.
+
+`terminal-info` takes a different approach:
+
+- It is designed as a **platform**, not just a single command.
+- Features can be added via **plugins**.
+- Users can extend the CLI without modifying the core.
+
+---
+
+### Monitoring tools
+
+| Tool | Description | Plugin ecosystem |
+|-----|-------------|----------------|
+| btop / htop | Terminal system monitoring | ❌ |
+| glances | Multi-metric system monitor | ❌ |
+| terminal-info | Extendable toolbox with custom modules | ✅ |
+
+Monitoring tools focus on **resource usage**, but they are still mostly fixed-feature applications.
+
+`terminal-info` allows modules to be added for things like:
+
+- system diagnostics
+- hardware info
+- network checks
+- custom scripts
+- developer utilities
+
+---
+
+### CLI platforms
+
+Some CLI tools are successful because they provide an **ecosystem**.
+
+Examples include:
+
+| Tool | Purpose | Plugin model |
+|-----|--------|-------------|
+| kubectl | Kubernetes CLI | Plugins |
+| cargo | Rust package manager | Subcommands |
+| brew | Package manager | Taps |
+
+`terminal-info` follows a similar philosophy:
+
+- A **core CLI**
+- A **plugin SDK**
+- A **plugin registry**
+- A growing ecosystem of tools
+
+Instead of being a single-purpose utility, the goal is to become a **general-purpose terminal toolbox**.
+
+---
+
+### Philosophy
+
+terminal-info is built around 5 ideas:
+
+- **Extensibility** – anyone can write plugins
+- **Modularity** – features live outside the core
+- **CLI ecosystem** – tools can grow organically
+- **Information** – useful information and operations
+- **Fast & Light** – fast, light, but powerful enough
+
+The goal is not to replace existing tools, but to **provide a platform where new terminal tools can live together**.
 
 ## Plugin SDK
 
@@ -40,39 +184,6 @@ Start here:
 - [docs/plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md)
 - [docs/sdk.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/sdk.md)
 - [docs/plugin-spec.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-spec.md)
-
-## Installation
-
-![Latest Release](https://img.shields.io/github/v/release/T-1234567890/terminal-info)
-![Downloads](https://img.shields.io/github/downloads/T-1234567890/terminal-info/total)
-### Install script
-
-You can inspect the install script before running it:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash
-```
-
-Supported release assets include:
-
-- macOS Intel (`x86_64`)
-- macOS Apple Silicon (`arm64` / `aarch64`)
-- Linux `x86_64`
-- Windows `x86_64`
-
-### Build from source
-
-```bash
-git clone https://github.com/T-1234567890/terminal-info
-cd terminal-info
-cargo build --release
-```
-
-### Cargo install
-
-```bash
-cargo install tinfo
-```
 
 ## Basic Usage
 
