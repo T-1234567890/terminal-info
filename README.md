@@ -42,6 +42,7 @@ tinfo plugin search
 ## Installation
 
 ![Latest Release](https://img.shields.io/github/v/release/T-1234567890/terminal-info)
+[![crates.io](https://img.shields.io/crates/v/terminal-info.svg)](https://crates.io/crates/terminal-info)
 ![Downloads](https://img.shields.io/github/downloads/T-1234567890/terminal-info/total)
 ### Install script
 
