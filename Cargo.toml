@@ -1,6 +1,6 @@
 [package]
 name = "terminal-info"
-version = "0.10.2"
+version = "0.10.3"
 edition = "2024"
 
 description = "An extensible terminal information CLI and developer toolbox"
@@ -11,7 +11,6 @@ documentation = "https://github.com/T-1234567890/terminal-info/tree/main/docs"
 readme = "README.md"
 categories = ["command-line-utilities"]
 keywords = ["cli", "terminal", "system-info", "toolbox", "plugins"]
-
 
 exclude = [
 ".github/",
@@ -32,6 +31,10 @@ exclude = [
 "scripts/",
 "target/"
 ]
+
+[[bin]]
+name = "tinfo"
+path = "src/main.rs"
 
 [workspace]
 members = ["crates/tinfo-plugin"]
