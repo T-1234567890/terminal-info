@@ -9,12 +9,14 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use dialoguer::{Input, theme::ColorfulTheme};
 use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use minisign_verify::{PublicKey, Signature};
 use reqwest::blocking::Client;
 use reqwest::header::ACCEPT_ENCODING;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tar::Archive;
+use tar::{Archive, Builder};
 use zip::ZipArchive;
 
 use crate::output::{error_prefix, success_prefix};
@@ -45,6 +47,12 @@ pub struct PluginMetadata {
     #[serde(default)]
     pub binary: String,
     pub version: String,
+    #[serde(default)]
+    pub author: String,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+    #[serde(default = "default_plugin_api")]
+    pub plugin_api: u32,
     pub checksums: std::collections::BTreeMap<String, String>,
     pub pubkey: String,
 }
@@ -81,6 +89,8 @@ struct PluginManifest {
     command: CommandSection,
     compatibility: CompatibilitySection,
     #[serde(skip_serializing_if = "Option::is_none")]
+    requirements: Option<RequirementsSection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     install: Option<InstallSection>,
 }
 
@@ -89,6 +99,8 @@ struct PluginSection {
     name: String,
     version: String,
     description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    author: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -99,6 +111,14 @@ struct CommandSection {
 #[derive(Serialize, Deserialize)]
 struct CompatibilitySection {
     terminal_info: String,
+    #[serde(default = "default_plugin_api")]
+    plugin_api: u32,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+struct RequirementsSection {
+    #[serde(default)]
+    capabilities: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -148,6 +168,39 @@ struct PluginDoctorCheck {
     fix: String,
 }
 
+#[derive(Serialize, Deserialize)]
+struct PluginRuntimeMetadata {
+    name: String,
+    version: String,
+    description: String,
+    #[serde(default)]
+    author: Option<String>,
+    #[serde(default)]
+    commands: Vec<String>,
+    compatibility: PluginRuntimeCompatibility,
+    #[serde(default)]
+    capabilities: Vec<String>,
+    api_version: u32,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PluginRuntimeCompatibility {
+    tinfo: String,
+    plugin_api: u32,
+}
+
+#[derive(Serialize)]
+struct PluginInspectView {
+    manifest: Option<toml::Value>,
+    metadata: Option<PluginRuntimeMetadata>,
+    compatibility_ok: bool,
+    binary: Option<String>,
+}
+
+fn default_plugin_api() -> u32 {
+    1
+}
+
 pub struct PluginDiagnosticSummary {
     pub unknown_plugins: Vec<String>,
     pub broken_paths: Vec<String>,
@@ -164,8 +217,12 @@ pub fn run_plugin(command: &str, args: &[String]) -> Result<(), String> {
         format!("Unknown command '{command}'. No plugin named '{binary_name}' found.")
     })?;
 
-    let status = Command::new(&binary_path)
-        .args(args)
+    let mut cmd = Command::new(&binary_path);
+    cmd.args(args);
+    for (key, value) in simulated_host_env() {
+        cmd.env(key, value);
+    }
+    let status = cmd
         .status()
         .map_err(|err| format!("Failed to execute plugin '{}': {err}", binary_name))?;
 
@@ -411,7 +468,204 @@ pub fn plugin_publish_check() -> Result<(), String> {
         },
         fix: "build release artifacts before publishing".to_string(),
     });
+    if let Ok(metadata) = run_local_plugin_metadata(&cwd) {
+        checks.push(PluginDoctorCheck {
+            name: "Metadata protocol".to_string(),
+            status: if metadata.api_version == default_plugin_api() {
+                "PASS"
+            } else {
+                "WARN"
+            }
+            .to_string(),
+            detail: format!("api_version={}", metadata.api_version),
+            fix: "return plugin_api 1 from the --metadata command".to_string(),
+        });
+    }
+    let manifest = read_project_manifest(&cwd).ok();
+    let plugin_name = manifest.as_ref().and_then(plugin_name_from_manifest);
+    let plugin_version = manifest.as_ref().and_then(plugin_version_from_manifest);
+    if let (Some(name), Some(version)) = (plugin_name, plugin_version) {
+        let archive = dist.join(format!("{name}-v{version}.tar.gz"));
+        let signature = dist.join(format!("{name}-v{version}.tar.gz.minisig"));
+        let checksum = dist.join(format!("{name}-v{version}.tar.gz.sha256"));
+        checks.push(project_file_check(
+            &archive.display().to_string(),
+            &archive,
+            "run `tinfo plugin pack` to create the release bundle",
+        ));
+        checks.push(project_file_check(
+            &signature.display().to_string(),
+            &signature,
+            "sign the release bundle with `tinfo plugin sign` or `tinfo plugin pack`",
+        ));
+        checks.push(project_file_check(
+            &checksum.display().to_string(),
+            &checksum,
+            "generate the release checksum with `tinfo plugin pack`",
+        ));
+    }
     render_plugin_checks(&checks)
+}
+
+pub fn plugin_inspect() -> Result<(), String> {
+    let cwd =
+        env::current_dir().map_err(|err| format!("Failed to read current directory: {err}"))?;
+    let manifest_path = cwd.join("plugin.toml");
+    let manifest = if manifest_path.exists() {
+        let contents = fs::read_to_string(&manifest_path)
+            .map_err(|err| format!("Failed to read {}: {err}", manifest_path.display()))?;
+        Some(
+            toml::from_str::<toml::Value>(&contents)
+                .map_err(|err| format!("Failed to parse {}: {err}", manifest_path.display()))?,
+        )
+    } else {
+        None
+    };
+
+    let binary = manifest
+        .as_ref()
+        .and_then(plugin_name_from_manifest)
+        .map(|name| cwd.join("target").join("debug").join(binary_filename(&format!("tinfo-{name}"))))
+        .filter(|path| path.exists());
+    let metadata = if cwd.join("Cargo.toml").exists() {
+        run_local_plugin_metadata(&cwd).ok()
+    } else {
+        None
+    };
+    let compatibility_ok = metadata
+        .as_ref()
+        .map(|meta| meta.api_version == default_plugin_api())
+        .unwrap_or(false);
+    let view = PluginInspectView {
+        manifest,
+        metadata,
+        compatibility_ok,
+        binary: binary.map(|path| path.display().to_string()),
+    };
+
+    if crate::output::json_output() {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&view).unwrap_or_else(|_| "{}".to_string())
+        );
+        return Ok(());
+    }
+
+    println!("Plugin project inspection");
+    println!();
+    println!(
+        "Manifest: {}",
+        if view.manifest.is_some() { "found" } else { "missing" }
+    );
+    println!(
+        "Metadata command: {}",
+        if view.metadata.is_some() { "available" } else { "unavailable" }
+    );
+    println!(
+        "Plugin API compatibility: {}",
+        if view.compatibility_ok { "ok" } else { "needs review" }
+    );
+    if let Some(binary) = view.binary {
+        println!("Debug binary: {binary}");
+    }
+    if let Some(metadata) = view.metadata {
+        println!();
+        println!("Name: {}", metadata.name);
+        println!("Version: {}", metadata.version);
+        println!("Description: {}", metadata.description);
+        println!(
+            "Capabilities: {}",
+            if metadata.capabilities.is_empty() {
+                "none".to_string()
+            } else {
+                metadata.capabilities.join(", ")
+            }
+        );
+    }
+    Ok(())
+}
+
+pub fn plugin_test() -> Result<(), String> {
+    let cwd =
+        env::current_dir().map_err(|err| format!("Failed to read current directory: {err}"))?;
+    let mut checks = plugin_project_checks(&cwd, false)?;
+    let metadata = run_local_plugin_metadata(&cwd)?;
+    checks.push(PluginDoctorCheck {
+        name: "Metadata command".to_string(),
+        status: "PASS".to_string(),
+        detail: format!("{} v{}", metadata.name, metadata.version),
+        fix: "none".to_string(),
+    });
+
+    let preview = run_local_plugin_preview(&cwd)?;
+    checks.push(PluginDoctorCheck {
+        name: "Preview output".to_string(),
+        status: "PASS".to_string(),
+        detail: preview.lines().next().unwrap_or("no output").to_string(),
+        fix: "none".to_string(),
+    });
+    render_plugin_checks(&checks)
+}
+
+pub fn plugin_pack() -> Result<(), String> {
+    let cwd =
+        env::current_dir().map_err(|err| format!("Failed to read current directory: {err}"))?;
+    let manifest = read_project_manifest(&cwd)?;
+    let plugin_name = plugin_name_from_manifest(&manifest)
+        .ok_or_else(|| "plugin.toml is missing [plugin].name".to_string())?;
+    let plugin_version = plugin_version_from_manifest(&manifest)
+        .ok_or_else(|| "plugin.toml is missing [plugin].version".to_string())?;
+    let binary_name = format!("tinfo-{plugin_name}");
+
+    run_command(
+        Command::new("cargo")
+            .arg("build")
+            .arg("--release")
+            .current_dir(&cwd),
+        "Failed to build plugin release binary",
+    )?;
+
+    let release_binary = cwd.join("target").join("release").join(binary_filename(&binary_name));
+    if !release_binary.exists() {
+        return Err(format!(
+            "Expected release binary '{}' was not found.",
+            release_binary.display()
+        ));
+    }
+
+    let dist = cwd.join("dist");
+    fs::create_dir_all(&dist).map_err(|err| format!("Failed to create dist/: {err}"))?;
+    let archive_name = format!("{plugin_name}-v{plugin_version}.tar.gz");
+    let archive_path = dist.join(&archive_name);
+    let tar_file = File::create(&archive_path)
+        .map_err(|err| format!("Failed to create archive {}: {err}", archive_path.display()))?;
+    let encoder = GzEncoder::new(tar_file, Compression::default());
+    let mut archive = Builder::new(encoder);
+    archive
+        .append_path_with_name(&release_binary, binary_filename(&binary_name))
+        .map_err(|err| format!("Failed to append binary to archive: {err}"))?;
+    archive
+        .append_path_with_name(cwd.join("plugin.toml"), "plugin.toml")
+        .map_err(|err| format!("Failed to append plugin.toml to archive: {err}"))?;
+    archive
+        .finish()
+        .map_err(|err| format!("Failed to finish archive: {err}"))?;
+
+    let archive_bytes = fs::read(&archive_path)
+        .map_err(|err| format!("Failed to read {}: {err}", archive_path.display()))?;
+    let checksum = sha256_hex(&archive_bytes);
+    let checksum_path = dist.join(format!("{archive_name}.sha256"));
+    fs::write(&checksum_path, format!("{checksum}  {archive_name}\n"))
+        .map_err(|err| format!("Failed to write checksum file: {err}"))?;
+
+    let key = default_project_signing_key(&cwd)?;
+    plugin_sign(&archive_path, Some(&key))?;
+
+    println!("Created plugin bundle:");
+    println!("  {}", archive_path.display());
+    println!("  {}", checksum_path.display());
+    println!("  {}.minisig", archive_path.display());
+    Ok(())
 }
 
 fn plugin_project_checks(
@@ -442,7 +696,8 @@ fn plugin_project_checks(
     if plugin_manifest.exists() {
         let contents = fs::read_to_string(&plugin_manifest)
             .map_err(|err| format!("Failed to read {}: {err}", plugin_manifest.display()))?;
-        let valid = toml::from_str::<toml::Value>(&contents).is_ok();
+        let parsed = toml::from_str::<toml::Value>(&contents).ok();
+        let valid = parsed.is_some();
         checks.push(PluginDoctorCheck {
             name: "Manifest schema".to_string(),
             status: if valid { "PASS" } else { "FAIL" }.to_string(),
@@ -453,6 +708,28 @@ fn plugin_project_checks(
             },
             fix: "fix plugin.toml syntax and required sections".to_string(),
         });
+        if let Some(value) = parsed {
+            let compatibility_api = value
+                .get("compatibility")
+                .and_then(|section| section.get("plugin_api"))
+                .and_then(|value| value.as_integer())
+                .unwrap_or_default();
+            checks.push(PluginDoctorCheck {
+                name: "Plugin API version".to_string(),
+                status: if compatibility_api == default_plugin_api() as i64 {
+                    "PASS"
+                } else {
+                    "WARN"
+                }
+                .to_string(),
+                detail: if compatibility_api == 0 {
+                    "missing".to_string()
+                } else {
+                    compatibility_api.to_string()
+                },
+                fix: "set [compatibility].plugin_api = 1".to_string(),
+            });
+        }
     }
 
     Ok(checks)
@@ -482,9 +759,144 @@ fn render_plugin_checks(checks: &[PluginDoctorCheck]) -> Result<(), String> {
 
     for check in checks {
         println!("{}: {} ({})", check.status, check.name, check.detail);
-        println!("FIX: {}", check.fix);
+        if check.fix != "none" {
+            println!("FIX: {}", check.fix);
+        }
     }
     Ok(())
+}
+
+fn read_project_manifest(project_dir: &Path) -> Result<toml::Value, String> {
+    let manifest_path = project_dir.join("plugin.toml");
+    let contents = fs::read_to_string(&manifest_path)
+        .map_err(|err| format!("Failed to read {}: {err}", manifest_path.display()))?;
+    toml::from_str(&contents).map_err(|err| format!("Failed to parse {}: {err}", manifest_path.display()))
+}
+
+fn plugin_name_from_manifest(manifest: &toml::Value) -> Option<String> {
+    manifest
+        .get("plugin")
+        .and_then(|section| section.get("name"))
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+}
+
+fn plugin_version_from_manifest(manifest: &toml::Value) -> Option<String> {
+    manifest
+        .get("plugin")
+        .and_then(|section| section.get("version"))
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+}
+
+fn run_local_plugin_metadata(project_dir: &Path) -> Result<PluginRuntimeMetadata, String> {
+    let mut command = Command::new("cargo");
+    command
+        .arg("run")
+        .arg("--quiet")
+        .arg("--")
+        .arg("--metadata")
+        .current_dir(project_dir);
+    for (key, value) in simulated_host_env() {
+        command.env(key, value);
+    }
+    let output = command
+        .output()
+        .map_err(|err| format!("Failed to run local plugin metadata command: {err}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "Local plugin metadata command failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    serde_json::from_slice(&output.stdout)
+        .map_err(|err| format!("Failed to parse plugin metadata JSON: {err}"))
+}
+
+fn run_local_plugin_preview(project_dir: &Path) -> Result<String, String> {
+    let mut command = Command::new("cargo");
+    command.arg("run").arg("--quiet").current_dir(project_dir);
+    for (key, value) in simulated_host_env() {
+        command.env(key, value);
+    }
+    let output = command
+        .output()
+        .map_err(|err| format!("Failed to run local plugin preview: {err}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "Local plugin preview failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn simulated_host_env() -> Vec<(String, String)> {
+    let mut items = vec![
+        ("TINFO_HOST_VERSION".to_string(), env!("CARGO_PKG_VERSION").to_string()),
+        (
+            "TINFO_PLUGIN_DIR".to_string(),
+            plugin_dir_path()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|_| ".terminal-info/plugins".to_string()),
+        ),
+        (
+            "TINFO_PLUGIN_CACHE_DIR".to_string(),
+            plugin_cache_path()
+                .ok()
+                .and_then(|path| path.parent().map(Path::to_path_buf))
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| ".terminal-info/cache".to_string()),
+        ),
+        (
+            "TINFO_CONFIG_PATH".to_string(),
+            env::var("TINFO_CONFIG_DIR")
+                .map(PathBuf::from)
+                .map(|path| path.join("config.toml").display().to_string())
+                .unwrap_or_else(|_| {
+                    env::var("HOME")
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|_| PathBuf::from("."))
+                        .join(".tinfo")
+                        .join("config.toml")
+                        .display()
+                        .to_string()
+                }),
+        ),
+    ];
+    if let Ok(config) = crate::config::Config::load_or_create() {
+        if let Ok(json) = serde_json::to_string(&config) {
+            items.push(("TINFO_PLUGIN_CONFIG_JSON".to_string(), json));
+        }
+    }
+    items
+}
+
+fn run_command(command: &mut Command, context: &str) -> Result<(), String> {
+    let output = command
+        .output()
+        .map_err(|err| format!("{context}: {err}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let detail = if !stderr.is_empty() { stderr } else { stdout };
+        Err(format!("{context}: {detail}"))
+    }
+}
+
+fn default_project_signing_key(project_dir: &Path) -> Result<PathBuf, String> {
+    let candidates = [
+        project_dir.join("minisign.key"),
+        project_dir.join("keys").join("minisign.key"),
+    ];
+    candidates
+        .into_iter()
+        .find(|path| path.exists())
+        .ok_or_else(|| {
+            "No Minisign secret key found. Create one with `tinfo plugin keygen` or place minisign.key in the project root.".to_string()
+        })
 }
 
 #[cfg(test)]
@@ -656,6 +1068,8 @@ pub fn init_plugin_template(name: Option<String>) -> Result<(), String> {
 
     fs::create_dir_all(directory.join("src"))
         .map_err(|err| format!("Failed to create plugin template: {err}"))?;
+    fs::create_dir_all(directory.join("tests"))
+        .map_err(|err| format!("Failed to create plugin test directory: {err}"))?;
 
     fs::write(
         directory.join("plugin.toml"),
@@ -664,13 +1078,21 @@ pub fn init_plugin_template(name: Option<String>) -> Result<(), String> {
     .map_err(|err| format!("Failed to write plugin.toml: {err}"))?;
     fs::write(directory.join("Cargo.toml"), cargo_template(&plugin_name))
         .map_err(|err| format!("Failed to write Cargo.toml: {err}"))?;
-    fs::write(directory.join("src").join("main.rs"), main_template())
+    fs::write(
+        directory.join("src").join("main.rs"),
+        main_template(&plugin_name, &description),
+    )
         .map_err(|err| format!("Failed to write src/main.rs: {err}"))?;
     fs::write(
         directory.join("README.md"),
         readme_template(&plugin_name, &description),
     )
     .map_err(|err| format!("Failed to write README.md: {err}"))?;
+    fs::write(
+        directory.join("tests").join("smoke.rs"),
+        tests_template(&plugin_name),
+    )
+    .map_err(|err| format!("Failed to write tests/smoke.rs: {err}"))?;
     fs::create_dir_all(directory.join(".github").join("workflows"))
         .map_err(|err| format!("Failed to create workflow directory: {err}"))?;
     fs::write(
@@ -1221,6 +1643,13 @@ fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
         ));
     }
 
+    if plugin.plugin_api == 0 {
+        return Err(format!(
+            "Plugin '{}' must declare a non-zero plugin API version.",
+            plugin.name
+        ));
+    }
+
     let checksum = plugin.checksums.get(target_triple()).ok_or_else(|| {
         format!(
             "Plugin '{}' is missing a checksum for '{}'.",
@@ -1234,6 +1663,11 @@ fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
             "Plugin '{}' is missing a minisign public key.",
             plugin.name
         ));
+    }
+
+    for capability in &plugin.capabilities {
+        validate_capability(capability)
+            .map_err(|err| format!("Plugin '{}': {err}", plugin.name))?;
     }
 
     Ok(())
@@ -1262,6 +1696,16 @@ fn validate_plugin_name(name: &str) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn validate_capability(value: &str) -> Result<(), String> {
+    match value {
+        "network" | "config" | "cache" | "filesystem" => Ok(()),
+        _ => Err(format!(
+            "unsupported capability '{}'; expected one of network, config, cache, filesystem.",
+            value
+        )),
+    }
 }
 
 fn parse_github_repo(url: &str) -> Result<(String, String), String> {
@@ -1593,12 +2037,25 @@ fn write_plugin_manifest(
             name: plugin.name.clone(),
             version: version.to_string(),
             description: plugin.description.clone(),
+            author: if plugin.author.trim().is_empty() {
+                None
+            } else {
+                Some(plugin.author.clone())
+            },
         },
         command: CommandSection {
             name: plugin.name.clone(),
         },
         compatibility: CompatibilitySection {
             terminal_info: format!(">={}", env!("CARGO_PKG_VERSION")),
+            plugin_api: plugin.plugin_api,
+        },
+        requirements: if plugin.capabilities.is_empty() {
+            None
+        } else {
+            Some(RequirementsSection {
+                capabilities: plugin.capabilities.clone(),
+            })
         },
         install: Some(InstallSection {
             version: version.to_string(),
@@ -1619,12 +2076,17 @@ fn plugin_manifest_template(name: &str, description: &str) -> String {
 name = "{name}"
 version = "0.1.0"
 description = "{description}"
+author = "Plugin Author"
 
 [command]
 name = "{name}"
 
 [compatibility]
 terminal_info = ">={version}"
+plugin_api = 1
+
+[requirements]
+capabilities = ["config", "cache"]
 "#,
         version = env!("CARGO_PKG_VERSION")
     )
@@ -1642,15 +2104,87 @@ name = "tinfo-{name}"
 path = "src/main.rs"
 
 [dependencies]
-"#
+tinfo-plugin = {{ git = "https://github.com/T-1234567890/terminal-info", package = "tinfo-plugin", tag = "{version}" }}
+serde = {{ version = "1.0", features = ["derive"] }}
+serde_json = "1.0"
+"#,
+        version = env!("CARGO_PKG_VERSION")
     )
 }
 
-fn main_template() -> &'static str {
-    r#"fn main() {
-    println!("Hello from Terminal Info plugin!");
-}
-"#
+fn main_template(name: &str, description: &str) -> String {
+    format!(
+        r#"use serde::Serialize;
+use tinfo_plugin::{{Capability, CommandInput, Plugin, PluginCommand, PluginResult, StatusLevel, Table}};
+
+#[derive(Serialize)]
+struct InspectView {{
+    plugin: &'static str,
+    host_version: String,
+    configured_location: Option<String>,
+}}
+
+fn status(ctx: tinfo_plugin::Context, args: CommandInput) -> PluginResult<()> {{
+    let location = args
+        .option("--city")
+        .map(str::to_string)
+        .or(ctx.config.string("location")?)
+        .unwrap_or_else(|| "auto".to_string());
+    ctx.cache.write_string("last-city", &location)?;
+
+    ctx.output().section("Status");
+    ctx.output().status(StatusLevel::Ok, format!("plugin {name} is ready"));
+    ctx.output().kv("Location", &location);
+    ctx.output().kv("Host", ctx.host.version());
+    ctx.output().table(
+        Table::new(["Field", "Value"])
+            .row(["OS", ctx.system.os()])
+            .row(["Arch", ctx.system.arch()])
+            .row(["Cache", &ctx.cache.plugin_dir().display().to_string()]),
+    );
+    ctx.output().list([
+        "Try `tinfo {name} inspect` for JSON output",
+        "Pass `--city <name>` to override the configured location",
+    ]);
+    Ok(())
+}}
+
+fn inspect(ctx: tinfo_plugin::Context, _args: CommandInput) -> PluginResult<()> {{
+    ctx.output().section("Inspect");
+    ctx.output().progress("collecting plugin state");
+    ctx.output().json(&InspectView {{
+        plugin: "{name}",
+        host_version: ctx.host.version(),
+        configured_location: ctx.config.string("location")?,
+    }})?;
+    Ok(())
+}}
+
+fn main() {{
+    Plugin::new("{name}")
+        .description("{description}")
+        .author("Plugin Author")
+        .compatibility(">={version}")
+        .capability(Capability::Config)
+        .capability(Capability::Cache)
+        .command(
+            PluginCommand::new("status")
+                .description("Show the plugin status using SDK output helpers")
+                .handler(status),
+        )
+        .command(
+            PluginCommand::new("inspect")
+                .description("Print a JSON inspection view")
+                .handler(inspect),
+        )
+        .default_handler(status)
+        .dispatch();
+}}
+"#,
+        name = name,
+        description = description,
+        version = env!("CARGO_PKG_VERSION")
+    )
 }
 
 fn readme_template(name: &str, description: &str) -> String {
@@ -1658,6 +2192,8 @@ fn readme_template(name: &str, description: &str) -> String {
         r#"# tinfo-{name}
 
 {description}
+
+This plugin uses the Terminal Info SDK crate `tinfo-plugin`.
 
 ## Build
 
@@ -1673,11 +2209,61 @@ tinfo {name}
 
 Terminal Info will route `tinfo {name}` to the `tinfo-{name}` executable.
 
+## Inspect Metadata
+
+```bash
+cargo run -- --metadata
+cargo run -- --manifest
+```
+
+## Local Plugin Development
+
+```bash
+tinfo plugin inspect
+tinfo plugin test
+tinfo plugin pack
+```
+
+## Test
+
+```bash
+cargo test
+```
+
 ## Submit To The Plugin Registry
 
 1. Publish a GitHub release for this plugin
 2. Add or update `plugins/{name}.json` in the Terminal Info repository
 3. Open a pull request for registry review
+"#
+    )
+}
+
+fn tests_template(name: &str) -> String {
+    format!(
+        r#"use serde_json::json;
+use tinfo_plugin::{{testing::{{MockHost, TestRunner}}, Capability, CommandInput, Plugin, PluginCommand, PluginResult}};
+
+fn status(ctx: tinfo_plugin::Context, _args: CommandInput) -> PluginResult<()> {{
+    let location = ctx.config.string("location")?.unwrap_or_else(|| "unknown".to_string());
+    ctx.output().kv("Location", location);
+    Ok(())
+}}
+
+#[test]
+fn status_command_reads_typed_config() {{
+    let plugin = Plugin::new("{name}")
+        .capability(Capability::Config)
+        .command(PluginCommand::new("status").handler(status));
+
+    let run = TestRunner::new(plugin)
+        .host(MockHost::default().config_json(json!({{ "location": "tokyo" }})))
+        .args(["status"])
+        .run()
+        .expect("plugin should run");
+
+    assert!(run.stdout.contains("Location: tokyo"));
+}}
 "#
     )
 }
@@ -1761,51 +2347,63 @@ jobs:
           if (-not $env:MINISIGN_SECRET_KEY) {{
             throw "MINISIGN_SECRET_KEY is required for plugin release signing."
           }}
-          choco install minisign -y
+          $zipUrl = "https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-win64.zip"
+          Invoke-WebRequest $zipUrl -OutFile minisign.zip
+          Expand-Archive minisign.zip -DestinationPath minisign
+          $minisignExe = Get-ChildItem -Path minisign -Recurse -Filter minisign.exe | Select-Object -First 1
+          echo $minisignExe.DirectoryName >> $env:GITHUB_PATH
 
       - name: Package asset (Unix)
         if: runner.os != 'Windows'
         run: |
           mkdir -p dist
-          cp target/${{{{ matrix.target }}}}/release/${{{{ matrix.binary_name }}}} dist/${{{{ matrix.binary_name }}}}
-          mv dist/${{{{ matrix.binary_name }}}} dist/tinfo-{name}-${{{{ matrix.target }}}}
-          shasum -a 256 dist/tinfo-{name}-${{{{ matrix.target }}}} > dist/tinfo-{name}-${{{{ matrix.target }}}}.sha256
+          mkdir -p bundle
+          cp target/${{{{ matrix.target }}}}/release/${{{{ matrix.binary_name }}}} bundle/${{{{ matrix.binary_name }}}}
+          cp plugin.toml bundle/plugin.toml
+          tar -czf dist/tinfo-{name}-${{{{ matrix.target }}}}.tar.gz -C bundle .
+          shasum -a 256 dist/tinfo-{name}-${{{{ matrix.target }}}}.tar.gz > dist/tinfo-{name}-${{{{ matrix.target }}}}.tar.gz.sha256
           printf '%s' "$MINISIGN_SECRET_KEY" > minisign.key
           chmod 600 minisign.key
-          minisign -S -W -s minisign.key -m dist/tinfo-{name}-${{{{ matrix.target }}}} -x dist/tinfo-{name}-${{{{ matrix.target }}}}.minisig -t "tinfo-{name}-${{{{ matrix.target }}}}"
+          minisign -S -s minisign.key -m dist/tinfo-{name}-${{{{ matrix.target }}}}.tar.gz -x dist/tinfo-{name}-${{{{ matrix.target }}}}.tar.gz.minisig -t "tinfo-{name}-${{{{ matrix.target }}}}.tar.gz"
 
       - name: Package asset (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item "target/${{{{ matrix.target }}}}/release/${{{{ matrix.binary_name }}}}" "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe"
-          $hash = (Get-FileHash "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe" -Algorithm SHA256).Hash.ToLower()
-          Set-Content -Path "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.sha256" -Value "$hash  tinfo-{name}-${{{{ matrix.target }}}}.exe"
+          New-Item -ItemType Directory -Force -Path bundle | Out-Null
+          Copy-Item "target/${{{{ matrix.target }}}}/release/${{{{ matrix.binary_name }}}}" "bundle/${{{{ matrix.binary_name }}}}"
+          Copy-Item "plugin.toml" "bundle/plugin.toml"
+          Compress-Archive -Path "bundle/*" -DestinationPath "dist/tinfo-{name}-${{{{ matrix.target }}}}.zip" -Force
+          $hash = (Get-FileHash "dist/tinfo-{name}-${{{{ matrix.target }}}}.zip" -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path "dist/tinfo-{name}-${{{{ matrix.target }}}}.zip.sha256" -Value "$hash  tinfo-{name}-${{{{ matrix.target }}}}.zip"
           if ($env:MINISIGN_SECRET_KEY) {{
             $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
             [System.IO.File]::WriteAllText("minisign.key", $env:MINISIGN_SECRET_KEY, $utf8NoBom)
-            minisign -S -W -s minisign.key -m "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe" -x "dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.minisig" -t "tinfo-{name}-${{{{ matrix.target }}}}.exe"
+            minisign -S -s minisign.key -m "dist/tinfo-{name}-${{{{ matrix.target }}}}.zip" -x "dist/tinfo-{name}-${{{{ matrix.target }}}}.zip.minisig" -t "tinfo-{name}-${{{{ matrix.target }}}}.zip"
           }}
 
-      - name: Upload release asset (Unix)
-        if: runner.os != 'Windows'
-        uses: softprops/action-gh-release@v2
+      - name: Upload release artifact bundle
+        uses: actions/upload-artifact@v4
         with:
-          files: |
-            dist/tinfo-{name}-${{{{ matrix.target }}}}
-            dist/tinfo-{name}-${{{{ matrix.target }}}}.sha256
-            dist/tinfo-{name}-${{{{ matrix.target }}}}.minisig
-          generate_release_notes: true
+          name: plugin-${{{{ matrix.target }}}}
+          path: dist/*
 
-      - name: Upload release asset (signed Windows)
-        if: runner.os == 'Windows'
+  release:
+    name: Publish release
+    runs-on: ubuntu-22.04
+    needs: build
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/tinfo-{name}-${{{{ matrix.target }}}}.exe
-            dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.sha256
-            dist/tinfo-{name}-${{{{ matrix.target }}}}.exe.minisig
+          files: dist/**/*
+          allowUpdates: true
           generate_release_notes: true
 "#
     )

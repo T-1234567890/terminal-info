@@ -47,9 +47,9 @@ use crate::config_menu::show_config_menu;
 use crate::output::{OutputMode, set_json_output, set_output_mode};
 use crate::plugin::{
     info_plugin, init_plugin_template, install_plugin, list_plugins, list_trusted_plugins,
-    plugin_doctor, plugin_keygen, plugin_lint, plugin_publish_check, plugin_sign, remove_plugin,
-    run_diagnostic_plugins, run_plugin, search_plugins, set_plugin_trust, update_plugin,
-    upgrade_all_plugins, verify_plugins,
+    plugin_doctor, plugin_inspect, plugin_keygen, plugin_lint, plugin_pack, plugin_publish_check,
+    plugin_sign, plugin_test, remove_plugin, run_diagnostic_plugins, run_plugin, search_plugins,
+    set_plugin_trust, update_plugin, upgrade_all_plugins, verify_plugins,
 };
 use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, WeatherReport};
 
@@ -277,6 +277,12 @@ enum PluginCommand {
         #[arg(long)]
         key: Option<PathBuf>,
     },
+    /// Inspect local plugin metadata and compatibility
+    Inspect,
+    /// Run a local plugin test with host simulation
+    Test,
+    /// Build a signed plugin release bundle
+    Pack,
     /// Install a plugin
     Install { name: String },
     /// Trust a plugin so it can execute
@@ -1099,6 +1105,9 @@ fn handle_plugin(command: PluginCommand) -> Result<(), String> {
         PluginCommand::Init { name } => init_plugin_template(name),
         PluginCommand::Keygen { output_dir } => plugin_keygen(output_dir),
         PluginCommand::Sign { file, key } => plugin_sign(&file, key.as_deref()),
+        PluginCommand::Inspect => plugin_inspect(),
+        PluginCommand::Test => plugin_test(),
+        PluginCommand::Pack => plugin_pack(),
         PluginCommand::Install { name } => install_plugin(&name),
         PluginCommand::Trust { name } => set_plugin_trust(&name, true),
         PluginCommand::Untrust { name } => set_plugin_trust(&name, false),

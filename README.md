@@ -19,7 +19,27 @@ A fast Rust-powered terminal information hub and all-in-one developer toolbox.
 - Shell completions for `bash`, `zsh`, and `fish`
 - Output modes for scripting and interactive use, including `--json`
 - GitHub-based plugin discovery, install, update, trust, verification, and execution
+- A reusable `tinfo-plugin` SDK crate and plugin developer workflow
 - IP-based location detection with provider fallback and local caching
+
+## Plugin SDK
+
+`tinfo-plugin` is the official Rust SDK for building Terminal Info plugins.
+
+It provides:
+
+- typed config access
+- declarative command routing
+- structured output helpers
+- cache, filesystem, and network helpers
+- manifest generation
+- in-process plugin testing
+
+Start here:
+
+- [docs/plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md)
+- [docs/sdk.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/sdk.md)
+- [docs/plugin-spec.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-spec.md)
 
 ## Installation
 
@@ -272,6 +292,9 @@ tinfo plugin search
 tinfo plugin init <name>
 tinfo plugin keygen
 tinfo plugin sign <file>
+tinfo plugin inspect
+tinfo plugin test
+tinfo plugin pack
 tinfo plugin install <name>
 tinfo plugin trust <name>
 tinfo plugin untrust <name>
@@ -297,9 +320,10 @@ Developer quick start:
 ```bash
 tinfo plugin init hello
 cd tinfo-hello
+tinfo plugin inspect
+tinfo plugin test
 tinfo plugin keygen --output-dir ./keys
-cargo build --release
-tinfo plugin sign dist/tinfo-hello-x86_64-apple-darwin --key ./keys/minisign.key
+tinfo plugin pack
 ```
 
 See:
@@ -308,6 +332,12 @@ See:
 - [docs/plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md)
 - [docs/plugin-registry.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-registry.md)
 - [docs/plugin-security.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-security.md)
+
+Official example plugins are included in:
+
+```text
+examples/plugins/
+```
 
 Additional stability commands:
 

@@ -1,162 +1,202 @@
-# Terminal Info Plugin Development
+# Write a Terminal Info Plugin in 5 Minutes
 
-Terminal Info plugins are standalone executables. The plugin SDK model is intentionally small so a developer can build and publish a plugin in minutes.
+Terminal Info plugins are standalone executables, but the recommended developer workflow now uses the `tinfo-plugin` SDK crate and the built-in plugin tooling.
 
-## Quick Start
+Conceptually, the plugin system works a lot like a lightweight `brew tap`. A plugin author ships a separate executable such as `tinfo-weather`, publishes signed release assets on GitHub, and then adds a reviewed registry entry that tells Terminal Info where to find that exact version. When a user runs `tinfo plugin install weather`, Terminal Info looks up the pinned registry metadata, downloads that release asset, verifies its checksum and Minisign signature, installs it under `~/.terminal-info/plugins/weather/`, and then routes `tinfo weather` to that plugin executable. The host and plugin communicate through a small stable contract, but plugin authors are expected to target the Rust SDK instead of dealing with the raw protocol directly.
 
-Generate a new plugin template:
-
-```bash
-tinfo plugin init
-```
-
-Generate plugin signing keys:
+## 1. Scaffold a plugin
 
 ```bash
-tinfo plugin keygen --output-dir ./keys
+tinfo plugin init weather
+cd tinfo-weather
 ```
 
-This creates:
+The generated project includes:
 
 ```text
-tinfo-<plugin-name>/
-├── .github/
-│   └── workflows/
-│       └── release.yml
+tinfo-weather/
+├── .github/workflows/release.yml
 ├── Cargo.toml
 ├── README.md
 ├── plugin.toml
-└── src/
-    └── main.rs
+├── src/main.rs
+└── tests/smoke.rs
 ```
 
-## What the Template Does
+The template already:
 
-The generated plugin:
+- depends on the `tinfo-plugin` SDK crate
+- implements the standard `--metadata` command automatically through the SDK
+- implements the standard `--manifest` command automatically through the SDK
+- declares `plugin_api = 1`
+- includes capabilities in `plugin.toml`
+- shows typed config access
+- shows declarative command routing
+- includes a smoke test using the SDK test harness
+- builds signed cross-platform release bundles
 
-- compiles to `tinfo-<plugin-name>`
-- works with `tinfo <plugin-name>`
-- includes a `plugin.toml` manifest
-- includes a GitHub Actions release workflow
-
-## Local Development
+## 2. Run locally
 
 ```bash
-cd tinfo-<plugin-name>
-cargo run -- --help
-cargo build --release
-./target/release/tinfo-<plugin-name>
+cargo run
 ```
 
-## Release Workflow
+Inspect the plugin API metadata:
 
-The template includes:
-
-```text
-.github/workflows/release.yml
+```bash
+cargo run -- --metadata
+cargo run -- --manifest
 ```
 
-The workflow:
+The generated plugin uses the SDK's declarative command model:
 
-- runs when a release tag like `0.1.0` is pushed
-- builds release binaries
-- targets:
-  - `x86_64-apple-darwin`
-  - `aarch64-apple-darwin`
-  - `x86_64-unknown-linux-gnu`
-  - `x86_64-pc-windows-msvc`
-- uploads release assets to GitHub Releases
-- signs release assets with Minisign when `MINISIGN_SECRET_KEY` is configured in the plugin repository
+- `status`
+- `inspect`
 
-Generated asset names follow this pattern:
+The SDK also handles these flags automatically:
 
-```text
-tinfo-<plugin-name>-x86_64-apple-darwin
-tinfo-<plugin-name>-aarch64-apple-darwin
-tinfo-<plugin-name>-x86_64-unknown-linux-gnu
-tinfo-<plugin-name>-x86_64-pc-windows-msvc.exe
+- `--metadata`
+- `--manifest`
+- `--help`
+
+See [docs/sdk.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/sdk.md) for the full API guide.
+
+## 3. Test with host simulation
+
+From inside the plugin project:
+
+```bash
+cargo test
+tinfo plugin inspect
+tinfo plugin test
 ```
 
-For registry installation, publish matching signature files:
+These commands:
 
-```text
-tinfo-<plugin-name>-x86_64-apple-darwin.minisig
-tinfo-<plugin-name>-x86_64-pc-windows-msvc.exe.minisig
-```
+- run the in-process SDK smoke test
+- validate `plugin.toml`
+- run the local plugin metadata command
+- simulate Terminal Info host environment variables
+- preview the plugin output
 
-## Plugin Signing
+## 4. Build a signed release bundle
 
-Each plugin author signs their own plugin releases.
-
-Generate a Minisign keypair with Terminal Info:
+Generate a plugin signing key once:
 
 ```bash
 tinfo plugin keygen --output-dir ./keys
 ```
 
-This writes:
+Build and pack the plugin:
+
+```bash
+tinfo plugin pack
+```
+
+This creates a bundle such as:
 
 ```text
-./keys/minisign.key
-./keys/minisign.pub
+dist/weather-v0.1.0.tar.gz
+dist/weather-v0.1.0.tar.gz.sha256
+dist/weather-v0.1.0.tar.gz.minisig
 ```
 
-You can also use Minisign directly:
+If you want to sign a file manually:
 
 ```bash
-minisign -G
+tinfo plugin sign dist/weather-v0.1.0.tar.gz --key ./keys/minisign.key
 ```
 
-Sign each published release asset with Terminal Info:
+## 5. Validate before publishing
 
 ```bash
-tinfo plugin sign dist/tinfo-<plugin-name>-x86_64-apple-darwin --key ./keys/minisign.key
+tinfo plugin lint
+tinfo plugin publish-check
 ```
 
-Or use Minisign directly:
+Use these before pushing a release tag.
 
-```bash
-minisign -S -s minisign.key -m dist/tinfo-<plugin-name>-x86_64-apple-darwin
-```
+## 6. Publish
 
-Add the public key to the Terminal Info registry entry:
+1. Push a release tag such as `0.1.0`
+2. Let GitHub Actions build the release assets
+3. Confirm the bundle, checksum, and `.minisig` files exist
+4. Add or update `plugins/<plugin-name>.json` in the Terminal Info registry
+5. Submit a pull request for review
 
-```json
-{
-  "name": "<plugin-name>",
-  "repo": "https://github.com/example/tinfo-<plugin-name>",
-  "description": "<plugin description>",
-  "version": "0.1.0",
-  "pubkey": "RWRgzvl/IRChlCdww8KtvuohEfnRA++x8Ro1hql1KOvVAVItAXEsC0jN"
+## SDK Example
+
+```rust
+use serde::Serialize;
+use tinfo_plugin::{
+    Capability, CommandInput, Plugin, PluginCommand, PluginResult, StatusLevel,
+};
+
+#[derive(Serialize)]
+struct InspectView {
+    host_version: String,
+    location: Option<String>,
+}
+
+fn status(ctx: tinfo_plugin::Context, _args: CommandInput) -> PluginResult<()> {
+    let location = ctx.config.string("location")?.unwrap_or_else(|| "auto".to_string());
+    ctx.output().status(StatusLevel::Ok, format!("location: {location}"));
+    Ok(())
+}
+
+fn inspect(ctx: tinfo_plugin::Context, _args: CommandInput) -> PluginResult<()> {
+    ctx.output().json(&InspectView {
+        host_version: ctx.host.version(),
+        location: ctx.config.string("location")?,
+    })?;
+    Ok(())
+}
+
+fn main() {
+    Plugin::new("weather")
+        .description("Weather information plugin")
+        .author("Plugin Author")
+        .capability(Capability::Config)
+        .command(
+            PluginCommand::new("status")
+                .description("Show plugin status")
+                .handler(status),
+        )
+        .command(
+            PluginCommand::new("inspect")
+                .description("Emit machine-readable state")
+                .handler(inspect),
+        )
+        .default_handler(status)
+        .dispatch();
 }
 ```
 
-## Manifest
+## SDK Surface
 
-Every plugin includes:
+The current SDK provides:
 
-```toml
-[plugin]
-name = "<plugin-name>"
-version = "0.1.0"
-description = "<plugin description>"
+- `Plugin` for metadata, routing, and dispatch
+- `PluginCommand` and `CommandInput` for command handling
+- typed config access through `ctx.config`
+- structured output through `ctx.output()`
+- logging through `ctx.log()`
+- cache, filesystem, and network helpers through `ctx.cache`, `ctx.fs`, and `ctx.network`
+- `PluginManifest` and compatibility types for manifest generation
+- `testing::TestRunner` and `testing::MockHost` for plugin tests
 
-[command]
-name = "<plugin-name>"
+## Official examples
 
-[compatibility]
-terminal_info = ">=0.2.3"
+See the official example plugins in:
+
+```text
+examples/plugins/
 ```
 
-## Publishing to the Registry
+Included examples:
 
-The recommended flow is:
-
-1. Create a plugin repository such as `tinfo-<plugin-name>`
-2. Push a version tag such as `0.1.0`
-3. Let GitHub Actions publish the binaries
-4. Sign the release assets with the plugin's own Minisign key
-5. Add release checksums and the plugin public key to `plugins/<plugin-name>.json`
-6. Submit or update `plugins/<plugin-name>.json` in the Terminal Info repository
-
-See [plugin-registry.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-registry.md) and [plugin-spec.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-spec.md).
+- `weather`
+- `git-summary`
+- `docker-status`
+- `network-diagnostics`
+- `system-resource`

@@ -1,0 +1,15 @@
+[plugin]
+name = "docker-status"
+version = "0.1.0"
+description = "Official example docker status plugin"
+author = "Terminal Info"
+
+[command]
+name = "docker-status"
+
+[compatibility]
+terminal_info = ">=0.9.0"
+plugin_api = 1
+
+[requirements]
+capabilities = ["filesystem"]

@@ -221,6 +221,9 @@ tinfo plugin search
 tinfo plugin init <name>
 tinfo plugin keygen [--output-dir <dir>]
 tinfo plugin sign <file> [--key <path>]
+tinfo plugin inspect
+tinfo plugin test
+tinfo plugin pack
 tinfo plugin install <name>
 tinfo plugin trust <name>
 tinfo plugin untrust <name>
@@ -238,6 +241,9 @@ tinfo plugin remove <name>
 `plugin search` reads the reviewed registry metadata, using the local cache when available.
 `plugin keygen` creates `minisign.key` and `minisign.pub` for plugin release signing.
 `plugin sign` signs a plugin artifact and writes a sibling `.minisig` file.
+`plugin inspect` shows local plugin metadata and compatibility information for the current project.
+`plugin test` validates the current plugin project, runs `--metadata`, and previews local plugin output with simulated host values.
+`plugin pack` builds a release binary, bundles it with `plugin.toml`, writes a checksum, and signs the bundle.
 `plugin doctor` checks installed plugins for manifest, registry, path, checksum, and binary issues.
 `plugin lint` validates the current plugin project files.
 `plugin publish-check` validates plugin project files and release layout before publishing.
