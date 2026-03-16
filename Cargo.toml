@@ -1,7 +1,38 @@
 [package]
-name = "tinfo"
+name = "terminal-info"
 version = "0.10.0"
 edition = "2024"
+
+description = "An extensible terminal information CLI and developer toolbox"
+license = "Apache-2.0"
+repository = "https://github.com/T-1234567890/terminal-info"
+homepage = "https://github.com/T-1234567890/terminal-info"
+documentation = "https://github.com/T-1234567890/terminal-info/tree/main/docs"
+readme = "README.md"
+categories = ["command-line-utilities"]
+keywords = ["cli", "terminal", "system-info", "toolbox", "plugins"]
+
+
+exclude = [
+".github/",
+".tcache/",
+".tconf/",
+".tdash/",
+".tdiagplugins/",
+".tmenu/",
+".tmphome/",
+".tmphome2/",
+".tmptest-empty/",
+".tmptest-live/",
+".tplugins/",
+"demos/",
+"docs/",
+"examples/",
+"keys/",
+"plugins/",
+"scripts/",
+"target/"
+]
 
 [workspace]
 members = ["crates/tinfo-plugin"]
