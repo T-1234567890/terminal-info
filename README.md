@@ -69,7 +69,7 @@ cargo build --release
 ### Cargo install
 
 ```bash
-cargo install tinfo
+cargo install terminal-info
 ```
 
 ## Features
