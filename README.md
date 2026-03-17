@@ -42,9 +42,10 @@ tinfo plugin search
 ## Installation
 
 ![Latest Release](https://img.shields.io/github/v/release/T-1234567890/terminal-info)
-[![crates.io](https://img.shields.io/crates/v/terminal-info.svg)](https://crates.io/crates/terminal-info)
-![Downloads](https://img.shields.io/github/downloads/T-1234567890/terminal-info/total)
-### Install script
+![github downloads](https://img.shields.io/github/downloads/T-1234567890/terminal-info/total?label=github%20downloads)
+[![cargo installs](https://img.shields.io/crates/d/terminal-info.svg?label=cargo%20installs)](https://crates.io/crates/terminal-info)
+### Install script 
+`Recommended`
 
 You can inspect the install script before running it:
 
@@ -60,6 +61,7 @@ Supported release assets include:
 - Windows `x86_64`
 
 ### Build from source
+`Contributors and plugin developers`
 
 ```bash
 git clone https://github.com/T-1234567890/terminal-info
@@ -68,6 +70,7 @@ cargo build --release
 ```
 
 ### Cargo install
+`Rust users`
 
 ```bash
 cargo install terminal-info
