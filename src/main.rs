@@ -4,10 +4,15 @@ mod config;
 mod config_menu;
 mod dashboard;
 mod disk;
+mod hardware;
 mod migration;
 mod output;
 mod plugin;
+mod process_inspect;
+mod search;
+mod speedtest;
 mod storage;
+mod theme;
 mod weather;
 
 use std::fs;
@@ -42,15 +47,17 @@ use crate::builtins::{
     run_diagnostic_system, run_ping, show_network_info, show_system_info,
 };
 use crate::cache::{read_cache, write_cache};
-use crate::config::{ApiProvider, Config, Units, config_path};
+use crate::config::{ApiProvider, Config, DefaultOutput, Units, config_path};
 use crate::config_menu::show_config_menu;
 use crate::output::{OutputMode, set_json_output, set_output_mode};
 use crate::plugin::{
     info_plugin, init_plugin_template, install_plugin, list_plugins, list_trusted_plugins,
+    plugin_browse,
     plugin_doctor, plugin_inspect, plugin_keygen, plugin_lint, plugin_pack, plugin_publish_check,
     plugin_sign, plugin_test, remove_plugin, run_diagnostic_plugins, run_plugin, search_plugins,
     set_plugin_trust, update_plugin, upgrade_all_plugins, verify_plugins,
 };
+use crate::theme::{AccentColor, BorderStyle, format_box_table, set_theme};
 use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, WeatherReport};
 
 #[derive(Parser, Debug)]
@@ -93,7 +100,10 @@ enum Command {
         host: Option<String>,
     },
     /// Show network information
-    Network,
+    Network {
+        #[command(subcommand)]
+        command: Option<NetworkCommand>,
+    },
     /// Inspect physical disk health and reliability
     Disk {
         #[command(subcommand)]
@@ -105,11 +115,30 @@ enum Command {
         command: Option<StorageCommand>,
     },
     /// Show system information
-    System,
+    System {
+        #[command(subcommand)]
+        command: Option<SystemCommand>,
+    },
+    /// Inspect running processes
+    #[command(visible_alias = "top")]
+    Ps {
+        /// Maximum number of processes to display
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+        /// Sort process list by cpu or memory
+        #[arg(long, value_enum, default_value_t = ProcessSortArg::Cpu)]
+        sort: ProcessSortArg,
+    },
     /// Show local or global times
     Time {
         /// Optional city name
         city: Option<String>,
+    },
+    /// Search built-ins and plugins
+    Search {
+        /// Search term
+        #[arg(required = true)]
+        query: Vec<String>,
     },
     /// Run diagnostics
     Diagnostic {
@@ -193,6 +222,8 @@ enum WeatherCommand {
 
 #[derive(Subcommand, Debug)]
 enum ConfigCommand {
+    /// Run the guided first-run setup again
+    Setup,
     /// Show or set the default location
     Location {
         /// City name to store
@@ -200,6 +231,13 @@ enum ConfigCommand {
     },
     /// Show or set units
     Units { units: Option<UnitArg> },
+    /// Show or set the default output mode
+    Output { mode: Option<OutputArg> },
+    /// Show or change theme preferences
+    Theme {
+        #[command(subcommand)]
+        command: Option<ThemeCommand>,
+    },
     /// Show or set API provider configuration
     Api {
         #[command(subcommand)]
@@ -257,7 +295,16 @@ enum PluginCommand {
     /// List installed plugins
     List,
     /// Search for plugins
-    Search,
+    Search {
+        /// Optional search term
+        query: Vec<String>,
+    },
+    /// Browse plugins in a local browser UI
+    Browse {
+        /// Do not try to open the browser automatically
+        #[arg(long)]
+        no_open: bool,
+    },
     /// Interactively scaffold a new plugin template
     Init {
         /// Optional plugin name used as the default prompt value
@@ -281,8 +328,12 @@ enum PluginCommand {
     Inspect,
     /// Run a local plugin test with host simulation
     Test,
-    /// Build a signed plugin release bundle
-    Pack,
+    /// Build a signed plugin release bundle and registry JSON
+    Pack {
+        /// Generate registry JSON from existing dist artifacts instead of building locally
+        #[arg(long)]
+        from_dist: bool,
+    },
     /// Install a plugin
     Install { name: String },
     /// Trust a plugin so it can execute
@@ -351,6 +402,18 @@ enum StorageCommand {
     Optimize,
 }
 
+#[derive(Subcommand, Debug)]
+enum NetworkCommand {
+    /// Measure network download speed
+    Speed,
+}
+
+#[derive(Subcommand, Debug)]
+enum SystemCommand {
+    /// Show detailed hardware inventory
+    Hardware,
+}
+
 #[derive(Copy, Clone, Debug, ValueEnum)]
 enum CompletionCommand {
     Bash,
@@ -381,10 +444,88 @@ enum UnitArg {
     Imperial,
 }
 
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum OutputArg {
+    Plain,
+    Compact,
+    Color,
+}
+
+#[derive(Subcommand, Debug)]
+enum ThemeCommand {
+    /// Show the active theme settings
+    Show,
+    /// Show or set the border style
+    Border { style: Option<BorderStyleArg> },
+    /// Show or set the accent color
+    Accent { color: Option<AccentColorArg> },
+    /// Enable or disable Unicode box drawing
+    Unicode { enabled: Option<ToggleArg> },
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum BorderStyleArg {
+    Sharp,
+    Rounded,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum AccentColorArg {
+    Auto,
+    Blue,
+    Cyan,
+    Green,
+    Magenta,
+    Red,
+    Yellow,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum ToggleArg {
+    On,
+    Off,
+}
+
+impl From<BorderStyleArg> for BorderStyle {
+    fn from(value: BorderStyleArg) -> Self {
+        match value {
+            BorderStyleArg::Sharp => BorderStyle::Sharp,
+            BorderStyleArg::Rounded => BorderStyle::Rounded,
+        }
+    }
+}
+
+impl From<AccentColorArg> for AccentColor {
+    fn from(value: AccentColorArg) -> Self {
+        match value {
+            AccentColorArg::Auto => AccentColor::Auto,
+            AccentColorArg::Blue => AccentColor::Blue,
+            AccentColorArg::Cyan => AccentColor::Cyan,
+            AccentColorArg::Green => AccentColor::Green,
+            AccentColorArg::Magenta => AccentColor::Magenta,
+            AccentColorArg::Red => AccentColor::Red,
+            AccentColorArg::Yellow => AccentColor::Yellow,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum ProcessSortArg {
+    Cpu,
+    Memory,
+}
+
+impl From<ProcessSortArg> for process_inspect::ProcessSort {
+    fn from(value: ProcessSortArg) -> Self {
+        match value {
+            ProcessSortArg::Cpu => process_inspect::ProcessSort::Cpu,
+            ProcessSortArg::Memory => process_inspect::ProcessSort::Memory,
+        }
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
-    set_output_mode(resolve_output_mode(&cli));
-    set_json_output(cli.json);
     let freeze = should_freeze(&cli);
     let _migration_status = match migration::run_startup_migration() {
         Ok(status) => status,
@@ -401,15 +542,30 @@ fn main() {
         }
     };
 
+    if should_run_first_run_setup(&cli, &config) {
+        if let Err(err) = config_menu::run_first_run_setup(&mut config) {
+            eprintln!("{err}");
+            process::exit(1);
+        }
+    }
+
+    set_output_mode(resolve_output_mode(&cli, &config));
+    set_theme(config.theme);
+    set_json_output(cli.json);
+
     let result = match cli.command {
         Some(Command::Weather { command }) => handle_weather(&mut config, command, freeze),
         Some(Command::Ping { host }) => handle_ping(&config, host),
         Some(Command::Latency { host }) => handle_latency(&config, host),
-        Some(Command::Network) => show_network_info(),
+        Some(Command::Network { command }) => handle_network(command),
         Some(Command::Disk { command }) => handle_disk(command),
         Some(Command::Storage { command }) => handle_storage(command),
-        Some(Command::System) => show_system_info(),
+        Some(Command::System { command }) => handle_system(command),
+        Some(Command::Ps { limit, sort }) => {
+            process_inspect::show_processes(limit, sort.into())
+        }
         Some(Command::Time { city }) => live_time(city, freeze),
+        Some(Command::Search { query }) => search::run_search(&query),
         Some(Command::Diagnostic {
             command,
             markdown_out,
@@ -440,13 +596,24 @@ fn should_freeze(cli: &Cli) -> bool {
     cli.freeze || cli.json || !io::stdout().is_terminal()
 }
 
-fn resolve_output_mode(cli: &Cli) -> OutputMode {
+fn should_run_first_run_setup(cli: &Cli, config: &Config) -> bool {
+    if config.setup_complete || cli.json || !io::stdin().is_terminal() || !io::stdout().is_terminal()
+    {
+        return false;
+    }
+
+    matches!(cli.command, None | Some(Command::Config { command: None }))
+}
+
+fn resolve_output_mode(cli: &Cli, config: &Config) -> OutputMode {
     if cli.plain {
         OutputMode::Plain
     } else if cli.compact {
         OutputMode::Compact
-    } else {
+    } else if cli.color {
         OutputMode::Color
+    } else {
+        config.default_output.as_output_mode()
     }
 }
 
@@ -498,6 +665,20 @@ fn handle_disk(command: Option<DiskCommand>) -> Result<(), String> {
         Some(DiskCommand::Smart) => disk::show_disk_smart(),
         Some(DiskCommand::Temperature) => disk::show_disk_temperature(),
         Some(DiskCommand::Reliability) => disk::show_disk_reliability(),
+    }
+}
+
+fn handle_network(command: Option<NetworkCommand>) -> Result<(), String> {
+    match command {
+        None => show_network_info(),
+        Some(NetworkCommand::Speed) => speedtest::show_network_speed(),
+    }
+}
+
+fn handle_system(command: Option<SystemCommand>) -> Result<(), String> {
+    match command {
+        None => show_system_info(),
+        Some(SystemCommand::Hardware) => hardware::show_system_hardware(),
     }
 }
 
@@ -667,6 +848,7 @@ impl Drop for LiveTerminalGuard {
 
 fn handle_config(config: &mut Config, command: Option<ConfigCommand>) -> Result<(), String> {
     match command {
+        Some(ConfigCommand::Setup) => config_menu::run_first_run_setup(config),
         Some(ConfigCommand::Location { city }) => handle_location(config, city),
         Some(ConfigCommand::Units { units }) => match units {
             Some(UnitArg::Metric) => {
@@ -686,6 +868,31 @@ fn handle_config(config: &mut Config, command: Option<ConfigCommand>) -> Result<
                 Ok(())
             }
         },
+        Some(ConfigCommand::Output { mode }) => match mode {
+            Some(OutputArg::Plain) => {
+                config.default_output = DefaultOutput::Plain;
+                config.save()?;
+                println!("Default output set to plain.");
+                Ok(())
+            }
+            Some(OutputArg::Compact) => {
+                config.default_output = DefaultOutput::Compact;
+                config.save()?;
+                println!("Default output set to compact.");
+                Ok(())
+            }
+            Some(OutputArg::Color) => {
+                config.default_output = DefaultOutput::Color;
+                config.save()?;
+                println!("Default output set to color.");
+                Ok(())
+            }
+            None => {
+                println!("Default output: {}", config.default_output.label());
+                Ok(())
+            }
+        },
+        Some(ConfigCommand::Theme { command }) => handle_theme_config(config, command),
         Some(ConfigCommand::Api { command }) => match command {
             Some(ApiCommand::Set { provider, key }) => {
                 config.provider = Some(match provider {
@@ -716,6 +923,77 @@ fn handle_config(config: &mut Config, command: Option<ConfigCommand>) -> Result<
             print_advanced_config_hint()?;
             Ok(())
         }
+    }
+}
+
+fn handle_theme_config(config: &mut Config, command: Option<ThemeCommand>) -> Result<(), String> {
+    match command.unwrap_or(ThemeCommand::Show) {
+        ThemeCommand::Show => {
+            println!("Border style: {}", config.theme.border_style.label());
+            println!("Accent color: {}", config.theme.accent_color.label());
+            println!(
+                "Unicode borders: {}",
+                if config.theme.unicode_enabled() {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
+            Ok(())
+        }
+        ThemeCommand::Border { style } => match style {
+            Some(style) => {
+                config.theme.border_style = style.into();
+                config.save()?;
+                set_theme(config.theme);
+                println!("Theme border style set to {}.", config.theme.border_style.label());
+                Ok(())
+            }
+            None => {
+                println!("Border style: {}", config.theme.border_style.label());
+                Ok(())
+            }
+        },
+        ThemeCommand::Accent { color } => match color {
+            Some(color) => {
+                config.theme.accent_color = color.into();
+                config.save()?;
+                set_theme(config.theme);
+                println!("Theme accent color set to {}.", config.theme.accent_color.label());
+                Ok(())
+            }
+            None => {
+                println!("Accent color: {}", config.theme.accent_color.label());
+                Ok(())
+            }
+        },
+        ThemeCommand::Unicode { enabled } => match enabled {
+            Some(ToggleArg::On) => {
+                config.theme.ascii_only = false;
+                config.save()?;
+                set_theme(config.theme);
+                println!("Unicode borders enabled.");
+                Ok(())
+            }
+            Some(ToggleArg::Off) => {
+                config.theme.ascii_only = true;
+                config.save()?;
+                set_theme(config.theme);
+                println!("Unicode borders disabled.");
+                Ok(())
+            }
+            None => {
+                println!(
+                    "Unicode borders: {}",
+                    if config.theme.unicode_enabled() {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
+                );
+                Ok(())
+            }
+        },
     }
 }
 
@@ -1022,7 +1300,7 @@ fn handle_completion(command: CompletionCommand) {
     }
 }
 
-fn install_completion_for_current_shell() -> Result<(), String> {
+pub(crate) fn install_completion_for_current_shell() -> Result<(), String> {
     let (shell_cmd, path) = completion_install_target()?;
 
     if let Some(parent) = path.parent() {
@@ -1047,7 +1325,7 @@ fn install_completion_for_current_shell() -> Result<(), String> {
     Ok(())
 }
 
-fn uninstall_completion_for_current_shell() -> Result<(), String> {
+pub(crate) fn uninstall_completion_for_current_shell() -> Result<(), String> {
     let (_, path) = completion_install_target()?;
     if path.exists() {
         fs::remove_file(&path)
@@ -1059,7 +1337,7 @@ fn uninstall_completion_for_current_shell() -> Result<(), String> {
     Ok(())
 }
 
-fn completion_status_for_current_shell() -> Result<(), String> {
+pub(crate) fn completion_status_for_current_shell() -> Result<(), String> {
     let (shell, path) = completion_install_target()?;
     println!("Shell: {:?}", shell);
     println!("Path: {}", path.display());
@@ -1101,13 +1379,21 @@ fn completion_install_target() -> Result<(CompletionCommand, PathBuf), String> {
 fn handle_plugin(command: PluginCommand) -> Result<(), String> {
     match command {
         PluginCommand::List => list_plugins(),
-        PluginCommand::Search => search_plugins(),
+        PluginCommand::Search { query } => {
+            let query = if query.is_empty() {
+                None
+            } else {
+                Some(query.join(" "))
+            };
+            search_plugins(query.as_deref())
+        }
+        PluginCommand::Browse { no_open } => plugin_browse(no_open),
         PluginCommand::Init { name } => init_plugin_template(name),
         PluginCommand::Keygen { output_dir } => plugin_keygen(output_dir),
         PluginCommand::Sign { file, key } => plugin_sign(&file, key.as_deref()),
         PluginCommand::Inspect => plugin_inspect(),
         PluginCommand::Test => plugin_test(),
-        PluginCommand::Pack => plugin_pack(),
+        PluginCommand::Pack { from_dist } => plugin_pack(from_dist),
         PluginCommand::Install { name } => install_plugin(&name),
         PluginCommand::Trust { name } => set_plugin_trust(&name, true),
         PluginCommand::Untrust { name } => set_plugin_trust(&name, false),
@@ -1958,39 +2244,11 @@ fn format_alerts_report(report: &AlertsReport) -> String {
 }
 
 fn format_table(title: &str, rows: &[(&str, String)]) -> String {
-    let content_width = rows
+    let rows = rows
         .iter()
-        .map(|(label, value)| label.len() + 2 + value.len())
-        .max()
-        .unwrap_or(0)
-        .max(title.len());
-    let top = format!("┌{}┐", "─".repeat(content_width + 2));
-    let middle = format!("├{}┤", "─".repeat(content_width + 2));
-    let bottom = format!("└{}┘", "─".repeat(content_width + 2));
-    let mut lines = vec![
-        top,
-        format!("│ {} │", center_line(title, content_width)),
-        middle,
-    ];
-    for (label, value) in rows {
-        lines.push(format!(
-            "│ {} │",
-            pad_line(&format!("{label}: {value}"), content_width)
-        ));
-    }
-    lines.push(bottom);
-    format!("{}\n", lines.join("\n"))
-}
-
-fn pad_line(value: &str, width: usize) -> String {
-    format!("{value:<width$}")
-}
-
-fn center_line(value: &str, width: usize) -> String {
-    let padding = width.saturating_sub(value.len());
-    let left = padding / 2;
-    let right = padding - left;
-    format!("{}{}{}", " ".repeat(left), value, " ".repeat(right))
+        .map(|(label, value)| ((*label).to_string(), value.clone()))
+        .collect::<Vec<_>>();
+    format_box_table(title, &rows)
 }
 
 fn weather_cache_get_or_fetch<T, F>(key: &str, ttl_secs: u64, fetch: F) -> Result<T, String>

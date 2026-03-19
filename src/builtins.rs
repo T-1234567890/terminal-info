@@ -16,6 +16,7 @@ use crate::config::{Config, config_path};
 use crate::migration::inspect_migration_status;
 use crate::output::{error_prefix, success_prefix, warn_prefix};
 use crate::plugin::{plugin_diagnostic_summary, run_diagnostic_plugins, verify_plugins};
+use crate::theme::format_box_table;
 use crate::weather::WeatherClient;
 
 const DEFAULT_PING_HOSTS: [&str; 3] = ["google.com", "cloudflare.com", "github.com"];
@@ -331,35 +332,7 @@ pub fn time_output(city: Option<String>) -> Result<String, String> {
 }
 
 fn format_time_table(title: &str, rows: &[(String, String)]) -> String {
-    let content_width = rows
-        .iter()
-        .map(|(label, value)| label.len() + 2 + value.len())
-        .max()
-        .unwrap_or(0)
-        .max(title.len());
-    let top = format!("┌{}┐", "─".repeat(content_width + 2));
-    let middle = format!("├{}┤", "─".repeat(content_width + 2));
-    let bottom = format!("└{}┘", "─".repeat(content_width + 2));
-    let mut lines = vec![
-        top,
-        format!("│ {} │", center_line(title, content_width)),
-        middle,
-    ];
-    for (label, value) in rows {
-        lines.push(format!(
-            "│ {:<content_width$} │",
-            format!("{label}: {value}")
-        ));
-    }
-    lines.push(bottom);
-    format!("{}\n", lines.join("\n"))
-}
-
-fn center_line(value: &str, width: usize) -> String {
-    let padding = width.saturating_sub(value.len());
-    let left = padding / 2;
-    let right = padding - left;
-    format!("{}{}{}", " ".repeat(left), value, " ".repeat(right))
+    format_box_table(title, rows)
 }
 
 pub fn run_diagnostic_all() -> Result<(), String> {
@@ -1212,7 +1185,7 @@ fn format_offset_time(label: &str, offset_seconds: i32) -> Option<(String, Strin
     ))
 }
 
-fn memory_line(system: &System) -> String {
+pub(crate) fn memory_line(system: &System) -> String {
     format!(
         "{} / {} used",
         format_bytes(system.used_memory()),
@@ -1220,7 +1193,7 @@ fn memory_line(system: &System) -> String {
     )
 }
 
-fn format_bytes(bytes: u64) -> String {
+pub(crate) fn format_bytes(bytes: u64) -> String {
     const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
     const MIB: f64 = 1024.0 * 1024.0;
 
@@ -1231,7 +1204,7 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
-fn format_uptime(seconds: u64) -> String {
+pub(crate) fn format_uptime(seconds: u64) -> String {
     let days = seconds / 86_400;
     let hours = (seconds % 86_400) / 3_600;
     let minutes = (seconds % 3_600) / 60;

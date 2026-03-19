@@ -21,11 +21,18 @@ pub enum Capability {
 
 impl Display for Capability {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl Capability {
+    /// Stable string representation used in metadata and manifests.
+    pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Network => f.write_str("network"),
-            Self::Config => f.write_str("config"),
-            Self::Cache => f.write_str("cache"),
-            Self::Filesystem => f.write_str("filesystem"),
+            Self::Network => "network",
+            Self::Config => "config",
+            Self::Cache => "cache",
+            Self::Filesystem => "filesystem",
         }
     }
 }
@@ -111,6 +118,29 @@ impl PluginMetadata {
             self.commands.push(command);
             self.commands.sort();
         }
+    }
+
+    /// Validate metadata for SDK-level correctness.
+    pub fn validate(&self) -> ManifestValidation {
+        let mut issues = Vec::new();
+        if self.name.trim().is_empty() {
+            issues.push("metadata.name must not be empty".to_string());
+        }
+        if self.version.trim().is_empty() {
+            issues.push("metadata.version must not be empty".to_string());
+        }
+        if self.description.trim().is_empty() {
+            issues.push("metadata.description must not be empty".to_string());
+        }
+        if self.commands.is_empty() {
+            issues.push("metadata.commands must include at least one top-level command".to_string());
+        }
+        if self.plugin_api != SUPPORTED_PLUGIN_API || self.api_version != SUPPORTED_PLUGIN_API {
+            issues.push(format!(
+                "metadata.plugin_api and metadata.api_version must be {SUPPORTED_PLUGIN_API}"
+            ));
+        }
+        ManifestValidation { issues }
     }
 }
 

@@ -46,4 +46,4 @@ If a plugin asks users to run it with `sudo` or elevated privileges, that should
 
 Terminal Info can also resolve plugin executables on `PATH` for development and manual workflows.
 
-For normal installation, the recommended and documented location is the managed Terminal Info plugin directory.
+For normal use, Terminal Info installs and runs managed plugins from `~/.terminal-info/plugins/`. PATH-based resolution is supported for local development and manual testing, but the managed plugin directory is the stable installation path.

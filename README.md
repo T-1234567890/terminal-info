@@ -164,7 +164,7 @@ Examples include:
 - A **core CLI**
 - A **plugin SDK**
 - A **plugin registry**
-- A growing ecosystem of tools
+- A plugin-based terminal toolbox
 
 Instead of being a single-purpose utility, the goal is to become a **general-purpose terminal toolbox**.
 
@@ -197,9 +197,9 @@ It provides:
 
 Start here:
 
-- [docs/plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md)
-- [docs/sdk.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/sdk.md)
-- [docs/plugin-spec.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-spec.md)
+- [docs/plugin-development.md](docs/plugin-development.md)
+- [docs/sdk.md](docs/sdk.md)
+- [docs/plugin-spec.md](docs/plugin-spec.md)
 
 ## Basic Usage
 
@@ -235,7 +235,16 @@ Widget order is configurable:
 widgets = ["weather", "time", "network", "system", "plugins"]
 ```
 
-See [docs/dashboard.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/dashboard.md).
+Lightweight theming is configurable too:
+
+```toml
+[theme]
+border_style = "sharp"
+accent_color = "cyan"
+ascii_only = false
+```
+
+See [docs/dashboard.md](docs/dashboard.md).
 
 ## Configuration
 
@@ -250,6 +259,8 @@ You can configure `tinfo` in three ways:
 - `tinfo config` for the interactive menu
 - `tinfo config ...` commands for direct scripting
 - manual edits to `~/.tinfo/config.toml`
+
+The `[theme]` section controls border style, accent color, and whether boxed output should use ASCII-only characters for limited terminals.
 
 Location aliases are also supported:
 
@@ -275,11 +286,12 @@ location = "auto"
 Commands:
 
 ```bash
+tinfo search network
 tinfo profile list
 tinfo profile use travel
 ```
 
-See [docs/config.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/config.md).
+See [docs/config.md](docs/config.md).
 
 ## Server Mode
 
@@ -331,7 +343,7 @@ When server mode is enabled, the enhanced human-readable output prints a clear `
 
 The enhanced server-mode diagnostics now include broader API endpoint checks, DNS resolver visibility, load average, process count, and a wider full-latency probe set.
 
-See [docs/server-mode.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/server-mode.md).
+See [docs/server-mode.md](docs/server-mode.md).
 
 ## Output Modes
 
@@ -361,7 +373,7 @@ tinfo completion fish
 tinfo completion install
 ```
 
-See [docs/completions.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/completions.md).
+See [docs/completions.md](docs/completions.md).
 
 ## Diagnostic Command
 
@@ -380,7 +392,7 @@ tinfo diagnostic system
 tinfo diagnostic plugins
 ```
 
-See [docs/diagnostic.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/diagnostic.md).
+See [docs/diagnostic.md](docs/diagnostic.md).
 
 ## Plugin Ecosystem
 
@@ -416,6 +428,9 @@ Plugin management commands:
 
 ```bash
 tinfo plugin search
+tinfo plugin search <query>
+tinfo plugin browse
+tinfo plugin browse --no-open
 tinfo plugin init <name>
 tinfo plugin keygen
 tinfo plugin sign <file>
@@ -440,6 +455,9 @@ tinfo plugin remove <name>
 Registry-managed plugins are installed from the exact reviewed version pinned in `plugins/<name>.json`. Terminal Info does not install the latest plugin release automatically.
 Plugins must also be trusted locally before Terminal Info will execute them.
 
+`tinfo plugin search` groups installed plugins and registry plugins separately, ranks matches by name and description relevance, and shows short summaries when the registry provides them.
+`tinfo plugin browse` starts a local browser view on `127.0.0.1` for optional visual plugin discovery without replacing the CLI workflow.
+
 Core self-updates verify the official Terminal Info Minisign signature, and plugin installs verify the plugin author's Minisign signature from the reviewed registry entry. SHA-256 checksums remain an extra integrity check when present.
 
 Developer quick start:
@@ -453,12 +471,14 @@ tinfo plugin keygen --output-dir ./keys
 tinfo plugin pack
 ```
 
+`tinfo plugin pack` now also generates `dist/registry/<plugin-name>.json`, and the generated release workflow uploads the same registry JSON as a GitHub Actions artifact for registry PRs.
+
 See:
 
-- [docs/plugin-spec.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-spec.md)
-- [docs/plugin-development.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-development.md)
-- [docs/plugin-registry.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-registry.md)
-- [docs/plugin-security.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/plugin-security.md)
+- [docs/plugin-spec.md](docs/plugin-spec.md)
+- [docs/plugin-development.md](docs/plugin-development.md)
+- [docs/plugin-registry.md](docs/plugin-registry.md)
+- [docs/plugin-security.md](docs/plugin-security.md)
 
 Official example plugins are included in:
 

@@ -1,6 +1,6 @@
 # Commands
 
-This document describes the current `tinfo` command set.
+This document describes the `tinfo` command set.
 
 ## Dashboard
 
@@ -146,11 +146,23 @@ tinfo config server disable
 
 ```bash
 tinfo config
+tinfo config setup
 tinfo config location
 tinfo config location <city>
 tinfo config units
 tinfo config units metric
 tinfo config units imperial
+tinfo config output
+tinfo config output color
+tinfo config output compact
+tinfo config output plain
+tinfo config theme
+tinfo config theme border sharp
+tinfo config theme border rounded
+tinfo config theme accent auto
+tinfo config theme accent cyan
+tinfo config theme unicode on
+tinfo config theme unicode off
 tinfo config api
 tinfo config api show
 tinfo config api set openweather <key>
@@ -165,6 +177,14 @@ Configuration is stored in:
 ```text
 ~/.tinfo/config.toml
 ```
+
+## Search
+
+```bash
+tinfo search <query>
+```
+
+`search` looks across built-in commands, installed plugins, and the plugin registry cache and returns the most relevant matches first.
 
 ## Profiles
 
@@ -218,12 +238,16 @@ tinfo profile remove <name>
 ```bash
 tinfo plugin list
 tinfo plugin search
+tinfo plugin search <query>
+tinfo plugin browse
+tinfo plugin browse --no-open
 tinfo plugin init <name>
 tinfo plugin keygen [--output-dir <dir>]
 tinfo plugin sign <file> [--key <path>]
 tinfo plugin inspect
 tinfo plugin test
 tinfo plugin pack
+tinfo plugin pack --from-dist
 tinfo plugin install <name>
 tinfo plugin trust <name>
 tinfo plugin untrust <name>
@@ -238,12 +262,14 @@ tinfo plugin upgrade-all
 tinfo plugin remove <name>
 ```
 
-`plugin search` reads the reviewed registry metadata, using the local cache when available.
+`plugin search` reads the reviewed registry metadata, using the local cache when available, and groups results into installed and registry sections.
+`plugin browse` starts a localhost browser UI for plugin discovery and inspection.
 `plugin keygen` creates `minisign.key` and `minisign.pub` for plugin release signing.
 `plugin sign` signs a plugin artifact and writes a sibling `.minisig` file.
 `plugin inspect` shows local plugin metadata and compatibility information for the current project.
 `plugin test` validates the current plugin project, runs `--metadata`, and previews local plugin output with simulated host values.
-`plugin pack` builds a release binary, bundles it with `plugin.toml`, writes a checksum, and signs the bundle.
+`plugin pack` builds a release binary, bundles it with `plugin.toml`, writes a checksum, signs the bundle, and generates `dist/registry/<plugin-name>.json`.
+`plugin pack --from-dist` skips the local build and generates registry JSON from previously downloaded workflow artifacts in `dist/`.
 `plugin doctor` checks installed plugins for manifest, registry, path, checksum, and binary issues.
 `plugin lint` validates the current plugin project files.
 `plugin publish-check` validates plugin project files and release layout before publishing.

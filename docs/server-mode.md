@@ -157,6 +157,6 @@ These checks should not require sending secret data to external services.
 
 ## Related Docs
 
-- [config.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/config.md)
-- [diagnostic.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/diagnostic.md)
-- [commands.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/commands.md)
+- [config.md](config.md)
+- [diagnostic.md](diagnostic.md)
+- [commands.md](commands.md)

@@ -50,6 +50,9 @@ Supported top-level fields:
 - `dashboard.widgets`
 - `dashboard.refresh_interval`
 - `dashboard.compact_mode`
+- `theme.border_style`
+- `theme.accent_color`
+- `theme.ascii_only`
 - `cache.weather_ttl_secs`
 - `cache.network_ttl_secs`
 - `cache.time_ttl_secs`
@@ -71,6 +74,11 @@ Dashboard widget order:
 widgets = ["weather", "time", "network", "system", "plugins"]
 refresh_interval = 1
 compact_mode = false
+
+[theme]
+border_style = "sharp"
+accent_color = "cyan"
+ascii_only = false
  
 [cache]
 weather_ttl_secs = 60
@@ -90,10 +98,16 @@ This opens the interactive menu built with `dialoguer`.
 
 Menu sections:
 
+- `Guided Setup`
 - `Location`
+- `Dashboard`
+- `Default Output`
+- `Theme`
+- `Shell Completions`
 - `Units`
 - `API Keys`
 - `Server Mode`
+- `Advanced and More Config`
 - `Reset Config`
 - `Exit`
 
@@ -108,6 +122,7 @@ Location submenu:
 Location:
 
 ```bash
+tinfo config setup
 tinfo config location
 tinfo config location tokyo
 ```
@@ -119,6 +134,31 @@ tinfo config units
 tinfo config units metric
 tinfo config units imperial
 ```
+
+Default output:
+
+```bash
+tinfo config output
+tinfo config output color
+tinfo config output compact
+tinfo config output plain
+```
+
+Theme settings:
+
+```bash
+tinfo config theme
+tinfo config theme border sharp
+tinfo config theme border rounded
+tinfo config theme accent auto
+tinfo config theme accent cyan
+tinfo config theme unicode on
+tinfo config theme unicode off
+```
+
+`theme.border_style` controls the box corners used by the dashboard and boxed reports.
+`theme.accent_color` applies only in color mode.
+`theme.ascii_only = true` forces `+`, `-`, and `|` borders and ASCII status markers for older or limited terminals.
 
 API settings:
 
@@ -140,7 +180,7 @@ tinfo config edit
 
 Server mode is optional. It is intended for servers or VPS environments and is not recommended for regular desktop computers.
 
-See [server-mode.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/server-mode.md) for the full behavior and command scope.
+See [server-mode.md](server-mode.md) for the full behavior and command scope.
 
 Reset:
 

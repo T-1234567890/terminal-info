@@ -111,10 +111,32 @@ impl Plugin {
         self
     }
 
-    /// Register a subcommand with declarative routing.
+    /// Declare multiple capabilities consumed by the plugin.
+    pub fn capabilities<I>(mut self, capabilities: I) -> Self
+    where
+        I: IntoIterator<Item = Capability>,
+    {
+        for capability in capabilities {
+            self.metadata.push_capability(capability);
+        }
+        self
+    }
+
+    /// Register a routed subcommand.
+    ///
+    /// This controls plugin-local routing only. It does not change the
+    /// top-level command names exposed through plugin metadata.
     pub fn command(mut self, command: PluginCommand) -> Self {
-        self.metadata.push_command(command.name().to_string());
         self.commands.push(command);
+        self
+    }
+
+    /// Expose an additional top-level command alias in metadata.
+    ///
+    /// Most plugins should not need this. It exists for compatibility with the
+    /// host metadata schema, not for normal subcommand routing.
+    pub fn command_alias(mut self, command: impl Into<String>) -> Self {
+        self.metadata.push_command(command);
         self
     }
 
@@ -146,6 +168,11 @@ impl Plugin {
     /// Generate the canonical manifest model for the current plugin metadata.
     pub fn manifest(&self) -> PluginManifest {
         PluginManifest::from_metadata(&self.metadata)
+    }
+
+    /// Borrow the plugin metadata that will be emitted by `--metadata`.
+    pub fn metadata(&self) -> &PluginMetadata {
+        &self.metadata
     }
 
     fn execute_from_env(self) -> PluginResult<()> {

@@ -1,6 +1,6 @@
 # Write a Terminal Info Plugin in 5 Minutes
 
-Terminal Info plugins are standalone executables, but the recommended developer workflow now uses the `tinfo-plugin` SDK crate and the built-in plugin tooling.
+Terminal Info plugins are standalone executables, and the standard developer workflow uses the `tinfo-plugin` SDK crate and the built-in plugin tooling.
 
 Conceptually, the plugin system works a lot like a lightweight `brew tap`. A plugin author ships a separate executable such as `tinfo-weather`, publishes signed release assets on GitHub, and then adds a reviewed registry entry that tells Terminal Info where to find that exact version. When a user runs `tinfo plugin install weather`, Terminal Info looks up the pinned registry metadata, downloads that release asset, verifies its checksum and Minisign signature, installs it under `~/.terminal-info/plugins/weather/`, and then routes `tinfo weather` to that plugin executable. The host and plugin communicate through a small stable contract, but plugin authors are expected to target the Rust SDK instead of dealing with the raw protocol directly.
 
@@ -34,6 +34,7 @@ The template already:
 - shows declarative command routing
 - includes a smoke test using the SDK test harness
 - builds signed cross-platform release bundles
+- includes a release workflow that generates registry JSON automatically
 
 ## 2. Run locally
 
@@ -59,7 +60,7 @@ The SDK also handles these flags automatically:
 - `--manifest`
 - `--help`
 
-See [docs/sdk.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/sdk.md) for the full API guide.
+See [sdk.md](sdk.md) for the full API guide.
 
 ## 3. Test with host simulation
 
@@ -93,13 +94,25 @@ Build and pack the plugin:
 tinfo plugin pack
 ```
 
-This creates a bundle such as:
+The generated `plugin.toml` includes a `[release]` section. Set the repository URL before publishing and keep `keys/minisign.pub` in the repo so the workflow can generate registry JSON automatically.
+
+```toml
+[release]
+repo = "https://github.com/OWNER/tinfo-weather"
+pubkey_path = "keys/minisign.pub"
+short_description = "Current weather and forecast"
+```
+
+Local packing creates artifacts such as:
 
 ```text
 dist/weather-v0.1.0.tar.gz
 dist/weather-v0.1.0.tar.gz.sha256
 dist/weather-v0.1.0.tar.gz.minisig
+dist/registry/weather.json
 ```
+
+`dist/registry/<plugin-name>.json` is the ready-to-submit registry JSON for the current build output.
 
 If you want to sign a file manually:
 
@@ -120,9 +133,10 @@ Use these before pushing a release tag.
 
 1. Push a release tag such as `0.1.0`
 2. Let GitHub Actions build the release assets
-3. Confirm the bundle, checksum, and `.minisig` files exist
-4. Add or update `plugins/<plugin-name>.json` in the Terminal Info registry
-5. Submit a pull request for review
+3. Let GitHub Actions run `tinfo plugin pack --from-dist` and upload the generated registry JSON artifact
+4. Confirm the bundles, checksums, `.minisig` files, and registry JSON artifact exist
+5. Add or update `plugins/<plugin-name>.json` in the Terminal Info registry using the generated JSON
+6. Submit a pull request for review
 
 ## SDK Example
 
@@ -174,7 +188,7 @@ fn main() {
 
 ## SDK Surface
 
-The current SDK provides:
+The SDK provides:
 
 - `Plugin` for metadata, routing, and dispatch
 - `PluginCommand` and `CommandInput` for command handling
@@ -195,8 +209,7 @@ examples/plugins/
 
 Included examples:
 
-- `weather`
+- `daily-brief`
 - `git-summary`
 - `docker-status`
-- `network-diagnostics`
-- `system-resource`
+- `remote-health`

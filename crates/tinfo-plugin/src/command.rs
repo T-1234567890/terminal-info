@@ -55,6 +55,7 @@ pub struct PluginCommand {
 }
 
 impl PluginCommand {
+    /// Create a routed subcommand definition.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -63,11 +64,13 @@ impl PluginCommand {
         }
     }
 
+    /// Set the user-facing command description.
     pub fn description(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
         self
     }
 
+    /// Register the command handler.
     pub fn handler<F>(mut self, handler: F) -> Self
     where
         F: Fn(Context, CommandInput) -> PluginResult<()> + Send + Sync + 'static,
@@ -76,10 +79,21 @@ impl PluginCommand {
         self
     }
 
+    /// Borrow the routed subcommand name.
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Borrow the command description.
+    ///
+    /// This is the preferred accessor for v1.0 and later.
+    pub fn summary(&self) -> &str {
+        &self.description
+    }
+
+    /// Borrow the command description.
+    ///
+    /// Kept for pre-v1 compatibility. Prefer [`PluginCommand::summary`].
     pub fn description_text(&self) -> &str {
         &self.description
     }

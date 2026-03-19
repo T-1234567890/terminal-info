@@ -4,7 +4,7 @@
 
 Server mode is optional and intended for servers or VPS environments. Normal mode keeps the standard developer diagnostics. Server mode only extends them with deeper checks.
 
-For a full overview, see [server-mode.md](/Users/2111832868qq.com/PycharmProjects/Learning/Terminal%20Weather/docs/server-mode.md).
+For a full overview, see [server-mode.md](server-mode.md).
 
 Enable server mode with:
 

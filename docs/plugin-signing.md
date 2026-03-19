@@ -27,19 +27,20 @@ minisign -G
 3. Sign each asset:
 
 ```bash
-tinfo plugin sign dist/tinfo-<plugin-name>-x86_64-apple-darwin --key ./keys/minisign.key
+tinfo plugin sign dist/<plugin-name>-v<version>.tar.gz --key ./keys/minisign.key
 ```
 
 Or use Minisign directly:
 
 ```bash
-minisign -S -s minisign.key -m dist/tinfo-<plugin-name>-x86_64-apple-darwin
+minisign -S -s minisign.key -m dist/<plugin-name>-v<version>.tar.gz
 ```
 
 4. Upload both files to the plugin GitHub release:
 
-- `tinfo-<plugin-name>-x86_64-apple-darwin`
-- `tinfo-<plugin-name>-x86_64-apple-darwin.minisig`
+- `<plugin-name>-v<version>.tar.gz`
+- `<plugin-name>-v<version>.tar.gz.minisig`
+- `<plugin-name>-v<version>.tar.gz.sha256`
 
 5. Submit a registry pull request that includes:
 

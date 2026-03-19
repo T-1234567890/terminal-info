@@ -1,6 +1,6 @@
 # Architecture
 
-`tinfo` is a small Rust CLI with a deliberately narrow architecture. The current implementation centers on weather features, but the command tree now leaves room for broader terminal information commands over time.
+`tinfo` is a Rust CLI for terminal information, diagnostics, and plugin-based extensions. Its architecture is organized around command dispatch, configuration, built-in tools, and the plugin runtime.
 
 The code is organized around three responsibilities: command parsing, configuration, and weather data retrieval.
 It also now includes a small dashboard module and an external plugin runner.

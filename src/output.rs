@@ -1,5 +1,7 @@
 use std::sync::OnceLock;
 
+use crate::theme::theme_config;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OutputMode {
     Plain,
@@ -27,22 +29,25 @@ pub fn json_output() -> bool {
 }
 
 pub fn success_prefix() -> &'static str {
-    match output_mode() {
-        OutputMode::Plain | OutputMode::Compact => "[OK]",
-        OutputMode::Color => "✔",
+    match (output_mode(), theme_config().ascii_only) {
+        (_, true) => "[OK]",
+        (OutputMode::Plain, false) | (OutputMode::Compact, false) => "[OK]",
+        (OutputMode::Color, false) => "✔",
     }
 }
 
 pub fn error_prefix() -> &'static str {
-    match output_mode() {
-        OutputMode::Plain | OutputMode::Compact => "[ERR]",
-        OutputMode::Color => "✖",
+    match (output_mode(), theme_config().ascii_only) {
+        (_, true) => "[ERR]",
+        (OutputMode::Plain, false) | (OutputMode::Compact, false) => "[ERR]",
+        (OutputMode::Color, false) => "✖",
     }
 }
 
 pub fn warn_prefix() -> &'static str {
-    match output_mode() {
-        OutputMode::Plain | OutputMode::Compact => "[WARN]",
-        OutputMode::Color => "▲",
+    match (output_mode(), theme_config().ascii_only) {
+        (_, true) => "[WARN]",
+        (OutputMode::Plain, false) | (OutputMode::Compact, false) => "[WARN]",
+        (OutputMode::Color, false) => "▲",
     }
 }

@@ -1,10 +1,41 @@
 # Terminal Info Plugin Registry
 
-Terminal Info keeps a reviewed plugin registry in the repository `plugins/` directory.
+Terminal Info maintains a reviewed plugin registry in the repository `plugins/` directory.
 
-## Registry entry format
+The registry uses two layers:
 
-Each plugin uses one file:
+1. `plugins/index.json`
+2. one detailed JSON file per plugin
+
+This keeps the first fetch small and avoids GitHub API rate limits.
+
+## Layer 1: index.json
+
+`index.json` is intentionally minimal. It is used only to list plugin names and find the URL of each detailed registry file.
+
+It contains only:
+
+- `version`
+- `plugins[].name`
+- `plugins[].registry`
+
+Example:
+
+```json
+{
+  "version": 1,
+  "plugins": [
+    {
+      "name": "news",
+      "registry": "https://raw.githubusercontent.com/T-1234567890/terminal-info/main/plugins/news.json"
+    }
+  ]
+}
+```
+
+## Layer 2: per-plugin registry JSON
+
+Each plugin has one detailed registry file:
 
 ```text
 plugins/<plugin-name>.json
@@ -16,7 +47,13 @@ Example:
 {
   "name": "weather",
   "description": "Weather information plugin",
+  "short_description": "Current weather and forecast",
   "repo": "https://github.com/example/tinfo-weather",
+  "homepage": "https://example.com/tinfo-weather",
+  "icon": "https://example.com/assets/icon.png",
+  "screenshots": [
+    "https://example.com/assets/preview-1.png"
+  ],
   "version": "1.0.0",
   "author": "Plugin Author",
   "plugin_api": 1,
@@ -30,6 +67,24 @@ Example:
   }
 }
 ```
+
+Optional discovery fields:
+
+- `short_description`: compact summary used in search and browser cards
+- `homepage`: preferred user-facing project URL
+- `icon`: square logo or icon URL
+- `screenshots`: optional preview asset URLs for the local browser UI
+
+## Fetch Flow
+
+Terminal Info:
+
+1. fetches `index.json` from `raw.githubusercontent.com`
+2. caches the index locally for a short time
+3. fetches a per-plugin registry JSON only when a plugin needs to be searched in detail, inspected, installed, updated, or rendered in the browser UI
+4. caches each per-plugin registry JSON separately
+
+This keeps the list request small and avoids repeatedly downloading every plugin definition.
 
 ## Why exact versions are pinned
 
@@ -52,13 +107,14 @@ tinfo plugin install <plugin-name>
 
 Terminal Info:
 
-1. fetches the plugin registry
-2. reads the exact reviewed version
-3. downloads that exact GitHub release tag
-4. downloads the matching `.minisig` file
-5. verifies the bundle with the registry `pubkey`
-6. verifies the checksum for the active target
-7. installs the plugin into `~/.terminal-info/plugins/<plugin-name>/`
+1. fetches `index.json`
+2. fetches the target plugin registry JSON
+3. reads the exact reviewed version
+4. downloads that exact GitHub release asset URL directly
+5. downloads the matching `.minisig` file
+6. verifies the bundle with the registry `pubkey`
+7. verifies the checksum for the active target
+8. installs the plugin into `~/.terminal-info/plugins/<plugin-name>/`
 
 ## Developer workflow
 
@@ -74,8 +130,9 @@ tinfo plugin publish-check
 Then:
 
 1. publish the signed release assets
-2. update `plugins/<plugin-name>.json`
-3. submit a pull request
+2. generate or download the registry JSON produced by `tinfo plugin pack`
+3. update `plugins/<plugin-name>.json`
+4. submit a pull request
 
 ## Review expectations
 
@@ -89,4 +146,4 @@ Registry review should check:
 - signing key presence
 - release asset and checksum shape
 
-This review improves safety, but it is not a full security audit.
+Registry review verifies packaging, metadata, and signing information. It does not replace source review or operator trust decisions.

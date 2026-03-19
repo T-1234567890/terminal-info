@@ -2,6 +2,7 @@ use crate::builtins::build_dashboard_snapshot;
 use crate::config::Config;
 use crate::output::{OutputMode, output_mode};
 use crate::plugin::dashboard_widgets;
+use crate::theme::format_box_table;
 
 pub fn dashboard_output(config: &Config) -> String {
     let title = "Terminal Info";
@@ -48,7 +49,7 @@ pub fn dashboard_output(config: &Config) -> String {
         }
         OutputMode::Plain | OutputMode::Color => {
             let rows = dashboard_rows(location, &snapshot, &widgets, &plugin_widgets);
-            format_table(title, &rows)
+            format_box_table(title, &rows)
         }
     }
 }
@@ -111,40 +112,4 @@ fn dashboard_rows(
         }
     }
     rows
-}
-
-fn format_table(title: &str, rows: &[(String, String)]) -> String {
-    let content_width = rows
-        .iter()
-        .map(|(label, value)| label.len() + 2 + value.len())
-        .max()
-        .unwrap_or(0)
-        .max(title.len());
-    let top = format!("┌{}┐", "─".repeat(content_width + 2));
-    let middle = format!("├{}┤", "─".repeat(content_width + 2));
-    let bottom = format!("└{}┘", "─".repeat(content_width + 2));
-    let mut lines = vec![
-        top,
-        format!("│ {} │", center_line(title, content_width)),
-        middle,
-    ];
-    for (label, value) in rows {
-        lines.push(format!(
-            "│ {} │",
-            pad_line(&format!("{label}: {value}"), content_width)
-        ));
-    }
-    lines.push(bottom);
-    format!("{}\n", lines.join("\n"))
-}
-
-fn pad_line(value: &str, width: usize) -> String {
-    format!("{value:<width$}")
-}
-
-fn center_line(value: &str, width: usize) -> String {
-    let padding = width.saturating_sub(value.len());
-    let left = padding / 2;
-    let right = padding - left;
-    format!("{}{}{}", " ".repeat(left), value, " ".repeat(right))
 }

@@ -63,6 +63,15 @@ Supported widget names are:
 - `system`
 - `plugins`
 
+## Theme Behavior
+
+Dashboard rendering follows the `[theme]` section in `~/.tinfo/config.toml`.
+
+- `border_style = "sharp"` uses square corners
+- `border_style = "rounded"` uses rounded corners when Unicode is enabled
+- `ascii_only = true` forces ASCII borders for terminals with limited Unicode support
+- `accent_color` colors dashboard borders in `--color` mode and is ignored in plain, compact, and JSON output
+
 ## Future Expansion
 
 The dashboard is intentionally small and could expand later with:

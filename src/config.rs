@@ -5,6 +5,9 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::output::OutputMode;
+use crate::theme::ThemeConfig;
+
 pub const CURRENT_CONFIG_VERSION: u32 = 1;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -19,6 +22,33 @@ pub enum Units {
     #[default]
     Metric,
     Imperial,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum DefaultOutput {
+    Plain,
+    Compact,
+    #[default]
+    Color,
+}
+
+impl DefaultOutput {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Plain => "plain",
+            Self::Compact => "compact",
+            Self::Color => "color",
+        }
+    }
+
+    pub fn as_output_mode(self) -> OutputMode {
+        match self {
+            Self::Plain => OutputMode::Plain,
+            Self::Compact => OutputMode::Compact,
+            Self::Color => OutputMode::Color,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -128,6 +158,8 @@ impl Units {
 pub struct Config {
     #[serde(default = "default_config_version")]
     pub config_version: u32,
+    #[serde(default = "default_setup_complete")]
+    pub setup_complete: bool,
     #[serde(default)]
     pub server_mode: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -136,6 +168,10 @@ pub struct Config {
     pub api_key: Option<String>,
     #[serde(default)]
     pub units: Units,
+    #[serde(default)]
+    pub default_output: DefaultOutput,
+    #[serde(default)]
+    pub theme: ThemeConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_profile: Option<String>,
     #[serde(default)]
@@ -158,14 +194,21 @@ fn default_config_version() -> u32 {
     CURRENT_CONFIG_VERSION
 }
 
+fn default_setup_complete() -> bool {
+    true
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             config_version: CURRENT_CONFIG_VERSION,
+            setup_complete: true,
             server_mode: false,
             provider: None,
             api_key: None,
             units: Units::default(),
+            default_output: DefaultOutput::default(),
+            theme: ThemeConfig::default(),
             active_profile: None,
             profile: BTreeMap::new(),
             dashboard: DashboardConfig::default(),
@@ -186,7 +229,8 @@ impl Config {
         }
 
         if !path.exists() {
-            let config = Self::default();
+            let mut config = Self::default();
+            config.setup_complete = false;
             config.save()?;
             return Ok(config);
         }
@@ -195,7 +239,8 @@ impl Config {
             .map_err(|err| format!("Failed to read config file {}: {err}", path.display()))?;
 
         if contents.trim().is_empty() {
-            let config = Self::default();
+            let mut config = Self::default();
+            config.setup_complete = false;
             config.save()?;
             return Ok(config);
         }
@@ -396,6 +441,7 @@ mod tests {
         assert_eq!(config.cache.weather_ttl_secs, 60);
         assert_eq!(config.cache.network_ttl_secs, 30);
         assert_eq!(config.cache.time_ttl_secs, 10);
+        assert_eq!(config.theme, ThemeConfig::default());
     }
 
     #[test]

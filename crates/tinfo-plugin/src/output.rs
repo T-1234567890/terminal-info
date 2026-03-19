@@ -67,6 +67,13 @@ impl Output {
         self.state.write_stdout(&format!("WARNING: {message}"));
     }
 
+    /// Emit a warning message.
+    ///
+    /// This is the preferred short-form name for v1.0 and later.
+    pub fn warn(&self, message: impl Display) {
+        self.warning(message);
+    }
+
     pub fn error(&self, message: impl Display) {
         self.state.write_stdout(&format!("ERROR: {message}"));
     }
@@ -77,6 +84,11 @@ impl Output {
 
     pub fn progress(&self, message: impl Display) {
         self.state.write_stdout(&format!("... {message}"));
+    }
+
+    /// Emit a blank line.
+    pub fn blank_line(&self) {
+        self.state.write_stdout("");
     }
 
     pub fn table(&self, table: Table) {

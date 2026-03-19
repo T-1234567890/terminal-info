@@ -1,0 +1,15 @@
+[plugin]
+name = "remote-health"
+version = "0.1.0"
+description = "Official example plugin for network access and widgets"
+author = "Terminal Info"
+
+[command]
+name = "remote-health"
+
+[compatibility]
+terminal_info = ">=0.9.0"
+plugin_api = 1
+
+[requirements]
+capabilities = ["network", "cache", "config"]
