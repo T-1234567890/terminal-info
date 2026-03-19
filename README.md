@@ -76,6 +76,18 @@ cargo build --release
 cargo install terminal-info
 ```
 
+## 💡 Why terminal-info?
+
+Unlike traditional CLI tools that focus on doing one thing well,  
+**terminal-info** is designed as a modular, extensible terminal toolbox.
+
+Instead of switching between multiple utilities, you get a unified system that can adapt to your workflow.
+
+- 🔌 Extensible via plugins  
+- 🧩 Composable and customizable workflows  
+- ⚡️ Fast, lightweight single-binary core  
+
+
 ## Features
 
 - **A Plugin Platform**
