@@ -39,6 +39,15 @@ tinfo ping
 tinfo plugin search
 ```
 
+## v1.0
+
+> terminal-info has reached its first stable release.
+
+The core toolbox, plugin system, and registry are now in place, forming the foundation of a modular terminal environment. <br>
+This release focuses on stability and structure. Future updates will expand the plugin ecosystem, improve developer experience, and refine the overall workflow.
+
+This is the beginning of terminal-info as a platform, not just a tool.
+
 ## Installation
 
 ![Latest Release](https://img.shields.io/github/v/release/T-1234567890/terminal-info)
