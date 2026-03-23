@@ -155,6 +155,7 @@ jobs:
 
       - name: Save result
         if: always()
+        shell: bash
         run: |
           STATUS="❌ Failed"
 
