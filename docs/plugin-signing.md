@@ -46,6 +46,10 @@ minisign -S -s minisign.key -m dist/<plugin-name>-v<version>.tar.gz
 
 - plugin name
 - repository URL
+- binary name
+- entry command
+- supported platforms
+- plugin type and network requirement
 - reviewed version
 - `pubkey`
 - checksums
@@ -55,9 +59,16 @@ minisign -S -s minisign.key -m dist/<plugin-name>-v<version>.tar.gz
 ```json
 {
   "name": "<plugin-name>",
-  "description": "<plugin description>",
-  "repo": "https://github.com/example/tinfo-<plugin-name>",
   "version": "0.1.0",
+  "description": "<plugin description>",
+  "author": "Plugin Author",
+  "license": "MIT",
+  "repository": "https://github.com/example/tinfo-<plugin-name>",
+  "binary": "tinfo-<plugin-name>",
+  "entry": "<plugin-name>",
+  "platform": ["linux", "macos"],
+  "type": "local",
+  "requires_network": false,
   "pubkey": "RWRgzvl/IRChlCdww8KtvuohEfnRA++x8Ro1hql1KOvVAVItAXEsC0jN",
   "checksums": {
     "x86_64-unknown-linux-gnu": "<sha256>",

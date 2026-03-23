@@ -149,6 +149,28 @@ jobs:
     needs: build
 
     steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get previous tag
+        id: prev
+        run: |
+          PREV=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          echo "prev=$PREV" >> $GITHUB_OUTPUT
+          
+      - name: Build changelog URL
+        id: changelog
+        run: |
+         if [ -z "${{ steps.prev.outputs.prev }}" ]; then
+          URL="https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}"
+         else
+          URL="https://github.com/${{ github.repository }}/compare/${{ steps.prev.outputs.prev }}...${{ github.ref_name }}"
+         fi
+
+         echo "url=$URL" >> $GITHUB_OUTPUT
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -161,7 +183,13 @@ jobs:
         with:
           files: dist/*
           allowUpdates: true
-          generate_release_notes: true
+          generate_release_notes: false
+          body: |
+            ## Full Changelog
+
+            ${{ steps.changelog.outputs.url }}
+
+            ---
 
   publish:
     name: Publish crates.io

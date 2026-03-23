@@ -46,16 +46,22 @@ Example:
 ```json
 {
   "name": "weather",
+  "version": "1.0.0",
   "description": "Weather information plugin",
+  "author": "Plugin Author",
+  "license": "MIT",
   "short_description": "Current weather and forecast",
-  "repo": "https://github.com/example/tinfo-weather",
+  "repository": "https://github.com/example/tinfo-weather",
   "homepage": "https://example.com/tinfo-weather",
+  "binary": "tinfo-weather",
+  "entry": "weather",
+  "platform": ["linux", "macos", "windows"],
+  "type": "cloud",
+  "requires_network": true,
   "icon": "https://example.com/assets/icon.png",
   "screenshots": [
     "https://example.com/assets/preview-1.png"
   ],
-  "version": "1.0.0",
-  "author": "Plugin Author",
   "plugin_api": 1,
   "capabilities": ["network", "config"],
   "pubkey": "RW...",
@@ -74,6 +80,24 @@ Optional discovery fields:
 - `homepage`: preferred user-facing project URL
 - `icon`: square logo or icon URL
 - `screenshots`: optional preview asset URLs for the local browser UI
+
+Required plugin metadata fields:
+
+- `name`: plugin command name
+- `version`: exact reviewed release version
+- `description`: full human-readable description
+- `author`: plugin author or maintainer
+- `license`: `MIT` or `Apache-2.0`
+- `repository`: GitHub repository URL used to derive release asset URLs
+- `binary`: executable name inside the release archive, usually `tinfo-<plugin-name>`
+- `entry`: command entrypoint routed by `tinfo`
+- `platform`: supported platform list using `linux`, `macos`, and/or `windows`
+- `type`: `local` or `cloud`
+- `requires_network`: whether the plugin requires outbound network access
+- `plugin_api`: host compatibility version
+- `capabilities`: declared SDK capabilities
+- `pubkey`: Minisign public key used for verification
+- `checksums`: per-target SHA-256 checksums
 
 ## Fetch Flow
 

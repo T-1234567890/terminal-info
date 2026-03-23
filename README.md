@@ -461,7 +461,7 @@ tinfo plugin list
 tinfo plugin remove <name>
 ```
 
-Registry-managed plugins are installed from the exact reviewed version pinned in `plugins/<name>.json`. Terminal Info does not install the latest plugin release automatically.
+Registry-managed plugins are installed from the exact reviewed version pinned in the reviewed registry JSON referenced by `plugins/index.json`. Terminal Info does not install the latest plugin release automatically.
 Plugins must also be trusted locally before Terminal Info will execute them.
 
 `tinfo plugin search` groups installed plugins and registry plugins separately, ranks matches by name and description relevance, and shows short summaries when the registry provides them.
@@ -480,7 +480,7 @@ tinfo plugin keygen --output-dir ./keys
 tinfo plugin pack
 ```
 
-`tinfo plugin pack` now also generates `dist/registry/<plugin-name>.json`, and the generated release workflow uploads the same registry JSON as a GitHub Actions artifact for registry PRs.
+`tinfo plugin pack` now also generates `dist/registry/<plugin-name>.json`, and the generated release workflow uploads the same registry JSON as a GitHub Actions artifact for registry PRs. The generated file already uses the standard registry fields such as `repository`, `binary`, `entry`, `platform`, `type`, and `requires_network`.
 
 See:
 

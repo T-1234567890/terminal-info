@@ -98,7 +98,7 @@ The generated `plugin.toml` includes a `[release]` section. Set the repository U
 
 ```toml
 [release]
-repo = "https://github.com/OWNER/tinfo-weather"
+repository = "https://github.com/OWNER/tinfo-weather"
 pubkey_path = "keys/minisign.pub"
 short_description = "Current weather and forecast"
 ```
@@ -113,6 +113,7 @@ dist/registry/weather.json
 ```
 
 `dist/registry/<plugin-name>.json` is the ready-to-submit registry JSON for the current build output.
+That JSON already follows the reviewed registry schema, including `repository`, `binary`, `entry`, `platform`, `type`, and `requires_network`, so plugin authors should submit the generated file instead of hand-editing registry metadata.
 
 If you want to sign a file manually:
 

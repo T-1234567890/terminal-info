@@ -57,7 +57,7 @@ const SERVER_API_ENDPOINTS: [(&str, &str); 6] = [
     ("Google DoH", "https://dns.google/resolve"),
     (
         "Plugin registry",
-        "https://api.github.com/repos/T-1234567890/terminal-info/contents/plugins",
+        "https://raw.githubusercontent.com/T-1234567890/terminal-info/main/plugins/index.json",
     ),
 ];
 const NORMAL_API_ENDPOINTS: [(&str, &str); 2] = [
@@ -1524,7 +1524,7 @@ fn collect_full_diagnostic_checks(config: &Config, server_mode: bool) -> Vec<Doc
             ),
             (
                 "Plugin registry access",
-                "https://api.github.com/repos/T-1234567890/terminal-info/contents/plugins",
+                "https://raw.githubusercontent.com/T-1234567890/terminal-info/main/plugins/index.json",
             ),
         ],
         "check outbound HTTPS access or rely on cached data",

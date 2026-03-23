@@ -45,21 +45,28 @@ const PLUGIN_CACHE_TTL_SECS: u64 = 24 * 60 * 60;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PluginMetadata {
     pub name: String,
+    pub version: String,
     pub description: String,
+    pub author: String,
+    #[serde(default = "default_plugin_license")]
+    pub license: String,
+    #[serde(alias = "repo")]
+    pub repository: String,
+    pub binary: String,
+    pub entry: String,
+    pub platform: Vec<String>,
+    #[serde(default = "default_plugin_type")]
+    pub r#type: String,
+    #[serde(default)]
+    pub requires_network: bool,
     #[serde(default)]
     pub short_description: String,
-    pub repo: String,
     #[serde(default)]
     pub homepage: String,
     #[serde(default)]
     pub icon: String,
     #[serde(default)]
     pub screenshots: Vec<String>,
-    #[serde(default)]
-    pub binary: String,
-    pub version: String,
-    #[serde(default)]
-    pub author: String,
     #[serde(default)]
     pub capabilities: Vec<String>,
     #[serde(default = "default_plugin_api")]
@@ -73,7 +80,7 @@ pub struct PluginSearchEntry {
     pub name: String,
     pub description: String,
     pub short_description: String,
-    pub repo: String,
+    pub repository: String,
     pub homepage: String,
     pub icon: String,
     pub screenshots: Vec<String>,
@@ -92,15 +99,21 @@ struct PluginSearchView {
 #[derive(Serialize)]
 struct RegistryJsonOutput {
     name: String,
-    description: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    short_description: Option<String>,
-    repo: String,
     version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    author: Option<String>,
+    description: String,
+    author: String,
+    license: String,
+    repository: String,
+    binary: String,
+    entry: String,
+    platform: Vec<String>,
+    #[serde(rename = "type")]
+    type_name: String,
+    requires_network: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     homepage: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    short_description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     icon: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -110,6 +123,14 @@ struct RegistryJsonOutput {
     capabilities: Vec<String>,
     pubkey: String,
     checksums: std::collections::BTreeMap<String, String>,
+}
+
+fn default_plugin_license() -> String {
+    "MIT".to_string()
+}
+
+fn default_plugin_type() -> String {
+    "local".to_string()
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -345,7 +366,7 @@ pub fn info_plugin(name: &str) -> Result<(), String> {
         name: name.to_string(),
         repository: registry
             .as_ref()
-            .map(|plugin| plugin.repo.clone())
+            .map(|plugin| plugin.repository.clone())
             .unwrap_or_else(|| "unknown".to_string()),
         installed_version,
         pinned_version: registry.as_ref().map(|plugin| plugin.version.clone()),
@@ -879,9 +900,9 @@ fn build_registry_json_output(
         .ok_or_else(|| "plugin.toml is missing [plugin].description".to_string())?;
     let version = manifest_string(manifest, &["plugin", "version"])
         .ok_or_else(|| "plugin.toml is missing [plugin].version".to_string())?;
-    let repo = manifest_string(manifest, &["release", "repo"])
-        .or_else(|| manifest_string(manifest, &["release", "repository"]))
-        .ok_or_else(|| "plugin.toml is missing [release].repo".to_string())?;
+    let repository = manifest_string(manifest, &["release", "repository"])
+        .or_else(|| manifest_string(manifest, &["release", "repo"]))
+        .ok_or_else(|| "plugin.toml is missing [release].repository".to_string())?;
     let pubkey = manifest_string(manifest, &["release", "pubkey"])
         .filter(|value| !value.trim().is_empty())
         .or_else(|| read_release_pubkey(project_dir, manifest).ok())
@@ -895,15 +916,38 @@ fn build_registry_json_output(
         .and_then(|value| value.as_integer())
         .unwrap_or(default_plugin_api() as i64) as u32;
     let capabilities = manifest_string_array(manifest, &["requirements", "capabilities"]);
+    let license = manifest_string(manifest, &["plugin", "license"])
+        .unwrap_or_else(|| "MIT".to_string());
+    let binary = manifest_string(manifest, &["release", "binary"])
+        .unwrap_or_else(|| format!("tinfo-{plugin_name}"));
+    let entry = manifest_string(manifest, &["command", "name"])
+        .unwrap_or_else(|| plugin_name.to_string());
+    let platform = platforms_from_checksums(&checksums);
+    let requires_network = capabilities.iter().any(|item| item == "network");
+    let type_name = manifest_string(manifest, &["release", "type"]).unwrap_or_else(|| {
+        if requires_network {
+            "cloud".to_string()
+        } else {
+            "local".to_string()
+        }
+    });
+    let author = manifest_string(manifest, &["plugin", "author"])
+        .unwrap_or_else(|| "Plugin Author".to_string());
 
     Ok(RegistryJsonOutput {
         name: plugin_name.to_string(),
-        description,
-        short_description: manifest_string(manifest, &["release", "short_description"]),
-        repo,
         version,
-        author: manifest_string(manifest, &["plugin", "author"]),
+        description,
+        author,
+        license,
+        repository,
+        binary,
+        entry,
+        platform,
+        type_name,
+        requires_network,
         homepage: manifest_string(manifest, &["release", "homepage"]),
+        short_description: manifest_string(manifest, &["release", "short_description"]),
         icon: manifest_string(manifest, &["release", "icon"]),
         screenshots: manifest_string_array(manifest, &["release", "screenshots"]),
         plugin_api,
@@ -911,6 +955,29 @@ fn build_registry_json_output(
         pubkey,
         checksums,
     })
+}
+
+fn platforms_from_checksums(
+    checksums: &std::collections::BTreeMap<String, String>,
+) -> Vec<String> {
+    let mut values = Vec::new();
+    for target in checksums.keys() {
+        let platform = if target.contains("linux") {
+            Some("linux")
+        } else if target.contains("apple-darwin") {
+            Some("macos")
+        } else if target.contains("windows") {
+            Some("windows")
+        } else {
+            None
+        };
+        if let Some(platform) = platform {
+            if !values.iter().any(|value| value == platform) {
+                values.push(platform.to_string());
+            }
+        }
+    }
+    values
 }
 
 fn release_checksums_from_dist(
@@ -1197,7 +1264,7 @@ pub fn registry_plugin_search_entries() -> Result<Vec<PluginSearchEntry>, String
                 name: plugin.name,
                 description: plugin.description,
                 short_description: plugin.short_description,
-                repo: plugin.repo,
+                repository: plugin.repository,
                 homepage: plugin.homepage,
                 icon: plugin.icon,
                 screenshots: plugin.screenshots,
@@ -1232,7 +1299,7 @@ pub fn installed_plugin_search_entries() -> Result<Vec<PluginSearchEntry>, Strin
         entries.push(PluginSearchEntry {
             trusted: is_plugin_trusted(&name).unwrap_or(false),
             short_description: description.clone(),
-            repo: String::new(),
+            repository: String::new(),
             homepage: String::new(),
             icon: String::new(),
             screenshots: Vec::new(),
@@ -1295,8 +1362,8 @@ fn plugin_search_view(query: Option<&str>) -> Result<PluginSearchView, String> {
 
     for plugin in &registry {
         if let Some(installed_plugin) = installed.iter_mut().find(|item| item.name == plugin.name) {
-            if installed_plugin.repo.is_empty() {
-                installed_plugin.repo = plugin.repo.clone();
+            if installed_plugin.repository.is_empty() {
+                installed_plugin.repository = plugin.repository.clone();
             }
             if installed_plugin.homepage.is_empty() {
                 installed_plugin.homepage = plugin.homepage.clone();
@@ -1421,8 +1488,8 @@ fn print_plugin_search_line(plugin: &PluginSearchEntry) {
     }
     if !plugin.homepage.trim().is_empty() {
         flags.push(plugin.homepage.clone());
-    } else if !plugin.repo.trim().is_empty() {
-        flags.push(plugin.repo.clone());
+    } else if !plugin.repository.trim().is_empty() {
+        flags.push(plugin.repository.clone());
     }
 
     if flags.is_empty() {
@@ -1573,9 +1640,9 @@ fn render_plugin_section(
             html.push_str(&html_escape(&plugin.homepage));
             html.push_str("\">Homepage</a>");
         }
-        if !plugin.repo.trim().is_empty() {
+        if !plugin.repository.trim().is_empty() {
             html.push_str("<a class=\"button secondary\" href=\"");
-            html.push_str(&html_escape(&plugin.repo));
+            html.push_str(&html_escape(&plugin.repository));
             html.push_str("\">Repository</a>");
         }
         html.push_str("</div>");
@@ -2104,7 +2171,7 @@ fn install_or_update_plugin(plugin: &PluginMetadata, action: &str) -> Result<(),
     fs::create_dir_all(&plugin_home)
         .map_err(|err| format!("Failed to create plugin directory: {err}"))?;
 
-    let (owner, repo) = parse_github_repo(&plugin.repo)?;
+    let (owner, repo) = parse_github_repo(&plugin.repository)?;
     let binary = plugin_binary_name(plugin);
     let asset_name = release_asset_name(&binary);
     let asset_url = release_download_url(&owner, &repo, &plugin.version, &asset_name);
@@ -2424,8 +2491,12 @@ fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
     validate_plugin_name(&plugin.name)?;
 
     if plugin.name.trim().is_empty()
+        || plugin.author.trim().is_empty()
+        || plugin.license.trim().is_empty()
         || plugin.description.trim().is_empty()
-        || plugin.repo.trim().is_empty()
+        || plugin.repository.trim().is_empty()
+        || plugin.binary.trim().is_empty()
+        || plugin.entry.trim().is_empty()
         || plugin.version.trim().is_empty()
     {
         return Err(format!(
@@ -2441,11 +2512,61 @@ fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
         ));
     }
 
-    if !plugin.repo.starts_with("https://github.com/") {
+    if !plugin.repository.starts_with("https://github.com/") {
         return Err(format!(
             "Plugin '{}' must use a GitHub repository URL.",
             plugin.name
         ));
+    }
+
+    match plugin.license.as_str() {
+        "MIT" | "Apache-2.0" => {}
+        _ => {
+            return Err(format!(
+                "Plugin '{}' must use license MIT or Apache-2.0.",
+                plugin.name
+            ));
+        }
+    }
+
+    if !plugin
+        .name
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-' || ch == '_')
+    {
+        return Err(format!(
+            "Plugin '{}' must use lowercase ASCII letters, digits, '-' or '_'.",
+            plugin.name
+        ));
+    }
+
+    if plugin.platform.is_empty() {
+        return Err(format!(
+            "Plugin '{}' must declare at least one platform.",
+            plugin.name
+        ));
+    }
+
+    for platform in &plugin.platform {
+        match platform.as_str() {
+            "linux" | "macos" | "windows" => {}
+            _ => {
+                return Err(format!(
+                    "Plugin '{}' has unsupported platform '{}'.",
+                    plugin.name, platform
+                ));
+            }
+        }
+    }
+
+    match plugin.r#type.as_str() {
+        "local" | "cloud" => {}
+        _ => {
+            return Err(format!(
+                "Plugin '{}' must set type to 'local' or 'cloud'.",
+                plugin.name
+            ));
+        }
     }
 
     if plugin.version == "latest" {
@@ -2499,10 +2620,10 @@ fn validate_plugin_name(name: &str) -> Result<(), String> {
 
     if !name
         .chars()
-        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-' || ch == '_')
     {
         return Err(format!(
-            "Plugin '{}' must use lowercase ASCII letters, digits, or '-'.",
+            "Plugin '{}' must use lowercase ASCII letters, digits, '-' or '_'.",
             name
         ));
     }
@@ -2871,7 +2992,7 @@ plugin_api = 1
 capabilities = ["config", "cache"]
 
 [release]
-repo = "https://github.com/OWNER/tinfo-{name}"
+repository = "https://github.com/OWNER/tinfo-{name}"
 pubkey_path = "keys/minisign.pub"
 short_description = "{description}"
 "#,
