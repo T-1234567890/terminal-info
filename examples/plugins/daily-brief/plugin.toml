@@ -1,0 +1,15 @@
+[plugin]
+name = "daily-brief"
+version = "0.1.0"
+description = "Official example plugin for config, cache, and testing"
+author = "Terminal Info"
+
+[command]
+name = "daily-brief"
+
+[compatibility]
+terminal_info = ">=0.9.0"
+plugin_api = 1
+
+[requirements]
+capabilities = ["config", "cache"]

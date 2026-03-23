@@ -1,0 +1,39 @@
+# Rust build artifacts
+/target/
+target/
+**/target/
+
+# IDE files
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+
+# Environment files
+.env
+.env.local
+
+# CLI local config
+.tinfo/
+
+# Binary artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# VHS artifacts
+*.cast
+/demos/vhs/*.gif
+/demos/vhs/*.mp4
+
+# Other
+replace.txt

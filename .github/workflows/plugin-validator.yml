@@ -1,0 +1,23 @@
+name: Plugin Validator
+
+on:
+  pull_request:
+    paths:
+      - "plugins/*.json"
+      - "scripts/validate_plugins.py"
+      - ".github/workflows/plugin-validator.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate plugin index
+        run: python3 scripts/validate_plugins.py
