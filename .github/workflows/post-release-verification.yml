@@ -1,0 +1,200 @@
+name: Post-release Verification
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Verify ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13
+            platform: macOS (Intel, x86_64)
+            asset_name: tinfo-x86_64-apple-darwin.tar.gz
+          - os: macos-14
+            platform: macOS (Apple Silicon, arm64)
+            asset_name: tinfo-aarch64-apple-darwin.tar.gz
+          - os: ubuntu-latest
+            platform: Linux (x86_64)
+            asset_name: tinfo-x86_64-unknown-linux-gnu.tar.gz
+          - os: windows-latest
+            platform: Windows (x86_64)
+            asset_name: tinfo-x86_64-pc-windows-msvc.zip
+
+    steps:
+      - name: Download release asset
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL \
+            -o "${{ matrix.asset_name }}" \
+            "https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/${{ matrix.asset_name }}"
+
+      - name: Download release asset (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $url = "https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/${{ matrix.asset_name }}"
+          Invoke-WebRequest $url -OutFile "${{ matrix.asset_name }}"
+
+      - name: Extract and verify binary
+        id: verify_unix
+        if: runner.os != 'Windows'
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p out
+          tar -xzf "${{ matrix.asset_name }}" -C out
+          binary_path="$(find out -type f -name tinfo | head -n 1)"
+          if [ -z "$binary_path" ]; then
+            echo "Unable to find extracted tinfo binary."
+            exit 1
+          fi
+          chmod +x "$binary_path"
+          "$binary_path" --version
+          "$binary_path" --help > /dev/null
+
+      - name: Extract and verify binary (Windows)
+        id: verify_windows
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Expand-Archive "${{ matrix.asset_name }}" -DestinationPath out -Force
+          $binary = Get-ChildItem -Path out -Recurse -Filter tinfo.exe | Select-Object -First 1
+          if (-not $binary) {
+            throw "Unable to find extracted tinfo.exe binary."
+          }
+          & $binary.FullName --version
+          & $binary.FullName --help | Out-Null
+
+      - name: Write verification result
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const platform = `${{ matrix.platform }}`;
+            const isWindows = `${{ runner.os }}` === 'Windows';
+            const outcome = isWindows
+              ? `${{ steps.verify_windows.outcome || 'skipped' }}`
+              : `${{ steps.verify_unix.outcome || 'skipped' }}`;
+            const passed = outcome === 'success';
+            const result = {
+              platform,
+              status: passed ? '✅ Passed' : '❌ Failed'
+            };
+            fs.writeFileSync('result.json', JSON.stringify(result, null, 2));
+
+      - name: Upload verification result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-${{ matrix.asset_name }}
+          path: result.json
+          if-no-files-found: error
+
+  update-release:
+    name: Update Release Body
+    runs-on: ubuntu-latest
+    needs: verify
+    if: always()
+
+    steps:
+      - name: Download verification results
+        uses: actions/download-artifact@v4
+        with:
+          path: verification-results
+          pattern: verification-*
+          merge-multiple: false
+
+      - name: Update release description
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const releaseId = context.payload.release.id;
+            const tagName = context.payload.release.tag_name;
+            const date = new Date().toISOString().slice(0, 10);
+
+            const orderedPlatforms = [
+              'macOS (Intel, x86_64)',
+              'macOS (Apple Silicon, arm64)',
+              'Linux (x86_64)',
+              'Windows (x86_64)'
+            ];
+
+            const statuses = Object.fromEntries(
+              orderedPlatforms.map((platform) => [platform, '❌ Failed'])
+            );
+
+            const root = 'verification-results';
+            if (fs.existsSync(root)) {
+              for (const entry of fs.readdirSync(root)) {
+                const resultPath = path.join(root, entry, 'result.json');
+                if (!fs.existsSync(resultPath)) {
+                  continue;
+                }
+                const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+                if (result.platform && result.status) {
+                  statuses[result.platform] = result.status;
+                }
+              }
+            }
+
+            const overall = Object.values(statuses).some((status) => status === '❌ Failed')
+              ? '❌ Partial failure'
+              : '✅ Passed';
+
+            const report = [
+              '## Post-release verification',
+              '',
+              `**Overall status:** ${overall}`,
+              '',
+              '| Platform | Status |',
+              '|----------|--------|',
+              `| macOS (Intel, x86_64) | ${statuses['macOS (Intel, x86_64)']} |`,
+              `| macOS (Apple Silicon, arm64) | ${statuses['macOS (Apple Silicon, arm64)']} |`,
+              `| Linux (x86_64) | ${statuses['Linux (x86_64)']} |`,
+              `| Windows (x86_64) | ${statuses['Windows (x86_64)']} |`,
+              '',
+              '**Legend:**  ',
+              '✅ Passed  ',
+              '❌ Failed  ',
+              '',
+              '---',
+              '',
+              `**Release:** ${tagName}  `,
+              `**Date:** ${date}`
+            ].join('\n');
+
+            const { data: release } = await github.rest.repos.getRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: releaseId
+            });
+
+            const currentBody = release.body || '';
+            const sectionRegex = /## Post-release verification[\s\S]*?(?=\n## |\n# |$)/m;
+            const updatedBody = sectionRegex.test(currentBody)
+              ? currentBody.replace(sectionRegex, report)
+              : currentBody.trim()
+                ? `${currentBody.trim()}\n\n${report}`
+                : report;
+
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: releaseId,
+              body: updatedBody
+            });
