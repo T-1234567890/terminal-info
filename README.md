@@ -85,6 +85,19 @@ cargo build --release
 cargo install terminal-info
 ```
 
+> [!IMPORTANT]
+> ## ⚠️ Repository History Notice
+>
+> This repository previously contained full development history from early stages.
+>
+>In March 2026, the commit history was rewritten to remove local file paths and non-sensitive development artifacts.
+>
+>- The current codebase and documentation are unaffected  
+>- The repository now reflects a clean and production-ready state  
+>- Some older commits may still be accessible via GitHub cache or direct commit links, but they are no longer part of the active history  
+>
+>This is a standard repository maintenance process and does not impact the functionality or integrity of the project.
+
 ## 💡 Why terminal-info?
 
 Unlike traditional CLI tools that focus on doing one thing well,  
