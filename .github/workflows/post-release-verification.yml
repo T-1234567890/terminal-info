@@ -2,7 +2,7 @@ name: Post-release Verification
 
 on:
   release:
-    types: [published]
+    types: [published, created]
 
 permissions:
   contents: write
