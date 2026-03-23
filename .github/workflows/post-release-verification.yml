@@ -1,8 +1,10 @@
 name: Post-release Verification
 
 on:
-  release:
-    types: [published, created]
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
 
 permissions:
   contents: write
