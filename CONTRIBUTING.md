@@ -14,8 +14,6 @@ We welcome contributions of all kinds, including:
 - Plugin development
 - Developer tooling improvements
 
----
-
 # Getting Started
 
 ### 1. Fork the Repository
@@ -32,8 +30,6 @@ Add the upstream repository:
 ```
 git remote add upstream https://github.com/T-1234567890/terminal-info.git
 ```
-
----
 
 # Development Setup
 
@@ -75,8 +71,6 @@ cargo clippy
 
 Please ensure formatting and lint checks pass before submitting changes.
 
----
-
 # Submitting Changes
 
 1. Create a new branch
@@ -103,8 +97,6 @@ git push origin feature/my-feature
 
 Please clearly describe the purpose of your change in the Pull Request.
 
----
-
 # Commit Message Guidelines
 
 Terminal Info generally follows a conventional commit style.
@@ -125,7 +117,19 @@ Example:
 feat: add weather alerts command
 ```
 
----
+# Pull Request Types
+
+Please use the correct PR type when contributing:
+
+- `[core]` for core code changes
+- `[plugin]` for plugin metadata submissions
+- `[docs]` for documentation changes
+- `[maintenance]` for CI, release, and repository maintenance
+
+Plugin submissions must be opened as Pull Requests.
+
+Plugin-related bugs should be reported in the plugin's own repository.
+
 
 # Plugin Contributions
 
@@ -151,7 +155,6 @@ Plugin documentation will be provided in:
 docs/plugin-development.md
 ```
 
----
 
 # Reporting Issues
 
@@ -167,8 +170,6 @@ Example command:
 ```
 tinfo weather now
 ```
-
----
 
 # Code Style
 
@@ -194,15 +195,11 @@ Security-related issues may involve:
 - update mechanisms
 - external command execution
 
----
-
 # Community Guidelines
 
 Please be respectful and constructive when interacting with contributors.
 
 Terminal Info follows the **Contributor Covenant Code of Conduct**.
-
----
 
 # License
 
