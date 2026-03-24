@@ -58,7 +58,21 @@ jobs:
         shell: pwsh
         run: |
           $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/${{ matrix.asset }}"
-          Invoke-WebRequest $url -OutFile asset
+          Write-Host "Downloading from: $url"
+
+          for ($i = 0; $i -lt 5; $i++) {
+            try {
+              Invoke-WebRequest $url -OutFile asset
+              Write-Host "Download succeeded"
+              exit 0
+            } catch {
+              Write-Host "Attempt $i failed, retrying..."
+              Start-Sleep -Seconds 3
+            }
+          }
+
+          Write-Error "Failed to download asset after retries"
+          exit 1
 
       # -------------------------
       # Extract
