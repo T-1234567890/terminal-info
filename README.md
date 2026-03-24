@@ -10,6 +10,11 @@ The extensible terminal information CLI. <br>
 A fast Rust-powered toolbox for system information,
 diagnostics, and developer utilities.
 
+> [!IMPORTANT]
+> Commit history was rewritten to remove local file paths and sensitive info.
+> 
+> [Notice for commit history](https://github.com/T-1234567890/terminal-info?tab=readme-ov-file#%EF%B8%8F-repository-history-notice)
+
 ## Demo
 
 Running `tinfo`:
@@ -85,18 +90,11 @@ cargo build --release
 cargo install terminal-info
 ```
 
-> [!IMPORTANT]
-> ## ⚠️ Repository History Notice
->
-> This repository previously contained full development history from early stages.
->
->In March 2026, the commit history was rewritten to remove local file paths and non-sensitive development artifacts.
->
->- The current codebase and documentation are unaffected  
->- The repository now reflects a clean and production-ready state  
->- Some older commits may still be accessible via GitHub cache or direct commit links, but they are no longer part of the active history  
->
->This is a standard repository maintenance process and does not impact the functionality or integrity of the project.
+## 🧭 Roadmap
+
+A public roadmap is available to outline the future direction of the project, including upcoming features such as the dashboard system, widgets API, and plugin ecosystem improvements.
+
+👉 See the full roadmap here: [ROADMAP.md](./docs/roadmap.md)
 
 ## 💡 Why terminal-info?
 
@@ -529,6 +527,19 @@ tinfo profile use home
 tinfo profile add home
 tinfo profile remove office
 ```
+
+> ## ⚠️ Repository History Notice
+>
+> This repository previously contained full development history from early stages.
+>
+> In March 2026, the commit history was rewritten to remove local file paths and sensitive development artifacts.
+>
+>- The current codebase and documentation are unaffected  
+>- The repository now reflects a clean and production-ready state  
+>- Some older commits may still be accessible via GitHub cache or direct commit links, but they are no longer part of the active history  
+>
+>This is a standard repository maintenance process and does not impact the functionality or integrity of the project.
+
 
 ## Disclaimer
 
