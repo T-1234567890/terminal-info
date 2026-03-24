@@ -1,6 +1,6 @@
 [package]
 name = "terminal-info"
-version = "1.1.1"
+version = "1.1.2"
 edition = "2024"
 
 description = "An extensible terminal information CLI and developer toolbox"
