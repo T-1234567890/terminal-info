@@ -155,6 +155,10 @@ Plugin documentation will be provided in:
 docs/plugin-development.md
 ```
 
+Plugins are reviewed before being added to the registry.
+
+See [Plugin Review Guidelines](./docs/plugin-review.md)
+
 
 # Reporting Issues
 
