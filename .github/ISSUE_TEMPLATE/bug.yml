@@ -1,0 +1,25 @@
+name: Bug Report
+description: Report an issue with terminal-info
+title: "[bug] "
+labels: ["bug"]
+
+body:
+  - type: textarea
+    attributes:
+      label: Description
+      description: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+
+  - type: textarea
+    attributes:
+      label: Expected behavior
+
+  - type: textarea
+    attributes:
+      label: Environment
+      description: OS / terminal-info version / terminal
