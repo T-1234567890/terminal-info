@@ -16,7 +16,7 @@ terminal-info aims to become a **modular, extensible system diagnostics toolbox*
 
 ## ✅ v1.0.x — Foundation (Completed / Stabilizing)
 
-**Status:** Stabilizing
+**Status:** ✅
 
 - Core CLI commands (system, network, storage, diagnostics)
 - Plugin system (plugin_api = 1)
@@ -30,7 +30,7 @@ terminal-info aims to become a **modular, extensible system diagnostics toolbox*
 
 ## 🔧 v1.1.0 — Dashboard & Widgets (Next Major Step)
 
-**Status:** In Progress
+**Status:** ✅
 
 ### 🎯 Goals
 Make the dashboard a **first-class feature**
