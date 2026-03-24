@@ -23,6 +23,14 @@ target/
 
 # CLI local config
 .tinfo/
+.tcache/
+.tdiagplugins/
+.tmenu/
+.tmphome/
+.tmphome2/
+.tmptest-empty/
+.tmptest-live/
+.tplugins/
 
 # Binary artifacts
 *.exe

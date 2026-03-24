@@ -1,6 +1,0 @@
-{
-  "provider": "openweather",
-  "api_key": "testkey123",
-  "units": "imperial",
-  "default_city": "tokyo"
-}
