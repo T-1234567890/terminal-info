@@ -73,6 +73,8 @@ pub struct DashboardConfig {
     pub refresh_interval: u64,
     #[serde(default)]
     pub compact_mode: bool,
+    #[serde(default)]
+    pub freeze: bool,
 }
 
 impl Default for DashboardConfig {
@@ -81,6 +83,7 @@ impl Default for DashboardConfig {
             widgets: default_dashboard_widgets(),
             refresh_interval: default_dashboard_refresh_interval(),
             compact_mode: false,
+            freeze: false,
         }
     }
 }
@@ -91,6 +94,7 @@ fn default_dashboard_widgets() -> Vec<String> {
         "time".to_string(),
         "network".to_string(),
         "system".to_string(),
+        "notes".to_string(),
         "plugins".to_string(),
     ]
 }
@@ -405,8 +409,16 @@ pub fn config_path() -> Result<PathBuf, String> {
         return Ok(PathBuf::from(dir).join("config.toml"));
     }
 
+    Ok(config_dir()?.join("config.toml"))
+}
+
+pub fn config_dir() -> Result<PathBuf, String> {
     let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    Ok(PathBuf::from(home).join(".tinfo").join("config.toml"))
+    Ok(PathBuf::from(home).join(".tinfo"))
+}
+
+pub fn dashboard_notes_path() -> Result<PathBuf, String> {
+    Ok(config_dir()?.join("dashboard-notes.txt"))
 }
 
 pub fn legacy_json_config_path() -> Result<PathBuf, String> {

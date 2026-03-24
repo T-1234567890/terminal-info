@@ -231,7 +231,42 @@ struct PluginVerifyView {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PluginWidget {
     pub title: String,
-    pub content: String,
+    #[serde(default)]
+    pub refresh_interval_secs: Option<u64>,
+    pub full: PluginWidgetBody,
+    #[serde(default)]
+    pub compact: Option<PluginWidgetBody>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum PluginWidgetBody {
+    Text { content: String },
+    List { items: Vec<String> },
+    Table {
+        headers: Vec<String>,
+        rows: Vec<Vec<String>>,
+    },
+}
+
+#[derive(Deserialize)]
+struct LegacyPluginWidget {
+    title: String,
+    content: String,
+}
+
+impl PluginWidget {
+    pub fn body(&self, compact: bool) -> &PluginWidgetBody {
+        if compact {
+            self.compact.as_ref().unwrap_or(&self.full)
+        } else {
+            &self.full
+        }
+    }
+
+    pub fn refresh_interval_secs(&self) -> u64 {
+        self.refresh_interval_secs.unwrap_or(5).max(1)
+    }
 }
 
 #[derive(Serialize)]
@@ -1185,7 +1220,7 @@ mod tests {
     }
 }
 
-pub fn dashboard_widgets() -> Vec<PluginWidget> {
+pub fn dashboard_widgets(compact: bool) -> Vec<PluginWidget> {
     let Ok(installed) = installed_plugin_names() else {
         return Vec::new();
     };
@@ -1198,16 +1233,38 @@ pub fn dashboard_widgets() -> Vec<PluginWidget> {
             Some(path) => path,
             None => continue,
         };
-        let output = match Command::new(binary).arg("--widget").output() {
+        let mut command = Command::new(binary);
+        command.arg("--widget");
+        if compact {
+            command.arg("--compact");
+        }
+        let output = match command.output() {
             Ok(output) if output.status.success() => output,
             _ => continue,
         };
         let text = String::from_utf8_lossy(&output.stdout);
-        if let Ok(widget) = serde_json::from_str::<PluginWidget>(&text) {
+        if let Some(widget) = parse_dashboard_widget_payload(&text) {
             widgets.push(widget);
         }
     }
     widgets
+}
+
+fn parse_dashboard_widget_payload(text: &str) -> Option<PluginWidget> {
+    serde_json::from_str::<PluginWidget>(text).ok().or_else(|| {
+        serde_json::from_str::<LegacyPluginWidget>(text)
+            .ok()
+            .map(|legacy| PluginWidget {
+                title: legacy.title,
+                refresh_interval_secs: None,
+                full: PluginWidgetBody::Text {
+                    content: legacy.content.clone(),
+                },
+                compact: Some(PluginWidgetBody::Text {
+                    content: legacy.content,
+                }),
+            })
+    })
 }
 
 pub fn search_plugins(query: Option<&str>) -> Result<(), String> {

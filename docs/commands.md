@@ -156,6 +156,12 @@ tinfo config output
 tinfo config output color
 tinfo config output compact
 tinfo config output plain
+tinfo config widgets
+tinfo config widgets show
+tinfo config widgets add notes
+tinfo config widgets remove network
+tinfo config widgets set weather time system notes plugins
+tinfo config widgets reset
 tinfo config theme
 tinfo config theme border sharp
 tinfo config theme border rounded
@@ -177,6 +183,8 @@ Configuration is stored in:
 ```text
 ~/.tinfo/config.toml
 ```
+
+`config widgets` provides quick dashboard widget changes without editing TOML manually.
 
 ## Search
 
@@ -214,9 +222,19 @@ tinfo completion status
 ## Dashboard
 
 ```bash
+tinfo dashboard
+tinfo dashboard --freeze
+tinfo dashboard --live
 tinfo dashboard config
 tinfo dashboard reset
+tinfo dashboard notes show
+tinfo dashboard notes set remember to review plugins
+tinfo dashboard notes clear
 ```
+
+`dashboard` renders the dashboard itself when no dashboard subcommand is provided.
+`--freeze` forces snapshot mode.
+`--live` forces live mode even when `dashboard.freeze = true` in config.
 
 ## Profiles
 

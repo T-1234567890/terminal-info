@@ -227,6 +227,63 @@ let response = ctx
     .send_json::<ApiResponse>()?;
 ```
 
+## Widgets
+
+Plugins can expose dashboard widgets without rendering terminal UI directly.
+
+Use the widget builder on `Plugin` and return a structured widget payload:
+
+```rust
+use tinfo_plugin::{Plugin, PluginResult, Widget, WidgetBody, WidgetMode};
+
+fn dashboard_widget(ctx: tinfo_plugin::Context, mode: WidgetMode) -> PluginResult<Widget> {
+    let city = ctx.config.string("location")?.unwrap_or_else(|| "auto".to_string());
+    let compact = WidgetBody::text(format!("city={city}"));
+    let full = WidgetBody::table(
+        ["Field", "Value"],
+        [["City", city.as_str()], ["Host", ctx.host.version()]],
+    );
+
+    let widget = Widget::new("Weather", full)
+        .compact(compact)
+        .refresh_interval_secs(30);
+
+    match mode {
+        WidgetMode::Compact | WidgetMode::Full => Ok(widget),
+    }
+}
+
+Plugin::new("weather")
+    .description("Weather information plugin")
+    .widget(dashboard_widget)
+    .dispatch();
+```
+
+The SDK handles:
+
+- `--widget`
+- `--widget --compact`
+
+See [widgets.md](widgets.md) for the full widget JSON schema and dashboard-side behavior.
+
+Widget JSON schema:
+
+```json
+{
+  "title": "Weather",
+  "refresh_interval_secs": 30,
+  "full": {
+    "type": "table",
+    "headers": ["Field", "Value"],
+    "rows": [["City", "tokyo"], ["Host", "1.0.7"]]
+  },
+  "compact": {
+    "type": "text",
+    "content": "city=tokyo"
+  }
+}
+```
+
 ## Manifest Model
 
 The SDK owns the plugin manifest model.

@@ -12,6 +12,7 @@ The dashboard currently displays:
 - `Network`
 - `CPU`
 - `Memory`
+- `Notes` when local dashboard notes exist
 - `Plugins` when trusted plugins expose widgets
 
 Example:
@@ -61,7 +62,75 @@ Supported widget names are:
 - `time`
 - `network`
 - `system`
+- `notes`
 - `plugins`
+
+Plugin widgets do not render terminal UI directly. They return structured JSON through `--widget`, and the core dashboard renders that payload in compact or full mode.
+
+For the full widget configuration and plugin widget API reference, see [widgets.md](widgets.md).
+
+Example widget payload:
+
+```json
+{
+  "title": "CPU",
+  "refresh_interval_secs": 2,
+  "full": {
+    "type": "table",
+    "headers": ["Metric", "Value"],
+    "rows": [["Usage", "18%"], ["Load", "1.42"]]
+  },
+  "compact": {
+    "type": "text",
+    "content": "18%"
+  }
+}
+```
+
+The dashboard still accepts the legacy `{ "title": "...", "content": "..." }` widget shape for older plugins.
+
+## Notes Widget
+
+The built-in `notes` widget reads from:
+
+```text
+~/.tinfo/dashboard-notes.txt
+```
+
+Manage it with:
+
+```bash
+tinfo dashboard notes show
+tinfo dashboard notes set remember to rotate keys
+tinfo dashboard notes clear
+```
+
+The widget is intentionally small and non-blocking. The dashboard reads the file and refreshes it on a short interval without pausing the rest of the render loop.
+
+## Freeze Mode
+
+Dashboard freeze mode captures one snapshot and reuses it instead of auto-refreshing.
+
+You can enable it:
+
+- temporarily with `tinfo --freeze`
+- override it with `tinfo --live`
+- persistently with `dashboard.freeze = true` in `~/.tinfo/config.toml`
+
+When freeze mode is enabled, the live dashboard loop renders once and exits with a static snapshot.
+
+Priority order:
+
+1. `--freeze`
+2. `--live`
+3. `dashboard.freeze`
+4. normal live mode
+
+Examples:
+
+- `tinfo dashboard` uses the configured default
+- `tinfo dashboard --freeze` always renders a snapshot
+- `tinfo dashboard --live` always renders live updates
 
 ## Theme Behavior
 

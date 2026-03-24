@@ -50,6 +50,7 @@ Supported top-level fields:
 - `dashboard.widgets`
 - `dashboard.refresh_interval`
 - `dashboard.compact_mode`
+- `dashboard.freeze`
 - `theme.border_style`
 - `theme.accent_color`
 - `theme.ascii_only`
@@ -71,9 +72,10 @@ Dashboard widget order:
 
 ```toml
 [dashboard]
-widgets = ["weather", "time", "network", "system", "plugins"]
+widgets = ["weather", "time", "network", "system", "notes", "plugins"]
 refresh_interval = 1
 compact_mode = false
+freeze = false
 
 [theme]
 border_style = "sharp"
@@ -101,6 +103,7 @@ Menu sections:
 - `Guided Setup`
 - `Location`
 - `Dashboard`
+- `Widgets`
 - `Default Output`
 - `Theme`
 - `Shell Completions`
@@ -221,6 +224,24 @@ Dashboard settings:
 ```bash
 tinfo dashboard config
 tinfo dashboard reset
+tinfo dashboard notes show
+tinfo dashboard notes set remember to check disk health
+tinfo dashboard notes clear
+```
+
+`dashboard.freeze = true` makes the dashboard render a single static snapshot by default.
+Use `tinfo --live` to override that setting for one run, or `tinfo --freeze` to force snapshot mode explicitly.
+See [widgets.md](widgets.md) for widget ordering, notes, and plugin widget behavior.
+
+Fast widget commands:
+
+```bash
+tinfo config widgets
+tinfo config widgets show
+tinfo config widgets add notes
+tinfo config widgets remove network
+tinfo config widgets set weather time system notes plugins
+tinfo config widgets reset
 ```
 
 ## Profiles

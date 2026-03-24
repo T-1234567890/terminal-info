@@ -264,7 +264,7 @@ accent_color = "cyan"
 ascii_only = false
 ```
 
-See [docs/dashboard.md](docs/dashboard.md).
+See [docs/dashboard.md](docs/dashboard.md) and [docs/widgets.md](docs/widgets.md).
 
 ## Configuration
 
@@ -311,7 +311,7 @@ tinfo profile list
 tinfo profile use travel
 ```
 
-See [docs/config.md](docs/config.md).
+See [docs/config.md](docs/config.md) and [docs/widgets.md](docs/widgets.md).
 
 ## Server Mode
 

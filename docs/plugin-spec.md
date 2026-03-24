@@ -46,6 +46,8 @@ Plugins should support:
 
 ```bash
 tinfo-<plugin-name> --metadata
+tinfo-<plugin-name> --widget
+tinfo-<plugin-name> --widget --compact
 ```
 
 This prints JSON like:
@@ -175,6 +177,38 @@ The SDK provides:
 - `plugin.output().progress(...)`
 - `plugin.output().table(...)`
 - `plugin.output().json(...)`
+
+## Widget output
+
+Plugins may expose a dashboard widget through `--widget`.
+
+The host owns terminal rendering. Plugins return structured JSON instead of drawing their own UI.
+
+Stable widget shape:
+
+```json
+{
+  "title": "CPU",
+  "refresh_interval_secs": 2,
+  "full": {
+    "type": "table",
+    "headers": ["Metric", "Value"],
+    "rows": [["Usage", "18%"], ["Load", "1.42"]]
+  },
+  "compact": {
+    "type": "text",
+    "content": "18%"
+  }
+}
+```
+
+Supported widget body types:
+
+- `text`
+- `list`
+- `table`
+
+Legacy widget payloads of the form `{ "title": "...", "content": "..." }` are still accepted by the host for compatibility.
 
 It also provides logging helpers:
 

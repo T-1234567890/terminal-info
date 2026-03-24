@@ -47,7 +47,7 @@ use crate::builtins::{
     run_diagnostic_system, run_ping, show_network_info, show_system_info,
 };
 use crate::cache::{read_cache, write_cache};
-use crate::config::{ApiProvider, Config, DefaultOutput, Units, config_path};
+use crate::config::{ApiProvider, Config, DefaultOutput, Units, config_path, dashboard_notes_path};
 use crate::config_menu::show_config_menu;
 use crate::output::{OutputMode, set_json_output, set_output_mode};
 use crate::plugin::{
@@ -76,8 +76,11 @@ struct Cli {
     #[arg(long, global = true)]
     json: bool,
     /// Render once and exit instead of refreshing live views
-    #[arg(long, global = true)]
+    #[arg(long, global = true, conflicts_with = "live")]
     freeze: bool,
+    /// Force live updates even when dashboard freeze is enabled in config
+    #[arg(long, global = true, conflicts_with = "freeze")]
+    live: bool,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -166,7 +169,7 @@ enum Command {
     /// Configure dashboard behavior
     Dashboard {
         #[command(subcommand)]
-        command: DashboardCommand,
+        command: Option<DashboardCommand>,
     },
     /// Manage plugins and scaffold new plugin projects
     Plugin {
@@ -248,6 +251,11 @@ enum ConfigCommand {
         #[command(subcommand)]
         command: Option<ServerCommand>,
     },
+    /// Show or change dashboard widgets
+    Widgets {
+        #[command(subcommand)]
+        command: Option<WidgetsCommand>,
+    },
     /// Open the TOML config file with the system default app
     Open,
     /// Edit the TOML config file in $EDITOR, nano, or vim
@@ -288,6 +296,20 @@ enum ServerCommand {
     Disable,
     /// Show server mode status
     Status,
+}
+
+#[derive(Subcommand, Debug)]
+enum WidgetsCommand {
+    /// Show the active widget order
+    Show,
+    /// Add a widget to the end of the dashboard
+    Add { name: String },
+    /// Remove a widget from the dashboard
+    Remove { name: String },
+    /// Replace the full widget order
+    Set { names: Vec<String> },
+    /// Reset widget order to defaults
+    Reset,
 }
 
 #[derive(Subcommand, Debug)]
@@ -431,6 +453,21 @@ enum DashboardCommand {
     Config,
     /// Reset dashboard settings
     Reset,
+    /// Manage dashboard notes
+    Notes {
+        #[command(subcommand)]
+        command: DashboardNotesCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum DashboardNotesCommand {
+    /// Show the current notes file
+    Show,
+    /// Replace notes content
+    Set { text: Vec<String> },
+    /// Clear saved notes
+    Clear,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -526,7 +563,6 @@ impl From<ProcessSortArg> for process_inspect::ProcessSort {
 
 fn main() {
     let cli = Cli::parse();
-    let freeze = should_freeze(&cli);
     let _migration_status = match migration::run_startup_migration() {
         Ok(status) => status,
         Err(err) => {
@@ -552,9 +588,11 @@ fn main() {
     set_output_mode(resolve_output_mode(&cli, &config));
     set_theme(config.theme);
     set_json_output(cli.json);
+    let live_view_freeze = resolve_live_view_freeze(&cli);
+    let dashboard_freeze = resolve_dashboard_freeze(&cli, &config);
 
     let result = match cli.command {
-        Some(Command::Weather { command }) => handle_weather(&mut config, command, freeze),
+        Some(Command::Weather { command }) => handle_weather(&mut config, command, live_view_freeze),
         Some(Command::Ping { host }) => handle_ping(&config, host),
         Some(Command::Latency { host }) => handle_latency(&config, host),
         Some(Command::Network { command }) => handle_network(command),
@@ -564,7 +602,7 @@ fn main() {
         Some(Command::Ps { limit, sort }) => {
             process_inspect::show_processes(limit, sort.into())
         }
-        Some(Command::Time { city }) => live_time(city, freeze),
+        Some(Command::Time { city }) => live_time(city, live_view_freeze),
         Some(Command::Search { query }) => search::run_search(&query),
         Some(Command::Diagnostic {
             command,
@@ -576,14 +614,14 @@ fn main() {
             handle_completion(shell);
             Ok(())
         }
-        Some(Command::Dashboard { command }) => handle_dashboard(&mut config, command),
+        Some(Command::Dashboard { command }) => handle_dashboard(&mut config, command, dashboard_freeze),
         Some(Command::Plugin { command }) => handle_plugin(command),
         Some(Command::Update) => handle_update(),
         Some(Command::SelfRepair) => handle_self_repair(),
         Some(Command::Reinstall) => handle_reinstall(),
         Some(Command::Uninstall { keep_data }) => handle_uninstall(keep_data),
         Some(Command::External(args)) => handle_external(args),
-        None => live_dashboard(&config, freeze),
+        None => live_dashboard(&config, dashboard_freeze),
     };
 
     if let Err(err) = result {
@@ -592,8 +630,26 @@ fn main() {
     }
 }
 
-fn should_freeze(cli: &Cli) -> bool {
-    cli.freeze || cli.json || !io::stdout().is_terminal()
+fn resolve_live_view_freeze(cli: &Cli) -> bool {
+    if cli.freeze {
+        true
+    } else if cli.live {
+        false
+    } else {
+        cli.json || !io::stdout().is_terminal()
+    }
+}
+
+fn resolve_dashboard_freeze(cli: &Cli, config: &Config) -> bool {
+    if cli.freeze {
+        true
+    } else if cli.live {
+        false
+    } else if config.effective_dashboard().freeze {
+        true
+    } else {
+        cli.json || !io::stdout().is_terminal()
+    }
 }
 
 fn should_run_first_run_setup(cli: &Cli, config: &Config) -> bool {
@@ -747,10 +803,11 @@ enum WeatherView {
 
 fn live_dashboard(config: &Config, freeze: bool) -> Result<(), String> {
     let effective_dashboard = config.effective_dashboard();
+    let mut renderer = dashboard::DashboardRenderer::new(config.clone());
     run_live_loop(
         Duration::from_secs(effective_dashboard.refresh_interval.max(1)),
         freeze,
-        || Ok(dashboard::dashboard_output(config)),
+        || Ok(renderer.render()),
     )
 }
 
@@ -909,6 +966,7 @@ fn handle_config(config: &mut Config, command: Option<ConfigCommand>) -> Result<
             }
         },
         Some(ConfigCommand::Server { command }) => handle_server_mode(config, command),
+        Some(ConfigCommand::Widgets { command }) => handle_widgets_config(config, command),
         Some(ConfigCommand::Open) => handle_config_open(config),
         Some(ConfigCommand::Edit) => handle_config_edit(config),
         Some(ConfigCommand::Reset) => {
@@ -921,6 +979,94 @@ fn handle_config(config: &mut Config, command: Option<ConfigCommand>) -> Result<
         None => {
             show_config_menu(config)?;
             print_advanced_config_hint()?;
+            Ok(())
+        }
+    }
+}
+
+const SUPPORTED_DASHBOARD_WIDGETS: &[&str] = &[
+    "weather",
+    "time",
+    "network",
+    "system",
+    "notes",
+    "plugins",
+];
+
+fn normalize_widget_name(name: &str) -> Result<String, String> {
+    let normalized = name.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return Err("Widget name cannot be empty.".to_string());
+    }
+    if SUPPORTED_DASHBOARD_WIDGETS.contains(&normalized.as_str()) {
+        Ok(normalized)
+    } else {
+        Err(format!(
+            "Unsupported widget '{}'. Supported widgets: {}.",
+            name,
+            SUPPORTED_DASHBOARD_WIDGETS.join(", ")
+        ))
+    }
+}
+
+fn handle_widgets_config(
+    config: &mut Config,
+    command: Option<WidgetsCommand>,
+) -> Result<(), String> {
+    match command.unwrap_or(WidgetsCommand::Show) {
+        WidgetsCommand::Show => {
+            println!("Dashboard widgets: {}", config.dashboard.widgets.join(", "));
+            Ok(())
+        }
+        WidgetsCommand::Add { name } => {
+            let name = normalize_widget_name(&name)?;
+            if config.dashboard.widgets.iter().any(|item| item == &name) {
+                println!("Widget '{}' is already enabled.", name);
+                return Ok(());
+            }
+            config.dashboard.widgets.push(name.clone());
+            config.save()?;
+            println!("Added widget '{}'.", name);
+            Ok(())
+        }
+        WidgetsCommand::Remove { name } => {
+            let name = normalize_widget_name(&name)?;
+            let before = config.dashboard.widgets.len();
+            config.dashboard.widgets.retain(|item| item != &name);
+            if before == config.dashboard.widgets.len() {
+                println!("Widget '{}' is not enabled.", name);
+                return Ok(());
+            }
+            config.save()?;
+            println!("Removed widget '{}'.", name);
+            Ok(())
+        }
+        WidgetsCommand::Set { names } => {
+            if names.is_empty() {
+                return Err("Provide at least one widget name.".to_string());
+            }
+            let mut widgets = Vec::new();
+            for name in names {
+                let name = normalize_widget_name(&name)?;
+                if !widgets.iter().any(|item| item == &name) {
+                    widgets.push(name);
+                }
+            }
+            config.dashboard.widgets = widgets;
+            config.save()?;
+            println!(
+                "Dashboard widgets set to: {}",
+                config.dashboard.widgets.join(", ")
+            );
+            Ok(())
+        }
+        WidgetsCommand::Reset => {
+            config.dashboard.widgets = crate::config::DashboardConfig::default().widgets;
+            config.save()?;
+            println!(
+                "Dashboard widgets reset to: {}",
+                config.dashboard.widgets.join(", ")
+            );
             Ok(())
         }
     }
@@ -1245,18 +1391,66 @@ fn handle_profile(config: &mut Config, command: ProfileCommand) -> Result<(), St
     }
 }
 
-fn handle_dashboard(config: &mut Config, command: DashboardCommand) -> Result<(), String> {
+fn handle_dashboard(
+    config: &mut Config,
+    command: Option<DashboardCommand>,
+    freeze: bool,
+) -> Result<(), String> {
     match command {
-        DashboardCommand::Config => {
+        None => live_dashboard(config, freeze),
+        Some(DashboardCommand::Config) => {
             println!("Refresh interval: {}s", config.dashboard.refresh_interval);
             println!("Compact mode: {}", config.dashboard.compact_mode);
+            println!("Freeze mode: {}", config.dashboard.freeze);
             println!("Enabled widgets: {}", config.dashboard.widgets.join(", "));
             Ok(())
         }
-        DashboardCommand::Reset => {
+        Some(DashboardCommand::Reset) => {
             config.dashboard = crate::config::DashboardConfig::default();
             config.save()?;
             println!("Dashboard configuration reset.");
+            Ok(())
+        }
+        Some(DashboardCommand::Notes { command }) => handle_dashboard_notes(command),
+    }
+}
+
+fn handle_dashboard_notes(command: DashboardNotesCommand) -> Result<(), String> {
+    let path = dashboard_notes_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("Failed to create notes directory: {err}"))?;
+    }
+
+    match command {
+        DashboardNotesCommand::Show => {
+            let contents = fs::read_to_string(&path).unwrap_or_default();
+            if contents.trim().is_empty() {
+                println!("No dashboard notes saved.");
+            } else {
+                print!("{contents}");
+                if !contents.ends_with('\n') {
+                    println!();
+                }
+            }
+            Ok(())
+        }
+        DashboardNotesCommand::Set { text } => {
+            let body = text.join(" ").trim().to_string();
+            if body.is_empty() {
+                return Err("Dashboard notes cannot be empty.".to_string());
+            }
+            fs::write(&path, format!("{body}\n"))
+                .map_err(|err| format!("Failed to write dashboard notes: {err}"))?;
+            println!("Dashboard notes updated: {}", path.display());
+            Ok(())
+        }
+        DashboardNotesCommand::Clear => {
+            if path.exists() {
+                fs::remove_file(&path)
+                    .map_err(|err| format!("Failed to clear dashboard notes: {err}"))?;
+            }
+            println!("Dashboard notes cleared.");
             Ok(())
         }
     }
@@ -1636,6 +1830,59 @@ fn handle_uninstall(keep_data: bool) -> Result<(), String> {
 
     println!("Terminal Info successfully removed.");
     Ok(())
+}
+
+#[cfg(test)]
+mod dashboard_mode_tests {
+    use super::*;
+
+    #[test]
+    fn dashboard_freeze_flag_overrides_live_and_config() {
+        let cli = Cli {
+            plain: false,
+            compact: false,
+            color: false,
+            json: false,
+            freeze: true,
+            live: true,
+            command: None,
+        };
+        let mut config = Config::default();
+        config.dashboard.freeze = false;
+        assert!(resolve_dashboard_freeze(&cli, &config));
+    }
+
+    #[test]
+    fn dashboard_live_flag_overrides_config_freeze() {
+        let cli = Cli {
+            plain: false,
+            compact: false,
+            color: false,
+            json: false,
+            freeze: false,
+            live: true,
+            command: None,
+        };
+        let mut config = Config::default();
+        config.dashboard.freeze = true;
+        assert!(!resolve_dashboard_freeze(&cli, &config));
+    }
+
+    #[test]
+    fn dashboard_config_freeze_applies_without_flags() {
+        let cli = Cli {
+            plain: false,
+            compact: false,
+            color: false,
+            json: false,
+            freeze: false,
+            live: false,
+            command: None,
+        };
+        let mut config = Config::default();
+        config.dashboard.freeze = true;
+        assert!(resolve_dashboard_freeze(&cli, &config));
+    }
 }
 
 fn find_tinfo_binary() -> Result<PathBuf, String> {

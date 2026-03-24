@@ -16,6 +16,7 @@ pub fn show_config_menu(config: &mut Config) -> Result<(), String> {
             "Guided Setup",
             "Location",
             "Dashboard",
+            "Widgets",
             "Default Output",
             "Theme",
             "Shell Completions",
@@ -37,19 +38,20 @@ pub fn show_config_menu(config: &mut Config) -> Result<(), String> {
             Some(0) => run_first_run_setup(config)?,
             Some(1) => show_location_menu(config, &theme)?,
             Some(2) => show_dashboard_menu(config, &theme)?,
-            Some(3) => show_output_menu(config, &theme)?,
-            Some(4) => show_theme_menu(config, &theme)?,
-            Some(5) => show_completion_menu(&theme)?,
-            Some(6) => show_units_menu(config, &theme)?,
-            Some(7) => show_api_menu(config, &theme)?,
-            Some(8) => show_server_mode_menu(config, &theme)?,
-            Some(9) => show_advanced_config_menu(config, &theme)?,
-            Some(10) => {
+            Some(3) => show_widgets_menu(config, &theme)?,
+            Some(4) => show_output_menu(config, &theme)?,
+            Some(5) => show_theme_menu(config, &theme)?,
+            Some(6) => show_completion_menu(&theme)?,
+            Some(7) => show_units_menu(config, &theme)?,
+            Some(8) => show_api_menu(config, &theme)?,
+            Some(9) => show_server_mode_menu(config, &theme)?,
+            Some(10) => show_advanced_config_menu(config, &theme)?,
+            Some(11) => {
                 config.reset();
                 config.save()?;
                 println!("Configuration reset.");
             }
-            Some(11) | None => break,
+            Some(12) | None => break,
             Some(_) => {}
         }
     }
@@ -204,6 +206,7 @@ fn show_dashboard_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(),
             "Apply a dashboard preset",
             "Set refresh interval",
             "Toggle compact mode",
+            "Toggle freeze mode",
             "Back",
         ];
         let selection = Select::with_theme(theme)
@@ -230,8 +233,95 @@ fn show_dashboard_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(),
                 config.save()?;
                 println!("Dashboard compact mode: {}", config.dashboard.compact_mode);
             }
+            Some(3) => {
+                config.dashboard.freeze = !config.dashboard.freeze;
+                config.save()?;
+                println!("Dashboard freeze mode: {}", config.dashboard.freeze);
+            }
+            Some(4) | None => break,
+            Some(_) => {}
+        }
+    }
+
+    Ok(())
+}
+
+const SUPPORTED_WIDGETS: &[&str] = &["weather", "time", "network", "system", "notes", "plugins"];
+
+fn show_widgets_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
+    loop {
+        let items = [
+            "Show current widget order",
+            "Toggle widgets",
+            "Reset widget order",
+            "Back",
+        ];
+        let selection = Select::with_theme(theme)
+            .with_prompt("Widgets")
+            .items(&items)
+            .default(0)
+            .interact_opt()
+            .map_err(|err| format!("Failed to read widgets selection: {err}"))?;
+
+        match selection {
+            Some(0) => {
+                println!("Dashboard widgets: {}", config.dashboard.widgets.join(", "));
+            }
+            Some(1) => {
+                toggle_widgets(config, theme)?;
+            }
+            Some(2) => {
+                config.dashboard.widgets = DashboardConfig::default().widgets;
+                config.save()?;
+                println!("Widget order reset to defaults.");
+            }
             Some(3) | None => break,
             Some(_) => {}
+        }
+    }
+
+    Ok(())
+}
+
+fn toggle_widgets(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
+    loop {
+        let current = SUPPORTED_WIDGETS
+            .iter()
+            .map(|widget| {
+                if config.dashboard.widgets.iter().any(|value| value == widget) {
+                    format!("[x] {widget}")
+                } else {
+                    format!("[ ] {widget}")
+                }
+            })
+            .chain(std::iter::once("Back".to_string()))
+            .collect::<Vec<_>>();
+
+        let selection = Select::with_theme(theme)
+            .with_prompt("Toggle dashboard widgets")
+            .items(&current)
+            .default(0)
+            .interact_opt()
+            .map_err(|err| format!("Failed to read widget toggle selection: {err}"))?;
+
+        match selection {
+            Some(index) if index < SUPPORTED_WIDGETS.len() => {
+                let widget = SUPPORTED_WIDGETS[index];
+                if let Some(position) = config
+                    .dashboard
+                    .widgets
+                    .iter()
+                    .position(|value| value == widget)
+                {
+                    config.dashboard.widgets.remove(position);
+                    println!("Disabled widget '{widget}'.");
+                } else {
+                    config.dashboard.widgets.push(widget.to_string());
+                    println!("Enabled widget '{widget}'.");
+                }
+                config.save()?;
+            }
+            Some(_) | None => break,
         }
     }
 

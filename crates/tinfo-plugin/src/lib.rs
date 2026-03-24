@@ -45,6 +45,7 @@ mod context;
 mod error;
 mod manifest;
 mod output;
+mod widget;
 pub mod testing;
 
 use std::collections::BTreeMap;
@@ -60,8 +61,11 @@ pub use manifest::{
     PluginMetadata, SUPPORTED_PLUGIN_API,
 };
 pub use output::{Log, Output, StatusLevel, Table};
+pub use widget::{Widget, WidgetBody, WidgetMode};
 
 use context::{RuntimeHost, RuntimeState};
+
+pub type WidgetHandler = Arc<dyn Fn(Context, WidgetMode) -> PluginResult<Widget> + Send + Sync>;
 
 /// Declarative plugin application.
 ///
@@ -71,6 +75,7 @@ pub struct Plugin {
     metadata: PluginMetadata,
     commands: Vec<PluginCommand>,
     default_handler: Option<CommandHandler>,
+    widget_handler: Option<WidgetHandler>,
 }
 
 impl Plugin {
@@ -84,6 +89,7 @@ impl Plugin {
             ),
             commands: Vec::new(),
             default_handler: None,
+            widget_handler: None,
         }
     }
 
@@ -157,6 +163,18 @@ impl Plugin {
         self.default_handler(move |ctx, _| handler(ctx)).dispatch()
     }
 
+    /// Register a structured dashboard widget handler.
+    ///
+    /// The host owns rendering. Plugins return a stable widget payload, and
+    /// the host chooses how to display it in compact or full mode.
+    pub fn widget<F>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, WidgetMode) -> PluginResult<Widget> + Send + Sync + 'static,
+    {
+        self.widget_handler = Some(Arc::new(handler));
+        self
+    }
+
     /// Execute the plugin using environment-provided host state.
     pub fn dispatch(self) {
         if let Err(err) = self.execute_from_env() {
@@ -187,6 +205,20 @@ impl Plugin {
         config: ConfigContext,
         args: Vec<String>,
     ) -> PluginResult<()> {
+        if args.first().map(String::as_str) == Some("--widget") {
+            let mode = if args.iter().any(|arg| arg == "--compact") {
+                WidgetMode::Compact
+            } else {
+                WidgetMode::Full
+            };
+            let handler = self.widget_handler.ok_or_else(|| {
+                PluginError::new("plugin does not provide a dashboard widget")
+            })?;
+            let widget = handler(Context::new(state.clone(), config), mode)?;
+            state.write_stdout(&serde_json::to_string_pretty(&widget)?);
+            return Ok(());
+        }
+
         if args.first().map(String::as_str) == Some("--metadata") {
             state.write_stdout(&serde_json::to_string_pretty(&self.metadata)?);
             return Ok(());
@@ -238,6 +270,10 @@ impl Plugin {
         }
         lines.push(String::new());
         lines.push("Flags:".to_string());
+        if self.widget_handler.is_some() {
+            lines.push("  --widget      Print dashboard widget JSON".to_string());
+            lines.push("  --widget --compact  Print compact dashboard widget JSON".to_string());
+        }
         lines.push("  --metadata    Print plugin metadata as JSON".to_string());
         lines.push("  --manifest    Print the generated plugin.toml".to_string());
         lines.push("  --help        Print this help output".to_string());
