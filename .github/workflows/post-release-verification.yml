@@ -205,6 +205,26 @@ jobs:
     if: always()
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Set tag
+        shell: bash
+        run: |
+          git fetch --force --tags origin
+          TAG="$(git tag --points-at "${{ github.event.workflow_run.head_sha }}" | head -n 1)"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.event.workflow_run.head_branch }}"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "Unable to determine release tag for workflow run."
+            exit 1
+          fi
+          echo "Resolved release tag: $TAG"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
       - uses: actions/download-artifact@v4
         with:
           path: results
@@ -238,6 +258,7 @@ jobs:
               : '✅ Passed';
 
             const date = new Date().toISOString().slice(0, 10);
+            const tag = process.env.TAG;
 
             const report = [
               "## Post-release verification",
@@ -257,22 +278,25 @@ jobs:
               "",
               "---",
               "",
+              `**Release:** ${tag}`,
+              "",
               `**Date:** ${date}`
             ].join('\n');
 
-            const { data: releases } = await github.rest.repos.listReleases({
+            const { data: release } = await github.rest.repos.getReleaseByTag({
               owner: context.repo.owner,
-              repo: context.repo.repo
+              repo: context.repo.repo,
+              tag
             });
-
-            const release = releases[0];
 
             const current = release.body || '';
             const regex = /## Post-release verification[\s\S]*?(?=\n##|\n#|$)/;
 
             const body = regex.test(current)
               ? current.replace(regex, report)
-              : current + "\n\n" + report;
+              : current.trim()
+                ? current.trim() + "\n\n" + report
+                : report;
 
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,
