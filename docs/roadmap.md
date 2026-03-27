@@ -55,7 +55,7 @@ Make the dashboard a **first-class feature**
 
 ## ⏱️ v1.2.x — Productivity Tools
 
-**Status:** Planned
+**Status:** In progress
 
 ### 🎯 Goals
 Add simple, useful tools that improve everyday terminal workflows
