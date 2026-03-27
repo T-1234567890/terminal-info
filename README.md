@@ -572,6 +572,9 @@ tinfo profile remove office
 >
 >This is a standard repository maintenance process and does not impact the functionality or integrity of the project.
 
+## 📈 Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=T-1234567890/terminal-info&type=date&theme=light)](https://www.star-history.com/#T-1234567890/terminal-info&Date)
 
 ## Disclaimer
 
