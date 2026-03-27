@@ -1,6 +1,8 @@
 use dialoguer::{Confirm, Input, Password, Select, theme::ColorfulTheme};
 
-use crate::config::{ApiProvider, Config, DashboardConfig, DefaultOutput, Units, config_path};
+use crate::config::{
+    ApiProvider, Config, DashboardConfig, DefaultOutput, TaskSortOrder, Units, config_path,
+};
 use crate::theme::{AccentColor, BorderStyle};
 use crate::{
     completion_status_for_current_shell, handle_config_edit, handle_config_open,
@@ -17,6 +19,10 @@ pub fn show_config_menu(config: &mut Config) -> Result<(), String> {
             "Location",
             "Dashboard",
             "Widgets",
+            "Tasks",
+            "Notes",
+            "Timer",
+            "Reminders",
             "Default Output",
             "Theme",
             "Shell Completions",
@@ -39,19 +45,23 @@ pub fn show_config_menu(config: &mut Config) -> Result<(), String> {
             Some(1) => show_location_menu(config, &theme)?,
             Some(2) => show_dashboard_menu(config, &theme)?,
             Some(3) => show_widgets_menu(config, &theme)?,
-            Some(4) => show_output_menu(config, &theme)?,
-            Some(5) => show_theme_menu(config, &theme)?,
-            Some(6) => show_completion_menu(&theme)?,
-            Some(7) => show_units_menu(config, &theme)?,
-            Some(8) => show_api_menu(config, &theme)?,
-            Some(9) => show_server_mode_menu(config, &theme)?,
-            Some(10) => show_advanced_config_menu(config, &theme)?,
-            Some(11) => {
+            Some(4) => show_tasks_menu(config, &theme)?,
+            Some(5) => show_notes_menu(config, &theme)?,
+            Some(6) => show_timer_menu(config, &theme)?,
+            Some(7) => show_reminders_menu(config, &theme)?,
+            Some(8) => show_output_menu(config, &theme)?,
+            Some(9) => show_theme_menu(config, &theme)?,
+            Some(10) => show_completion_menu(&theme)?,
+            Some(11) => show_units_menu(config, &theme)?,
+            Some(12) => show_api_menu(config, &theme)?,
+            Some(13) => show_server_mode_menu(config, &theme)?,
+            Some(14) => show_advanced_config_menu(config, &theme)?,
+            Some(15) => {
                 config.reset();
                 config.save()?;
                 println!("Configuration reset.");
             }
-            Some(12) | None => break,
+            Some(16) | None => break,
             Some(_) => {}
         }
     }
@@ -78,6 +88,197 @@ pub fn run_first_run_setup(config: &mut Config) -> Result<(), String> {
     println!(
         "Run `tinfo config` any time to adjust location, dashboard, output, theme, or shell integrations."
     );
+    Ok(())
+}
+
+fn show_tasks_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
+    loop {
+        let items = [
+            "Toggle show completed tasks",
+            "Set default sort order",
+            "Set max tasks displayed in widget",
+            "Toggle auto-remove completed tasks",
+            "Back",
+        ];
+        let selection = Select::with_theme(theme)
+            .with_prompt("Tasks")
+            .items(&items)
+            .default(0)
+            .interact_opt()
+            .map_err(|err| format!("Failed to read tasks selection: {err}"))?;
+
+        match selection {
+            Some(0) => {
+                config.tasks.show_completed = !config.tasks.show_completed;
+                config.save()?;
+                println!("Show completed tasks: {}", config.tasks.show_completed);
+            }
+            Some(1) => {
+                let items = ["created", "status", "Keep current"];
+                let default = match config.tasks.sort_order {
+                    TaskSortOrder::Created => 0,
+                    TaskSortOrder::Status => 1,
+                };
+                let selection = Select::with_theme(theme)
+                    .with_prompt("Default task sort order")
+                    .items(&items)
+                    .default(default)
+                    .interact_opt()
+                    .map_err(|err| format!("Failed to read task sort order: {err}"))?;
+                match selection {
+                    Some(0) => config.tasks.sort_order = TaskSortOrder::Created,
+                    Some(1) => config.tasks.sort_order = TaskSortOrder::Status,
+                    _ => {}
+                }
+                config.save()?;
+            }
+            Some(2) => {
+                let max_display: usize = Input::with_theme(theme)
+                    .with_prompt("Max tasks displayed in widget")
+                    .default(config.tasks.max_display.max(1))
+                    .interact_text()
+                    .map_err(|err| format!("Failed to read task widget limit: {err}"))?;
+                config.tasks.max_display = max_display.max(1);
+                config.save()?;
+            }
+            Some(3) => {
+                config.tasks.auto_remove_completed = !config.tasks.auto_remove_completed;
+                config.save()?;
+                println!(
+                    "Auto-remove completed tasks: {}",
+                    config.tasks.auto_remove_completed
+                );
+            }
+            Some(4) | None => break,
+            Some(_) => {}
+        }
+    }
+    Ok(())
+}
+
+fn show_notes_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
+    loop {
+        let items = ["Set max notes stored", "Toggle notes widget", "Back"];
+        let selection = Select::with_theme(theme)
+            .with_prompt("Notes")
+            .items(&items)
+            .default(0)
+            .interact_opt()
+            .map_err(|err| format!("Failed to read notes selection: {err}"))?;
+        match selection {
+            Some(0) => {
+                let max_stored: usize = Input::with_theme(theme)
+                    .with_prompt("Max notes stored")
+                    .default(config.notes.max_stored.max(1))
+                    .interact_text()
+                    .map_err(|err| format!("Failed to read max notes stored: {err}"))?;
+                config.notes.max_stored = max_stored.max(1);
+                config.save()?;
+            }
+            Some(1) => {
+                config.notes.show_in_widget = !config.notes.show_in_widget;
+                config.save()?;
+                println!("Notes widget enabled: {}", config.notes.show_in_widget);
+            }
+            Some(2) | None => break,
+            Some(_) => {}
+        }
+    }
+    Ok(())
+}
+
+fn show_timer_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
+    loop {
+        let items = [
+            "Set default timer duration",
+            "Toggle timer auto-start",
+            "Toggle timer widget",
+            "Back",
+        ];
+        let selection = Select::with_theme(theme)
+            .with_prompt("Timer")
+            .items(&items)
+            .default(0)
+            .interact_opt()
+            .map_err(|err| format!("Failed to read timer selection: {err}"))?;
+        match selection {
+            Some(0) => {
+                let duration: String = Input::with_theme(theme)
+                    .with_prompt("Default timer duration")
+                    .default(config.timer.default_duration.clone())
+                    .interact_text()
+                    .map_err(|err| format!("Failed to read default timer duration: {err}"))?;
+                if !duration.trim().is_empty() {
+                    config.timer.default_duration = duration.trim().to_string();
+                    config.save()?;
+                }
+            }
+            Some(1) => {
+                config.timer.auto_start = !config.timer.auto_start;
+                config.save()?;
+                println!("Timer auto-start: {}", config.timer.auto_start);
+            }
+            Some(2) => {
+                config.timer.show_in_widget = !config.timer.show_in_widget;
+                config.save()?;
+                println!("Timer widget enabled: {}", config.timer.show_in_widget);
+            }
+            Some(3) | None => break,
+            Some(_) => {}
+        }
+    }
+    Ok(())
+}
+
+fn show_reminders_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
+    loop {
+        let items = [
+            "Set default reminder duration",
+            "Toggle notifications",
+            "Toggle sound alerts",
+            "Toggle visual alerts",
+            "Back",
+        ];
+        let selection = Select::with_theme(theme)
+            .with_prompt("Reminders")
+            .items(&items)
+            .default(0)
+            .interact_opt()
+            .map_err(|err| format!("Failed to read reminder selection: {err}"))?;
+        match selection {
+            Some(0) => {
+                let duration: String = Input::with_theme(theme)
+                    .with_prompt("Default reminder duration")
+                    .default(config.reminders.default_duration.clone())
+                    .interact_text()
+                    .map_err(|err| format!("Failed to read default reminder duration: {err}"))?;
+                if !duration.trim().is_empty() {
+                    config.reminders.default_duration = duration.trim().to_string();
+                    config.save()?;
+                }
+            }
+            Some(1) => {
+                config.reminders.enable_notifications = !config.reminders.enable_notifications;
+                config.save()?;
+                println!(
+                    "Reminder notifications enabled: {}",
+                    config.reminders.enable_notifications
+                );
+            }
+            Some(2) => {
+                config.reminders.sound_alert = !config.reminders.sound_alert;
+                config.save()?;
+                println!("Reminder sound alerts: {}", config.reminders.sound_alert);
+            }
+            Some(3) => {
+                config.reminders.visual_alert = !config.reminders.visual_alert;
+                config.save()?;
+                println!("Reminder visual alerts: {}", config.reminders.visual_alert);
+            }
+            Some(4) | None => break,
+            Some(_) => {}
+        }
+    }
     Ok(())
 }
 
@@ -246,7 +447,18 @@ fn show_dashboard_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(),
     Ok(())
 }
 
-const SUPPORTED_WIDGETS: &[&str] = &["weather", "time", "network", "system", "notes", "plugins"];
+const SUPPORTED_WIDGETS: &[&str] = &[
+    "weather",
+    "time",
+    "network",
+    "system",
+    "timer",
+    "tasks",
+    "notes",
+    "history",
+    "reminders",
+    "plugins",
+];
 
 fn show_widgets_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
     loop {

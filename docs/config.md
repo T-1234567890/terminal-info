@@ -51,6 +51,19 @@ Supported top-level fields:
 - `dashboard.refresh_interval`
 - `dashboard.compact_mode`
 - `dashboard.freeze`
+- `tasks.show_completed`
+- `tasks.sort_order`
+- `tasks.max_display`
+- `tasks.auto_remove_completed`
+- `notes.max_stored`
+- `notes.show_in_widget`
+- `timer.default_duration`
+- `timer.auto_start`
+- `timer.show_in_widget`
+- `reminders.default_duration`
+- `reminders.enable_notifications`
+- `reminders.sound_alert`
+- `reminders.visual_alert`
 - `theme.border_style`
 - `theme.accent_color`
 - `theme.ascii_only`
@@ -72,10 +85,31 @@ Dashboard widget order:
 
 ```toml
 [dashboard]
-widgets = ["weather", "time", "network", "system", "notes", "plugins"]
+widgets = ["weather", "time", "network", "system", "timer", "tasks", "notes", "history", "reminders", "plugins"]
 refresh_interval = 1
 compact_mode = false
 freeze = false
+
+[tasks]
+show_completed = true
+sort_order = "created"
+max_display = 5
+auto_remove_completed = false
+
+[notes]
+max_stored = 50
+show_in_widget = true
+
+[timer]
+default_duration = "25m"
+auto_start = false
+show_in_widget = true
+
+[reminders]
+default_duration = "15m"
+enable_notifications = true
+sound_alert = true
+visual_alert = true
 
 [theme]
 border_style = "sharp"
@@ -94,6 +128,7 @@ Run:
 
 ```bash
 tinfo config
+tinfo configure
 ```
 
 This opens the interactive menu built with `dialoguer`.
@@ -104,6 +139,10 @@ Menu sections:
 - `Location`
 - `Dashboard`
 - `Widgets`
+- `Tasks`
+- `Notes`
+- `Timer`
+- `Reminders`
 - `Default Output`
 - `Theme`
 - `Shell Completions`
@@ -238,11 +277,26 @@ Fast widget commands:
 ```bash
 tinfo config widgets
 tinfo config widgets show
-tinfo config widgets add notes
+tinfo config widgets add timer
 tinfo config widgets remove network
-tinfo config widgets set weather time system notes plugins
+tinfo config widgets set weather time system timer tasks notes history reminders plugins
 tinfo config widgets reset
 ```
+
+Productivity tool state is stored separately in:
+
+```text
+~/.tinfo/data/
+```
+
+This directory contains small JSON files for timers, tasks, notes, and reminders.
+
+Productivity settings:
+
+- `Tasks` controls completed-task visibility, task sort order, widget limits, and auto-removal
+- `Notes` controls note retention and widget visibility
+- `Timer` controls default duration, auto-start, and widget visibility
+- `Reminders` controls default reminder duration plus notification, sound, and visual alert behavior
 
 ## Profiles
 

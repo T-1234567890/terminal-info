@@ -4,7 +4,7 @@ Terminal Info widgets are small dashboard data sources. They do not own layout o
 
 Widgets come in two forms:
 
-- built-in widgets such as `weather`, `time`, `network`, `system`, and `notes`
+- built-in widgets such as `weather`, `time`, `network`, `system`, `timer`, `tasks`, `notes`, `history`, and `reminders`
 - plugin widgets returned by trusted plugins through `--widget`
 
 ## Dashboard Configuration
@@ -13,7 +13,7 @@ Widget order is configured in `~/.tinfo/config.toml`:
 
 ```toml
 [dashboard]
-widgets = ["weather", "time", "network", "system", "notes", "plugins"]
+widgets = ["weather", "time", "network", "system", "timer", "tasks", "notes", "history", "reminders", "plugins"]
 refresh_interval = 1
 compact_mode = false
 freeze = false
@@ -25,13 +25,23 @@ Supported built-in widget names:
 - `time`
 - `network`
 - `system`
+- `timer`
+- `tasks`
 - `notes`
+- `history`
+- `reminders`
 - `plugins`
 
 Notes:
 
 - `plugins` renders all trusted plugin widgets
-- `notes` renders only when `~/.tinfo/dashboard-notes.txt` exists and contains non-empty lines
+- productivity widgets read local state from `~/.tinfo/data/`
+- `notes` renders recent note entries from `~/.tinfo/data/notes.json`
+- `tasks` renders the latest tasks from `~/.tinfo/data/tasks.json`
+- `timer` renders the active stopwatch or countdown from `~/.tinfo/data/timer.json`
+- `history` renders recent shell history entries
+- `reminders` renders the next scheduled reminder from `~/.tinfo/data/reminders.json`
+- reminder entries include `id`, `message`, `trigger_at`, and `triggered`
 - `freeze = true` captures one snapshot and reuses it instead of refreshing live
 - `refresh_interval` controls the dashboard loop; plugin widgets can also provide their own refresh hint
 
@@ -39,9 +49,9 @@ Quick widget commands:
 
 ```bash
 tinfo config widgets show
-tinfo config widgets add notes
+tinfo config widgets add timer
 tinfo config widgets remove network
-tinfo config widgets set weather time system notes plugins
+tinfo config widgets set weather time system timer tasks notes history reminders plugins
 tinfo config widgets reset
 ```
 
@@ -53,17 +63,34 @@ tinfo config
 
 Then open the `Widgets` submenu.
 
-## Notes Widget
+## Productivity Widgets
 
-The built-in notes widget stores plain text in:
+Built-in productivity widgets use small JSON files in:
 
 ```text
-~/.tinfo/dashboard-notes.txt
+~/.tinfo/data/
 ```
 
-Manage it with:
+Commands:
 
 ```bash
+tinfo timer
+tinfo timer start
+tinfo timer start 25m
+tinfo timer stop
+tinfo stopwatch start
+tinfo stopwatch stop
+tinfo task
+tinfo task add finish README
+tinfo task list
+tinfo task done 1
+tinfo task delete 1
+tinfo note add remember to rotate keys
+tinfo note list
+tinfo history --limit 10
+tinfo remind
+tinfo remind 15m stand up
+tinfo remind 14:30 stand up
 tinfo dashboard notes show
 tinfo dashboard notes set remember to rotate keys
 tinfo dashboard notes clear
@@ -71,9 +98,14 @@ tinfo dashboard notes clear
 
 Rendering behavior:
 
-- full mode shows up to a few note lines as a list
-- compact mode shows only the first note line
-- notes are re-read on a short interval and do not block the rest of the dashboard
+- `timer` shows the active countdown and stopwatch state together and refreshes every second
+- `tasks` shows recent tasks based on the task settings in `config.toml`
+- `notes` shows recent note entries as a list
+- `history` shows recent shell commands without requiring shell integration beyond a normal history file
+- `reminders` shows upcoming reminders as a list and refreshes every few seconds
+- compact mode reduces each widget to a single summary line
+- all productivity widgets are re-read on short intervals and do not block the rest of the dashboard
+- `tinfo remind ...` schedules the reminder and opens the live dashboard so the scheduler is active immediately
 
 ## Plugin Widget API
 

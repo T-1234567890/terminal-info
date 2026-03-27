@@ -12,7 +12,7 @@ The dashboard currently displays:
 - `Network`
 - `CPU`
 - `Memory`
-- `Notes` when local dashboard notes exist
+- `Timer`, `Tasks`, `Notes`, `History`, and `Reminder` when local productivity state exists
 - `Plugins` when trusted plugins expose widgets
 
 Example:
@@ -53,7 +53,7 @@ Dashboard widgets can be ordered in the config file:
 
 ```toml
 [dashboard]
-widgets = ["weather", "time", "network", "system", "plugins"]
+widgets = ["weather", "time", "network", "system", "timer", "tasks", "notes", "history", "reminders", "plugins"]
 ```
 
 Supported widget names are:
@@ -62,7 +62,11 @@ Supported widget names are:
 - `time`
 - `network`
 - `system`
+- `timer`
+- `tasks`
 - `notes`
+- `history`
+- `reminders`
 - `plugins`
 
 Plugin widgets do not render terminal UI directly. They return structured JSON through `--widget`, and the core dashboard renders that payload in compact or full mode.
@@ -89,23 +93,37 @@ Example widget payload:
 
 The dashboard still accepts the legacy `{ "title": "...", "content": "..." }` widget shape for older plugins.
 
-## Notes Widget
+## Productivity Widgets
 
-The built-in `notes` widget reads from:
+Productivity widget state is stored in:
 
 ```text
-~/.tinfo/dashboard-notes.txt
+~/.tinfo/data/
 ```
 
-Manage it with:
+Commands:
 
 ```bash
+tinfo timer
+tinfo timer start 25m
+tinfo timer stop
+tinfo stopwatch start
+tinfo stopwatch stop
+tinfo task add finish README
+tinfo task list
+tinfo task done 1
+tinfo note add remember to rotate keys
+tinfo note list
+tinfo history --limit 10
+tinfo remind 15m stand up
 tinfo dashboard notes show
 tinfo dashboard notes set remember to rotate keys
 tinfo dashboard notes clear
 ```
 
-The widget is intentionally small and non-blocking. The dashboard reads the file and refreshes it on a short interval without pausing the rest of the render loop.
+The widgets are intentionally small and non-blocking. The dashboard reads local JSON state and shell history on short intervals without pausing the rest of the render loop.
+
+The dashboard also acts as the reminder scheduler. `tinfo remind ...` writes reminder data to `~/.tinfo/data/reminders.json`, prints `Note: reminders trigger while the dashboard is running.`, and opens the live dashboard. While the dashboard is running it checks for due reminders, marks them as triggered, rings the terminal bell, and shows a temporary alert row.
 
 ## Freeze Mode
 

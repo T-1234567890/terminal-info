@@ -77,6 +77,97 @@ pub struct DashboardConfig {
     pub freeze: bool,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Default, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum TaskSortOrder {
+    #[default]
+    Created,
+    Status,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct TasksConfig {
+    #[serde(default = "default_tasks_show_completed")]
+    pub show_completed: bool,
+    #[serde(default)]
+    pub sort_order: TaskSortOrder,
+    #[serde(default = "default_tasks_max_display")]
+    pub max_display: usize,
+    #[serde(default)]
+    pub auto_remove_completed: bool,
+}
+
+impl Default for TasksConfig {
+    fn default() -> Self {
+        Self {
+            show_completed: default_tasks_show_completed(),
+            sort_order: TaskSortOrder::default(),
+            max_display: default_tasks_max_display(),
+            auto_remove_completed: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct NotesConfig {
+    #[serde(default = "default_notes_max_stored")]
+    pub max_stored: usize,
+    #[serde(default = "default_true")]
+    pub show_in_widget: bool,
+}
+
+impl Default for NotesConfig {
+    fn default() -> Self {
+        Self {
+            max_stored: default_notes_max_stored(),
+            show_in_widget: default_true(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct TimerConfig {
+    #[serde(default = "default_timer_duration")]
+    pub default_duration: String,
+    #[serde(default)]
+    pub auto_start: bool,
+    #[serde(default = "default_true")]
+    pub show_in_widget: bool,
+}
+
+impl Default for TimerConfig {
+    fn default() -> Self {
+        Self {
+            default_duration: default_timer_duration(),
+            auto_start: false,
+            show_in_widget: default_true(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RemindersConfig {
+    #[serde(default = "default_reminder_duration")]
+    pub default_duration: String,
+    #[serde(default = "default_true")]
+    pub enable_notifications: bool,
+    #[serde(default = "default_true")]
+    pub sound_alert: bool,
+    #[serde(default = "default_true")]
+    pub visual_alert: bool,
+}
+
+impl Default for RemindersConfig {
+    fn default() -> Self {
+        Self {
+            default_duration: default_reminder_duration(),
+            enable_notifications: default_true(),
+            sound_alert: default_true(),
+            visual_alert: default_true(),
+        }
+    }
+}
+
 impl Default for DashboardConfig {
     fn default() -> Self {
         Self {
@@ -94,13 +185,41 @@ fn default_dashboard_widgets() -> Vec<String> {
         "time".to_string(),
         "network".to_string(),
         "system".to_string(),
+        "timer".to_string(),
+        "tasks".to_string(),
         "notes".to_string(),
+        "history".to_string(),
+        "reminders".to_string(),
         "plugins".to_string(),
     ]
 }
 
 fn default_dashboard_refresh_interval() -> u64 {
     1
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_tasks_show_completed() -> bool {
+    true
+}
+
+fn default_tasks_max_display() -> usize {
+    5
+}
+
+fn default_notes_max_stored() -> usize {
+    50
+}
+
+fn default_timer_duration() -> String {
+    "25m".to_string()
+}
+
+fn default_reminder_duration() -> String {
+    "15m".to_string()
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -183,6 +302,14 @@ pub struct Config {
     #[serde(default)]
     pub dashboard: DashboardConfig,
     #[serde(default)]
+    pub tasks: TasksConfig,
+    #[serde(default)]
+    pub notes: NotesConfig,
+    #[serde(default)]
+    pub timer: TimerConfig,
+    #[serde(default)]
+    pub reminders: RemindersConfig,
+    #[serde(default)]
     pub cache: CacheConfig,
     #[serde(default)]
     pub locations: BTreeMap<String, String>,
@@ -216,6 +343,10 @@ impl Default for Config {
             active_profile: None,
             profile: BTreeMap::new(),
             dashboard: DashboardConfig::default(),
+            tasks: TasksConfig::default(),
+            notes: NotesConfig::default(),
+            timer: TimerConfig::default(),
+            reminders: RemindersConfig::default(),
             cache: CacheConfig::default(),
             locations: BTreeMap::new(),
             default_city: None,
@@ -288,6 +419,18 @@ impl Config {
         }
         if self.cache.time_ttl_secs == 0 {
             self.cache.time_ttl_secs = default_time_cache_ttl();
+        }
+        if self.tasks.max_display == 0 {
+            self.tasks.max_display = default_tasks_max_display();
+        }
+        if self.notes.max_stored == 0 {
+            self.notes.max_stored = default_notes_max_stored();
+        }
+        if self.timer.default_duration.trim().is_empty() {
+            self.timer.default_duration = default_timer_duration();
+        }
+        if self.reminders.default_duration.trim().is_empty() {
+            self.reminders.default_duration = default_reminder_duration();
         }
     }
 
@@ -417,8 +560,8 @@ pub fn config_dir() -> Result<PathBuf, String> {
     Ok(PathBuf::from(home).join(".tinfo"))
 }
 
-pub fn dashboard_notes_path() -> Result<PathBuf, String> {
-    Ok(config_dir()?.join("dashboard-notes.txt"))
+pub fn data_dir_path() -> Result<PathBuf, String> {
+    Ok(config_dir()?.join("data"))
 }
 
 pub fn legacy_json_config_path() -> Result<PathBuf, String> {

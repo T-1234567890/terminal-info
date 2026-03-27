@@ -8,6 +8,7 @@ mod hardware;
 mod migration;
 mod output;
 mod plugin;
+mod productivity;
 mod process_inspect;
 mod search;
 mod speedtest;
@@ -47,7 +48,7 @@ use crate::builtins::{
     run_diagnostic_system, run_ping, show_network_info, show_system_info,
 };
 use crate::cache::{read_cache, write_cache};
-use crate::config::{ApiProvider, Config, DefaultOutput, Units, config_path, dashboard_notes_path};
+use crate::config::{ApiProvider, Config, DefaultOutput, Units, config_path};
 use crate::config_menu::show_config_menu;
 use crate::output::{OutputMode, set_json_output, set_output_mode};
 use crate::plugin::{
@@ -56,6 +57,12 @@ use crate::plugin::{
     plugin_doctor, plugin_inspect, plugin_keygen, plugin_lint, plugin_pack, plugin_publish_check,
     plugin_sign, plugin_test, remove_plugin, run_diagnostic_plugins, run_plugin, search_plugins,
     set_plugin_trust, update_plugin, upgrade_all_plugins, verify_plugins,
+};
+use crate::productivity::{
+    add_note, add_reminder, add_task, clear_notes, complete_task, delete_task,
+    has_active_timer_state, interactive_task_menu, list_notes, list_tasks,
+    replace_notes_with_single_entry, show_history, start_stopwatch, start_timer,
+    stop_stopwatch, stop_timer, timer_dashboard_output,
 };
 use crate::theme::{AccentColor, BorderStyle, format_box_table, set_theme};
 use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, WeatherReport};
@@ -137,6 +144,39 @@ enum Command {
         /// Optional city name
         city: Option<String>,
     },
+    /// Show or manage countdown timers
+    Timer {
+        #[command(subcommand)]
+        command: Option<TimerCommand>,
+    },
+    /// Manage a stopwatch separately from countdown timers
+    Stopwatch {
+        #[command(subcommand)]
+        command: StopwatchCommand,
+    },
+    /// Manage local tasks
+    Task {
+        #[command(subcommand)]
+        command: Option<TaskCommand>,
+    },
+    /// Capture quick notes
+    Note {
+        #[command(subcommand)]
+        command: NoteCommand,
+    },
+    /// Show recent shell commands
+    History {
+        /// Maximum number of history lines to show
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+    },
+    /// Schedule a reminder after a delay
+    Remind {
+        /// Delay such as `10m` or `1h30m`
+        time: Option<String>,
+        /// Optional reminder message
+        message: Vec<String>,
+    },
     /// Search built-ins and plugins
     Search {
         /// Search term
@@ -152,6 +192,7 @@ enum Command {
         command: Option<DiagnosticCommand>,
     },
     /// Manage configuration
+    #[command(visible_alias = "configure")]
     Config {
         #[command(subcommand)]
         command: Option<ConfigCommand>,
@@ -278,6 +319,32 @@ enum ProfileCommand {
     Add { name: String },
     /// Remove a profile
     Remove { name: String },
+}
+
+#[derive(Subcommand, Debug)]
+enum TaskCommand {
+    Add { text: Vec<String> },
+    List,
+    Done { id: u64 },
+    Delete { id: u64 },
+}
+
+#[derive(Subcommand, Debug)]
+enum NoteCommand {
+    Add { text: Vec<String> },
+    List,
+}
+
+#[derive(Subcommand, Debug)]
+enum TimerCommand {
+    Start { duration: Option<String> },
+    Stop,
+}
+
+#[derive(Subcommand, Debug)]
+enum StopwatchCommand {
+    Start,
+    Stop,
 }
 
 #[derive(Subcommand, Debug)]
@@ -603,6 +670,19 @@ fn main() {
             process_inspect::show_processes(limit, sort.into())
         }
         Some(Command::Time { city }) => live_time(city, live_view_freeze),
+        Some(Command::Timer { command }) => handle_timer(command, live_view_freeze, &config),
+        Some(Command::Stopwatch { command }) => handle_stopwatch(command),
+        Some(Command::Task { command }) => handle_task(&config, command),
+        Some(Command::Note { command }) => handle_note(command),
+        Some(Command::History { limit }) => show_history(limit),
+        Some(Command::Remind { time, message }) => {
+            let joined = if message.is_empty() {
+                None
+            } else {
+                Some(message.join(" "))
+            };
+            handle_remind(&config, time.as_deref(), joined.as_deref())
+        }
         Some(Command::Search { query }) => search::run_search(&query),
         Some(Command::Diagnostic {
             command,
@@ -989,7 +1069,11 @@ const SUPPORTED_DASHBOARD_WIDGETS: &[&str] = &[
     "time",
     "network",
     "system",
+    "timer",
+    "tasks",
     "notes",
+    "history",
+    "reminders",
     "plugins",
 ];
 
@@ -1391,6 +1475,53 @@ fn handle_profile(config: &mut Config, command: ProfileCommand) -> Result<(), St
     }
 }
 
+fn handle_task(config: &Config, command: Option<TaskCommand>) -> Result<(), String> {
+    match command {
+        None => interactive_task_menu(config),
+        Some(TaskCommand::Add { text }) => add_task(&text.join(" ")),
+        Some(TaskCommand::List) => list_tasks(),
+        Some(TaskCommand::Done { id }) => complete_task(id),
+        Some(TaskCommand::Delete { id }) => delete_task(id),
+    }
+}
+
+fn handle_timer(command: Option<TimerCommand>, freeze: bool, config: &Config) -> Result<(), String> {
+    match command {
+        Some(TimerCommand::Start { duration }) => start_timer(duration.as_deref(), &config.timer),
+        Some(TimerCommand::Stop) => stop_timer(),
+        None => {
+            if config.timer.auto_start && !has_active_timer_state()? {
+                start_timer(None, &config.timer)?;
+            }
+            run_live_loop(Duration::from_secs(1), freeze, timer_dashboard_output)
+        }
+    }
+}
+
+fn handle_stopwatch(command: StopwatchCommand) -> Result<(), String> {
+    match command {
+        StopwatchCommand::Start => start_stopwatch(),
+        StopwatchCommand::Stop => stop_stopwatch(),
+    }
+}
+
+fn handle_note(command: NoteCommand) -> Result<(), String> {
+    match command {
+        NoteCommand::Add { text } => add_note(&text.join(" ")),
+        NoteCommand::List => list_notes(),
+    }
+}
+
+fn handle_remind(config: &Config, time: Option<&str>, message: Option<&str>) -> Result<(), String> {
+    let time = time
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(config.reminders.default_duration.as_str());
+    add_reminder(time, message)?;
+    println!("Note: reminders trigger while the dashboard is running.");
+    live_dashboard(config, false)
+}
+
 fn handle_dashboard(
     config: &mut Config,
     command: Option<DashboardCommand>,
@@ -1416,40 +1547,21 @@ fn handle_dashboard(
 }
 
 fn handle_dashboard_notes(command: DashboardNotesCommand) -> Result<(), String> {
-    let path = dashboard_notes_path()?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("Failed to create notes directory: {err}"))?;
-    }
-
     match command {
         DashboardNotesCommand::Show => {
-            let contents = fs::read_to_string(&path).unwrap_or_default();
-            if contents.trim().is_empty() {
-                println!("No dashboard notes saved.");
-            } else {
-                print!("{contents}");
-                if !contents.ends_with('\n') {
-                    println!();
-                }
-            }
-            Ok(())
+            list_notes()
         }
         DashboardNotesCommand::Set { text } => {
             let body = text.join(" ").trim().to_string();
             if body.is_empty() {
                 return Err("Dashboard notes cannot be empty.".to_string());
             }
-            fs::write(&path, format!("{body}\n"))
-                .map_err(|err| format!("Failed to write dashboard notes: {err}"))?;
-            println!("Dashboard notes updated: {}", path.display());
+            replace_notes_with_single_entry(&body)?;
+            println!("Dashboard notes updated.");
             Ok(())
         }
         DashboardNotesCommand::Clear => {
-            if path.exists() {
-                fs::remove_file(&path)
-                    .map_err(|err| format!("Failed to clear dashboard notes: {err}"))?;
-            }
+            clear_notes()?;
             println!("Dashboard notes cleared.");
             Ok(())
         }

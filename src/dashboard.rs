@@ -1,21 +1,24 @@
-use std::fs;
+use std::collections::BTreeMap;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use sysinfo::{MINIMUM_CPU_UPDATE_INTERVAL, System};
 
 use crate::builtins::{DashboardSnapshot, build_dashboard_snapshot, memory_line};
-use crate::config::{Config, dashboard_notes_path};
+use crate::config::Config;
 use crate::output::{OutputMode, output_mode};
 use crate::plugin::{PluginWidget, PluginWidgetBody, dashboard_widgets};
+use crate::productivity::ProductivityWidgetManager;
 use crate::theme::format_box_table;
 
 pub struct DashboardRenderer {
     config: Config,
     frozen_output: Option<String>,
     plugin_cache: Option<CachedWidgets>,
-    notes_cache: Option<CachedNote>,
+    built_in_cache: BTreeMap<String, CachedNote>,
     system_sampler: DashboardSystemSampler,
+    productivity_widgets: ProductivityWidgetManager,
+    reminder_notices: Vec<ReminderNotice>,
 }
 
 struct CachedWidgets {
@@ -26,6 +29,11 @@ struct CachedWidgets {
 struct CachedNote {
     widget: Option<PluginWidget>,
     refresh_at: Instant,
+}
+
+struct ReminderNotice {
+    message: String,
+    expires_at: Instant,
 }
 
 struct DashboardSystemSampler {
@@ -43,8 +51,10 @@ impl DashboardRenderer {
             config,
             frozen_output: None,
             plugin_cache: None,
-            notes_cache: None,
+            built_in_cache: BTreeMap::new(),
             system_sampler: DashboardSystemSampler::new(),
+            productivity_widgets: ProductivityWidgetManager::new(),
+            reminder_notices: Vec::new(),
         }
     }
 
@@ -63,17 +73,20 @@ impl DashboardRenderer {
     }
 
     fn render_now(&mut self) -> String {
+        self.refresh_reminder_notices();
         let title = "Terminal Info";
         let snapshot = self.system_sampler.snapshot(&self.config);
         let effective_dashboard = self.config.effective_dashboard();
         let widgets = normalized_widgets(&effective_dashboard.widgets);
         let compact = effective_dashboard.compact_mode || matches!(output_mode(), OutputMode::Compact);
         let plugin_widgets = self.plugin_widgets(compact);
-        let notes_widget = self.notes_widget(compact);
         let location = if self.config.uses_auto_location() {
-            "auto"
+            "auto".to_string()
         } else {
-            self.config.configured_location().unwrap_or("unknown")
+            self.config
+                .configured_location()
+                .unwrap_or("unknown")
+                .to_string()
         };
 
         match if compact {
@@ -83,6 +96,9 @@ impl DashboardRenderer {
         } {
             OutputMode::Compact => {
                 let mut fields = vec![format!("location={location}")];
+                for notice in &self.reminder_notices {
+                    fields.push(format!("alert={}", notice.message));
+                }
                 for widget in &widgets {
                     match widget.as_str() {
                         "weather" => fields.push(format!("weather={}", snapshot.weather.line)),
@@ -92,11 +108,12 @@ impl DashboardRenderer {
                             fields.push(format!("cpu={}", snapshot.cpu));
                             fields.push(format!("mem={}", snapshot.memory));
                         }
-                        "notes" => {
-                            if let Some(widget) = &notes_widget {
+                        "notes" | "timer" | "tasks" | "history" | "reminders" => {
+                            if let Some(widget) = self.built_in_widget(widget, true) {
                                 fields.push(format!(
-                                    "notes={}",
-                                    compact_widget_summary(widget, true)
+                                    "{}={}",
+                                    widget.title.to_ascii_lowercase(),
+                                    compact_widget_summary(&widget, true)
                                 ));
                             }
                         }
@@ -114,12 +131,18 @@ impl DashboardRenderer {
                 format!("{}\n", fields.join(" "))
             }
             OutputMode::Plain | OutputMode::Color => {
+                let reminder_messages = self
+                    .reminder_notices
+                    .iter()
+                    .map(|notice| notice.message.clone())
+                    .collect::<Vec<_>>();
                 let rows = dashboard_rows(
-                    location,
+                    &location,
                     &snapshot,
                     &widgets,
                     &plugin_widgets,
-                    notes_widget.as_ref(),
+                    &reminder_messages,
+                    self,
                     false,
                 );
                 format_box_table(title, &rows)
@@ -147,19 +170,40 @@ impl DashboardRenderer {
         widgets
     }
 
-    fn notes_widget(&mut self, compact: bool) -> Option<PluginWidget> {
-        if let Some(cache) = &self.notes_cache {
+    fn built_in_widget(&mut self, id: &str, compact: bool) -> Option<PluginWidget> {
+        if let Some(cache) = self.built_in_cache.get(id) {
             if Instant::now() < cache.refresh_at {
                 return cache.widget.clone();
             }
         }
 
-        let widget = load_notes_widget(compact);
-        self.notes_cache = Some(CachedNote {
+        let (widget, refresh_after) = match self.productivity_widgets.render(id, compact) {
+            Ok(Some((widget, refresh))) => (Some(widget), refresh),
+            Ok(None) => (None, Duration::from_secs(5)),
+            Err(_) => (None, Duration::from_secs(5)),
+        };
+        self.built_in_cache.insert(id.to_string(), CachedNote {
             widget: widget.clone(),
-            refresh_at: Instant::now() + Duration::from_secs(5),
+            refresh_at: Instant::now() + refresh_after,
         });
         widget
+    }
+
+    fn refresh_reminder_notices(&mut self) {
+        self.reminder_notices
+            .retain(|notice| Instant::now() < notice.expires_at);
+        let triggered = match crate::productivity::trigger_due_reminders() {
+            Ok(messages) => messages,
+            Err(_) => Vec::new(),
+        };
+        if self.config.reminders.visual_alert {
+            for message in triggered {
+                self.reminder_notices.push(ReminderNotice {
+                    message,
+                    expires_at: Instant::now() + Duration::from_secs(10),
+                });
+            }
+        }
     }
 }
 
@@ -189,7 +233,8 @@ fn normalized_widgets(widgets: &[String]) -> Vec<String> {
         .filter(|value| {
             matches!(
                 value.as_str(),
-                "weather" | "time" | "network" | "system" | "notes" | "plugins"
+                "weather" | "time" | "network" | "system" | "timer" | "tasks" | "notes"
+                    | "history" | "reminders" | "plugins"
             )
         })
         .collect::<Vec<_>>();
@@ -199,7 +244,11 @@ fn normalized_widgets(widgets: &[String]) -> Vec<String> {
             "time".to_string(),
             "network".to_string(),
             "system".to_string(),
+            "timer".to_string(),
+            "tasks".to_string(),
             "notes".to_string(),
+            "history".to_string(),
+            "reminders".to_string(),
             "plugins".to_string(),
         ];
     }
@@ -211,10 +260,14 @@ fn dashboard_rows(
     snapshot: &crate::builtins::DashboardSnapshot,
     widgets: &[String],
     plugin_widgets: &[PluginWidget],
-    notes_widget: Option<&PluginWidget>,
+    reminder_messages: &[String],
+    renderer: &mut DashboardRenderer,
     compact: bool,
 ) -> Vec<(String, String)> {
     let mut rows = vec![("Location".to_string(), location.to_string())];
+    for message in reminder_messages {
+        rows.push(("Alert".to_string(), format!("Reminder: {message}")));
+    }
     for widget in widgets {
         match widget.as_str() {
             "weather" => {
@@ -234,9 +287,9 @@ fn dashboard_rows(
                 rows.push(("CPU".to_string(), snapshot.cpu.clone()));
                 rows.push(("Memory".to_string(), snapshot.memory.clone()));
             }
-            "notes" => {
-                if let Some(widget) = notes_widget {
-                    rows.extend(render_widget_rows(widget, compact));
+            "timer" | "tasks" | "notes" | "history" | "reminders" => {
+                if let Some(widget) = renderer.built_in_widget(widget, compact) {
+                    rows.extend(render_widget_rows(&widget, compact));
                 }
             }
             "plugins" if !plugin_widgets.is_empty() => {
@@ -306,27 +359,4 @@ fn compact_widget_summary(widget: &PluginWidget, compact: bool) -> String {
             .collect::<Vec<_>>()
             .join("; "),
     }
-}
-
-fn load_notes_widget(_compact: bool) -> Option<PluginWidget> {
-    let path = dashboard_notes_path().ok()?;
-    let contents = fs::read_to_string(path).ok()?;
-    let lines = contents
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    if lines.is_empty() {
-        return None;
-    }
-
-    let full = lines.iter().take(5).cloned().collect::<Vec<_>>();
-    let compact = lines.first().cloned().unwrap_or_default();
-    Some(PluginWidget {
-        title: "Notes".to_string(),
-        refresh_interval_secs: Some(5),
-        full: PluginWidgetBody::List { items: full },
-        compact: Some(PluginWidgetBody::Text { content: compact }),
-    })
 }

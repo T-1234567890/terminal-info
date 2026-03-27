@@ -222,6 +222,7 @@ tinfo completion status
 ## Dashboard
 
 ```bash
+tinfo configure
 tinfo dashboard
 tinfo dashboard --freeze
 tinfo dashboard --live
@@ -235,6 +236,44 @@ tinfo dashboard notes clear
 `dashboard` renders the dashboard itself when no dashboard subcommand is provided.
 `--freeze` forces snapshot mode.
 `--live` forces live mode even when `dashboard.freeze = true` in config.
+
+## Productivity
+
+```bash
+tinfo timer
+tinfo timer start
+tinfo timer start 25m
+tinfo timer stop
+tinfo stopwatch start
+tinfo stopwatch stop
+tinfo task
+tinfo task add finish README
+tinfo task list
+tinfo task done 1
+tinfo task delete 1
+tinfo note add remember to rotate keys
+tinfo note list
+tinfo history --limit 10
+tinfo remind
+tinfo remind 15m
+tinfo remind 14:30 stand up
+tinfo remind 30m stand up
+```
+
+These commands store lightweight local state in:
+
+```text
+~/.tinfo/data/
+```
+
+- `timer` opens a live timer dashboard by default, starts a countdown with `start [duration]`, and uses the configured default duration when omitted
+- `stopwatch` manages the stopwatch separately with `start` and `stop`
+- `task` opens an interactive task menu by default and also supports `add`, `list`, `done`, and `delete`
+- `note` appends quick notes for later review and for the dashboard notes widget
+- `history` shows recent shell history lines from the detected history file
+- `remind` schedules a local reminder for a delay like `15m`, `1h30m`, or `45s`, or for a clock time like `14:30`; if omitted it uses the configured default duration
+- reminders are written to `~/.tinfo/data/reminders.json`, then `tinfo` opens the live dashboard automatically
+- after scheduling, `tinfo` prints: `Note: reminders trigger while the dashboard is running.`
 
 ## Profiles
 
