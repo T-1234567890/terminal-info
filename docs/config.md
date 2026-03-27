@@ -298,6 +298,13 @@ Productivity settings:
 - `Timer` controls default duration, auto-start, and widget visibility
 - `Reminders` controls default reminder duration plus notification, sound, and visual alert behavior
 
+Task menu behavior:
+
+- `tinfo task` uses the same prompt-and-select interaction style as `tinfo config`
+- the menu uses `Exit` as the close action
+- `Deleted tasks` shows recoverable tasks still within the 7-day retention window
+- expired deleted tasks are purged automatically when the task store is opened
+
 ## Profiles
 
 Profiles are named configuration blocks stored under `[profile.<name>]`.

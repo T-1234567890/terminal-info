@@ -92,7 +92,7 @@ cargo install terminal-info
 
 ## 🧭 Roadmap
 
-A public roadmap is available to outline the future direction of the project, including upcoming features such as the dashboard system, widgets API, and plugin ecosystem improvements.
+The public roadmap tracks what is already shipped in the dashboard, widget, and plugin platform, plus the next planned improvements.
 
 👉 See the full roadmap here: [ROADMAP.md](./docs/roadmap.md)
 
@@ -117,11 +117,43 @@ Instead of switching between multiple utilities, you get a unified system that c
 - TOML configuration with profiles in `~/.tinfo/config.toml`
 - Optional server mode for server and VPS diagnostics
 - Dashboard widget ordering in `~/.tinfo/config.toml`
+- Built-in dashboard widgets for weather, time, network, system, timer, tasks, notes, history, reminders, and trusted plugins
+- Dashboard live mode, snapshot mode with `--freeze`, config-driven default freeze, and `--live` override
+- Lightweight productivity commands for timers, stopwatch, tasks, notes, history, and reminders
+- Interactive `tinfo config` / `tinfo configure` menu with sections for dashboard, widgets, tasks, notes, timer, and reminders
 - Shell completions for `bash`, `zsh`, and `fish`
 - Output modes for scripting and interactive use, including `--json`
-- GitHub-based plugin discovery, install, update, trust, verification, and execution
+- Plugin discovery, install, update, trust, verification, search, and local browser-based browsing
 - A reusable `tinfo-plugin` SDK crate and plugin developer workflow
+- Plugin widgets with structured JSON output rendered by the dashboard
 - IP-based location detection with provider fallback and local caching
+
+## Dashboard And Productivity
+
+The dashboard is now a first-class feature rather than a simple overview screen. It supports built-in widgets, trusted plugin widgets, widget ordering, notes, and reminder alerts. Widget rendering stays in the core CLI, while plugins provide structured widget payloads.
+
+Productivity tools are integrated into the same local workflow and dashboard runtime:
+
+- `tinfo timer` opens a live timer view
+- `tinfo timer start 25m` starts a countdown
+- `tinfo stopwatch start` starts a separate stopwatch
+- `tinfo task` opens an interactive task menu
+- `tinfo note add ...` captures quick notes
+- `tinfo history --limit 10` shows recent shell commands
+- `tinfo remind 15m take a break` schedules a reminder and opens the live dashboard
+
+Notes:
+
+- reminders trigger while the dashboard is running
+- deleted tasks are recoverable for 7 days from the task menu before automatic cleanup
+- widget ordering and feature settings live in `~/.tinfo/config.toml`
+
+See:
+
+- [docs/dashboard.md](docs/dashboard.md)
+- [docs/widgets.md](docs/widgets.md)
+- [docs/commands.md](docs/commands.md)
+- [docs/config.md](docs/config.md)
 
 ## Why not other tools?
 

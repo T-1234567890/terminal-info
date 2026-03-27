@@ -125,6 +125,8 @@ The widgets are intentionally small and non-blocking. The dashboard reads local 
 
 The dashboard also acts as the reminder scheduler. `tinfo remind ...` writes reminder data to `~/.tinfo/data/reminders.json`, prints `Note: reminders trigger while the dashboard is running.`, and opens the live dashboard. While the dashboard is running it checks for due reminders, marks them as triggered, rings the terminal bell, and shows a temporary alert row.
 
+For tasks, deleted items are soft-deleted into a recoverable area instead of disappearing immediately. They can be restored from `tinfo task` for 7 days, and expired deleted tasks are purged automatically the next time the CLI loads the task store.
+
 ## Freeze Mode
 
 Dashboard freeze mode captures one snapshot and reuses it instead of auto-refreshing.

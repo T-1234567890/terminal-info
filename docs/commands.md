@@ -268,7 +268,18 @@ These commands store lightweight local state in:
 
 - `timer` opens a live timer dashboard by default, starts a countdown with `start [duration]`, and uses the configured default duration when omitted
 - `stopwatch` manages the stopwatch separately with `start` and `stop`
-- `task` opens an interactive task menu by default and also supports `add`, `list`, `done`, and `delete`
+- `task` opens an interactive menu by default and also supports `add`, `list`, `done`, and `delete`
+- the interactive task menu includes:
+  - current task list
+  - `List all tasks`
+  - `Deleted tasks`
+  - `Add task`
+  - `Delete task`
+  - `Exit`
+- selecting a task or an item in `List all tasks` toggles its done state in one selection
+- deleted tasks move into a recoverable deleted-task area instead of being removed permanently
+- deleted tasks can be recovered for 7 days
+- when `tinfo` loads the task store on or after the seventh day, expired deleted tasks are removed automatically
 - `note` appends quick notes for later review and for the dashboard notes widget
 - `history` shows recent shell history lines from the detected history file
 - `remind` schedules a local reminder for a delay like `15m`, `1h30m`, or `45s`, or for a clock time like `14:30`; if omitted it uses the configured default duration

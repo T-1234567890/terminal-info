@@ -100,6 +100,8 @@ Rendering behavior:
 
 - `timer` shows the active countdown and stopwatch state together and refreshes every second
 - `tasks` shows recent tasks based on the task settings in `config.toml`
+- deleted tasks are not shown in the task widget
+- deleted tasks remain recoverable for 7 days before automatic removal
 - `notes` shows recent note entries as a list
 - `history` shows recent shell commands without requiring shell integration beyond a normal history file
 - `reminders` shows upcoming reminders as a list and refreshes every few seconds
