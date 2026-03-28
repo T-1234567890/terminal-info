@@ -17,6 +17,9 @@ diagnostics, and developer utilities.
 
 ## Demo
 
+### → Experience the demo
+https://tinfo.1234567890.dev
+
 Running `tinfo`:
 
 ```text
@@ -31,7 +34,7 @@ Running `tinfo`:
 │ Memory: 16.2 GiB / 24.0 GiB used │
 └──────────────────────────────────┘
 ```
-The dashboard is only the default overview. <br>
+The dashboard is just the starting point. <br>
 Terminal Info provides many additional commands and plugins
 for diagnostics, networking, system information, and developer tools.
 
