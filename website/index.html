@@ -28,7 +28,7 @@
           <a href="policies/">Policies</a>
           <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
         </nav>
-        <a class="btn btn-ghost nav-cta" href="#install">Get Started</a>
+        <a class="btn nav-cta" href="#install">Get started &rarr;</a>
         <button class="hamburger" id="hamburger" aria-label="Toggle menu">
           <span></span><span></span><span></span>
         </button>
@@ -43,22 +43,33 @@
         <div class="hero-inner">
 
           <div class="hero-copy">
-            <div class="hero-badge">v1.0 Stable &middot; Rust &middot; Apache 2.0</div>
+            <div class="hero-badge">Rust &middot; Apache 2.0</div>
             <h1>The <span class="highlight">Extensible</span><br>Terminal Toolbox</h1>
             <p class="hero-sub">
               A fast, Rust-powered platform for system information, diagnostics, and
               developer utilities &mdash; with a plugin ecosystem built right in.
             </p>
             <div class="hero-actions">
-              <a class="btn btn-primary" href="#install">Install Now</a>
-              <a class="btn btn-outline" href="https://github.com/T-1234567890/terminal-info" target="_blank" rel="noopener">
+              <a class="btn" href="#install">Install &rarr;</a>
+              <a class="btn" href="https://github.com/T-1234567890/terminal-info" target="_blank" rel="noopener">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
-                View on GitHub
+                GitHub &rarr;
               </a>
             </div>
             <div class="hero-install" id="hero-install-box">
-              <code id="hero-install-cmd">curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash</code>
-              <button class="copy-btn" id="hero-copy-btn" title="Copy install command">Copy</button>
+              <div class="hero-install-row">
+                <div class="hero-install-label">
+                  Quick install
+                </div>
+              </div>
+              <div class="hero-install-expanded" id="hero-install-expanded">
+                <span id="hero-install-cmd" hidden data-copy="curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash"></span>
+                <div class="hero-install-actions">
+                  <button class="copy-btn" id="hero-copy-btn" title="Copy install command">Copy</button>
+                  <a href="https://github.com/T-1234567890/terminal-info/blob/main/install.sh" target="_blank" rel="noopener">Inspect</a>
+                  <a href="#install">More install ways</a>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -70,20 +81,7 @@
                 <span class="term-dot green"></span>
                 <span class="term-title">tinfo &mdash; bash</span>
               </div>
-              <div class="term-body">
-                <div class="term-line"><span class="term-ps">$</span><span class="term-cmd">tinfo</span></div>
-                <div class="term-line"><span class="term-out term-box-border">&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;</span></div>
-                <div class="term-line"><span class="term-out term-box-border">&#x2502;</span><span class="term-out term-title-txt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Terminal Info&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&#x2502;</span></div>
-                <div class="term-line"><span class="term-out term-box-border">&#x251C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2524;</span></div>
-                <div class="term-line"><span class="term-out term-box-border">&#x2502;&nbsp;</span><span class="term-key">Location:&nbsp;&nbsp;</span><span class="term-val">Shenzhen&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&nbsp;&#x2502;</span></div>
-                <div class="term-line"><span class="term-out term-box-border">&#x2502;&nbsp;</span><span class="term-key">Weather:&nbsp;&nbsp;&nbsp;</span><span class="term-val">Clear sky, 20.3&deg;C&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&nbsp;&#x2502;</span></div>
-                <div class="term-line"><span class="term-out term-box-border">&#x2502;&nbsp;</span><span class="term-key">Time:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-val">2026-03-28 09:08:31&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&nbsp;&#x2502;</span></div>
-                <div class="term-line"><span class="term-out term-box-border">&#x2502;&nbsp;</span><span class="term-key">Network:&nbsp;&nbsp;&nbsp;</span><span class="term-val">203.0.113.42&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&nbsp;&#x2502;</span></div>
-                <div class="term-line"><span class="term-out term-box-border">&#x2502;&nbsp;</span><span class="term-key">CPU:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-val">19.3%&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&nbsp;&#x2502;</span></div>
-                <div class="term-line"><span class="term-out term-box-border">&#x2502;&nbsp;</span><span class="term-key">Memory:&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-val">16.2 / 24.0 GiB&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&nbsp;&#x2502;</span></div>
-                <div class="term-line"><span class="term-out term-box-border">&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;</span></div>
-                <div class="term-line" style="margin-top:0.5rem"><span class="term-ps">$</span><span class="term-cursor"></span></div>
-              </div>
+              <div class="term-body" id="hero-term-body"></div>
             </div>
           </div>
 
@@ -97,9 +95,9 @@
     <div class="stats-strip">
       <div class="container">
         <div class="stats-inner">
-          <div class="stat-item"><div class="stat-num">v1.0</div><div class="stat-label">Stable Release</div></div>
-          <div class="stat-item"><div class="stat-num">4</div><div class="stat-label">Platforms</div></div>
-          <div class="stat-item"><div class="stat-num">50+</div><div class="stat-label">Commands</div></div>
+          <div class="stat-item"><div class="stat-num" data-stable-version>latest</div><div class="stat-label">Stable Release</div></div>
+          <div class="stat-item"><div class="stat-num">Universal</div><div class="stat-label">Support</div></div>
+          <div class="stat-item"><div class="stat-num">100+</div><div class="stat-label">Commands</div></div>
           <div class="stat-item"><div class="stat-num">&infin;</div><div class="stat-label">Plugin Extensions</div></div>
           <div class="stat-item"><div class="stat-num">Rust</div><div class="stat-label">Powered</div></div>
         </div>
@@ -111,38 +109,38 @@
     ============================================================ -->
     <section class="features section" id="features">
       <div class="container">
-        <div class="section-header">
+        <div class="section-header" data-reveal style="--reveal-delay: 0s;">
           <p class="eyebrow">Features</p>
           <h2>Everything you need in your terminal</h2>
           <p>Terminal Info is a platform, not just a tool. Built around an extensible core with batteries included.</p>
         </div>
         <div class="features-grid">
-          <div class="feature-card">
+          <div class="feature-card" data-reveal style="--reveal-delay: 0.06s;">
             <span class="feature-icon">&#x1F50C;</span>
             <h3>Plugin Platform</h3>
             <p>Extend tinfo with community or custom plugins. Install from the registry, trust plugins locally, and add your own commands &mdash; without touching the core.</p>
           </div>
-          <div class="feature-card">
+          <div class="feature-card" data-reveal style="--reveal-delay: 0.12s;">
             <span class="feature-icon">&#x1F4CA;</span>
             <h3>Live Dashboard</h3>
             <p>Run <code>tinfo</code> to see an instant overview &mdash; weather, time, network, CPU, and memory. Widgets are configurable and support plugin data too.</p>
           </div>
-          <div class="feature-card">
+          <div class="feature-card" data-reveal style="--reveal-delay: 0.18s;">
             <span class="feature-icon">&#x1F30D;</span>
             <h3>Weather &amp; Network</h3>
             <p>Check current conditions, hourly forecasts, and weather alerts. Inspect public/local IPs, DNS, latency, and run multi-target ping diagnostics.</p>
           </div>
-          <div class="feature-card">
+          <div class="feature-card" data-reveal style="--reveal-delay: 0.24s;">
             <span class="feature-icon">&#x1FA7A;</span>
             <h3>Diagnostic Suite</h3>
             <p>Full network, system, performance, and security diagnostics. Optional server mode extends checks for VPS &mdash; DNS visibility, load average, and more.</p>
           </div>
-          <div class="feature-card">
+          <div class="feature-card" data-reveal style="--reveal-delay: 0.3s;">
             <span class="feature-icon">&#x23F1;&#xFE0F;</span>
             <h3>Productivity Tools</h3>
             <p>Built-in timer, stopwatch, tasks, quick notes, command history, and reminders &mdash; all integrated into the dashboard and run as CLI commands.</p>
           </div>
-          <div class="feature-card">
+          <div class="feature-card" data-reveal style="--reveal-delay: 0.36s;">
             <span class="feature-icon">&#x2699;&#xFE0F;</span>
             <h3>Flexible Output &amp; Config</h3>
             <p>Use <code>--json</code>, <code>--plain</code>, <code>--compact</code>, or <code>--color</code> for any command. Configure profiles, location aliases, themes, and widgets in one TOML file.</p>
@@ -154,21 +152,21 @@
     <!-- ============================================================
          Interactive Demo
     ============================================================ -->
-    <section class="demo-section" id="demo">
+    <section class="demo-section section" id="demo">
       <div class="container">
-        <div class="section-header">
+        <div class="section-header" data-reveal style="--reveal-delay: 0s;">
           <p class="eyebrow">Interactive Demo</p>
           <h2>See it in action</h2>
           <p>Select a scenario to explore what tinfo can do.</p>
         </div>
-        <div class="demo-tabs" role="tablist" aria-label="Demo scenarios">
-          <button class="demo-tab active" role="tab" aria-selected="true"  data-demo="dashboard">Dashboard</button>
-          <button class="demo-tab"        role="tab" aria-selected="false" data-demo="weather">Weather</button>
-          <button class="demo-tab"        role="tab" aria-selected="false" data-demo="diagnostic">Diagnostic</button>
-          <button class="demo-tab"        role="tab" aria-selected="false" data-demo="productivity">Productivity</button>
-          <button class="demo-tab"        role="tab" aria-selected="false" data-demo="plugin">Plugin</button>
+        <div class="demo-tabs install-tabs" role="tablist" aria-label="Demo scenarios" data-reveal style="--reveal-delay: 0.08s;">
+          <button class="demo-tab install-tab active" role="tab" aria-selected="true"  data-demo="dashboard">Dashboard</button>
+          <button class="demo-tab install-tab"        role="tab" aria-selected="false" data-demo="weather">Weather</button>
+          <button class="demo-tab install-tab"        role="tab" aria-selected="false" data-demo="diagnostic">Diagnostic</button>
+          <button class="demo-tab install-tab"        role="tab" aria-selected="false" data-demo="productivity">Productivity</button>
+          <button class="demo-tab install-tab"        role="tab" aria-selected="false" data-demo="plugin">Plugin</button>
         </div>
-        <div class="demo-container">
+        <div class="demo-container" data-reveal style="--reveal-delay: 0.16s;">
           <div class="demo-info" id="demo-info"></div>
           <div class="demo-window">
             <div class="term-window">
@@ -190,13 +188,13 @@
     ============================================================ -->
     <section class="comparison-section section" id="comparison">
       <div class="container">
-        <div class="section-header">
+        <div class="section-header" data-reveal style="--reveal-delay: 0s;">
           <p class="eyebrow">Why terminal-info</p>
           <h2>Built to be a platform,<br>not just a tool</h2>
           <p>There are already many great terminal tools. tinfo takes a different approach &mdash; it&rsquo;s a modular ecosystem designed to grow with you.</p>
         </div>
 
-        <div class="comparison-group">
+        <div class="comparison-group" data-reveal style="--reveal-delay: 0.08s;">
           <h3>vs. System info tools</h3>
           <table class="comparison-table">
             <thead>
@@ -228,7 +226,7 @@
           </table>
         </div>
 
-        <div class="comparison-group">
+        <div class="comparison-group" data-reveal style="--reveal-delay: 0.16s;">
           <h3>vs. Monitoring tools</h3>
           <table class="comparison-table">
             <thead>
@@ -254,7 +252,7 @@
           </table>
         </div>
 
-        <div class="comparison-group">
+        <div class="comparison-group" data-reveal style="--reveal-delay: 0.24s;">
           <h3>vs. CLI platforms</h3>
           <table class="comparison-table">
             <thead>
@@ -292,36 +290,33 @@
     ============================================================ -->
     <section class="install-section section" id="install">
       <div class="container">
-        <div class="section-header" style="margin-bottom:2.5rem">
+        <div class="section-header" data-reveal style="margin-bottom:2.5rem; --reveal-delay: 0s;">
           <p class="eyebrow">Installation</p>
-          <h2>Up and running in seconds</h2>
+          <h2>Quick Install</h2>
           <p>Choose the method that works best for your environment.</p>
         </div>
 
-        <div class="install-tabs" role="tablist" aria-label="Installation methods">
+        <div class="platform-chips" data-reveal style="--reveal-delay: 0.08s;">
+          <span class="platform-chip">&#x1F34E; macOS Intel</span>
+          <span class="platform-chip">&#x1F34E; macOS Apple Silicon</span>
+          <span class="platform-chip">&#x1F427; Linux x86_64</span>
+          <span class="platform-chip">&#x1FA9F; Windows x86_64</span>
+        </div>
+
+        <div class="install-tabs" role="tablist" aria-label="Installation methods" data-reveal style="--reveal-delay: 0.16s;">
           <button class="install-tab active" role="tab" data-install="script">
             Install Script
-            <span style="font-size:0.7rem;background:var(--accent);color:#fff;padding:1px 6px;border-radius:999px;margin-left:5px;vertical-align:middle">Recommended</span>
+            <span style="font-size:0.7rem;color:var(--accent);margin-left:5px;vertical-align:middle">Recommended</span>
           </button>
           <button class="install-tab" role="tab" data-install="cargo">Cargo</button>
           <button class="install-tab" role="tab" data-install="source">Build from Source</button>
         </div>
 
         <div class="install-content active" id="install-script">
-          <div class="install-grid">
+          <div class="install-grid" data-reveal style="--reveal-delay: 0.24s;">
             <div class="install-desc">
               <h3>One-command install</h3>
               <p>The install script downloads the correct binary for your platform, verifies the Minisign signature, and places <code>tinfo</code> in your <code>PATH</code>.</p>
-              <div class="platform-chips">
-                <span class="platform-chip">&#x1F34E; macOS Intel</span>
-                <span class="platform-chip">&#x1F34E; macOS Apple Silicon</span>
-                <span class="platform-chip">&#x1F427; Linux x86_64</span>
-                <span class="platform-chip">&#x1FA9F; Windows x86_64</span>
-              </div>
-              <p class="install-note">
-                You can <a href="https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh" target="_blank" rel="noopener">inspect the script</a> before running it.
-                Binaries are also available on the <a href="https://github.com/T-1234567890/terminal-info/releases" target="_blank" rel="noopener">GitHub Releases page</a>.
-              </p>
             </div>
             <div>
               <div class="code-block">
@@ -355,6 +350,11 @@ tinfo</pre>
                 </div>
                 <pre>cargo install terminal-info</pre>
               </div>
+              <div class="code-block">
+                <div class="code-block-header"><span>Verify it works</span></div>
+                <pre>tinfo --version
+tinfo</pre>
+              </div>
             </div>
           </div>
         </div>
@@ -378,6 +378,11 @@ cargo build --release">Copy</button>
 cd terminal-info
 cargo build --release</pre>
               </div>
+              <div class="code-block">
+                <div class="code-block-header"><span>Verify it works</span></div>
+                <pre>./target/release/tinfo --version
+./target/release/tinfo</pre>
+              </div>
             </div>
           </div>
         </div>
@@ -390,7 +395,7 @@ cargo build --release</pre>
     <section class="plugins-section section" id="plugins">
       <div class="container">
         <div class="plugins-inner">
-          <div class="plugin-cmds">
+          <div class="plugin-cmds" data-reveal style="--reveal-delay: 0.08s;">
             <div class="plugin-cmds-header">plugin commands</div>
             <div class="plugin-cmd-list">
               <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin search</span></div>
@@ -410,7 +415,7 @@ cargo build --release</pre>
               <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin publish-check</span></div>
             </div>
           </div>
-          <div class="plugins-copy">
+          <div class="plugins-copy" data-reveal style="--reveal-delay: 0.18s;">
             <p class="eyebrow">Plugin Ecosystem</p>
             <h2>Extend anything.<br>Build anything.</h2>
             <p>Terminal Info is designed as a platform. The plugin system lets you add new commands, dashboard widgets, and workflows &mdash; without touching the core binary.</p>
@@ -423,8 +428,8 @@ cargo build --release</pre>
               <li>Full dev workflow: scaffold &rarr; test &rarr; sign &rarr; pack &rarr; publish</li>
             </ul>
             <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
-              <a class="btn btn-primary" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md" target="_blank" rel="noopener">Plugin Docs</a>
-              <a class="btn btn-ghost" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/sdk.md" target="_blank" rel="noopener">SDK Reference</a>
+              <a class="btn" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md" target="_blank" rel="noopener">Plugin Docs &rarr;</a>
+              <a class="btn" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/sdk.md" target="_blank" rel="noopener">SDK Reference &rarr;</a>
             </div>
           </div>
         </div>

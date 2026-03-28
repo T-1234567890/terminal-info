@@ -13,23 +13,75 @@
   <body>
     <header class="site-header">
       <div class="container">
-        <a class="brand" href="../">tinfo</a>
-        <nav class="site-nav" aria-label="Primary">
+        <a class="brand" href="../">t<span>info</span></a>
+        <nav class="site-nav" id="site-nav" aria-label="Primary">
           <a href="../#features">Features</a>
+          <a href="../#demo">Demo</a>
+          <a href="../#comparison">Why tinfo</a>
           <a href="../#install">Install</a>
+          <a href="../#plugins">Plugins</a>
+          <a href="./">Policies</a>
           <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
         </nav>
+        <a class="btn nav-cta" href="../#install">Get started &rarr;</a>
+        <button class="hamburger" id="hamburger" aria-label="Toggle menu">
+          <span></span><span></span><span></span>
+        </button>
       </div>
     </header>
+
+    <section class="hero">
+      <div class="container">
+        <div class="hero-inner">
+          <div class="hero-copy">
+            <div class="hero-badge">Policies</div>
+            <h1>Disclaimer and privacy</h1>
+            <p class="hero-sub">
+              This page explains the security, plugin, installation, and privacy
+              expectations for Terminal Info.
+            </p>
+            <div class="hero-actions">
+              <a class="btn" href="../#install">Install &rarr;</a>
+              <a class="btn" href="https://github.com/T-1234567890/terminal-info">GitHub &rarr;</a>
+            </div>
+          </div>
+
+          <div class="hero-terminal">
+            <div class="term-window">
+              <div class="term-titlebar">
+                <span class="term-dot red"></span>
+                <span class="term-dot yellow"></span>
+                <span class="term-dot green"></span>
+                <span class="term-title">tinfo &mdash; policies</span>
+              </div>
+              <div class="term-body">
+                <div class="term-line"><span class="term-ps">$</span><span class="term-cmd">tinfo plugin install news</span></div>
+                <div class="term-line"><span class="term-out">Only install plugins from sources you trust.</span></div>
+                <div class="term-line"><span class="term-out">Review plugin repositories before installing them.</span></div>
+                <div class="term-line" style="margin-top:0.5rem"><span class="term-ps">$</span><span class="term-cmd">tinfo</span></div>
+                <div class="term-line"><span class="term-out">Terminal Info runs locally on your machine.</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <main class="section legal-page">
       <div class="container legal-layout">
         <div class="section-copy">
           <p class="eyebrow">Policies</p>
-          <h1 class="legal-title">Disclaimer and privacy</h1>
+          <h2 class="legal-title">What to expect from tinfo</h2>
           <p>
-            This page explains the security, plugin, installation, and privacy
-            expectations for Terminal Info.
+            Terminal Info is designed to be transparent and local-first. It runs
+            on your machine, and its built-in features are intended to be clear
+            about when they read local system state and when they contact a
+            remote service.
+          </p>
+          <p>
+            This page describes the boundaries of the core project, the risk
+            model for plugins, and the small set of cases where network requests
+            are part of normal use.
           </p>
         </div>
 
@@ -57,9 +109,9 @@
             Installing a plugin may execute external code on your system.
           </p>
           <p>
-            Plugins listed in the official plugin registry will go through a
-            basic review process. This review does not guarantee that plugins
-            are safe or free of malicious behavior.
+            Plugins listed in the official plugin registry go through a basic
+            review process. This review does not guarantee that plugins are safe
+            or free of malicious behavior.
           </p>
           <p>
             Only install plugins from sources you trust and review plugin
@@ -68,9 +120,9 @@
 
           <h3>Installation scripts</h3>
           <p>
-            If you install Terminal Info using the provided installation
-            script, you may review the script before running it. You may also
-            download binaries directly from the GitHub Releases page.
+            If you install Terminal Info using the provided installation script,
+            you may review the script before running it. You may also download
+            binaries directly from the GitHub Releases page.
           </p>
 
           <h3>Privacy</h3>
@@ -83,11 +135,41 @@
             <li>future features</li>
           </ul>
           <p>
-            By using Terminal Info, you acknowledge that you are responsible
-            for reviewing the software and plugins you install.
+            By using Terminal Info, you acknowledge that you are responsible for
+            reviewing the software and plugins you install.
           </p>
         </section>
       </div>
     </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <div class="footer-inner">
+          <div>
+            <div class="footer-brand">t<span>info</span></div>
+            <div class="footer-tagline">The extensible terminal toolbox.</div>
+          </div>
+          <div class="footer-links">
+            <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md">Plugin Docs</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/commands.md">Commands</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/roadmap.md">Roadmap</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/CONTRIBUTING.md">Contributing</a>
+            <a href="./">Disclaimer &amp; Privacy</a>
+          </div>
+        </div>
+        <div class="footer-divider"></div>
+        <div class="footer-bottom">
+          <span class="footer-copy">&copy; 2026 Terminal Info. Licensed under Apache 2.0.</span>
+          <div class="footer-legal">
+            <a href="mailto:support@pomodoro-app.tech">support@pomodoro-app.tech</a>
+            <a href="./">Disclaimer</a>
+            <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script src="../script.js"></script>
   </body>
 </html>
