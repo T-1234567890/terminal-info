@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Terminal Info — The Extensible Terminal Toolbox</title>
+    <meta
+      name="description"
+      content="A fast Rust-powered toolbox for system information, diagnostics, and developer utilities — with a plugin ecosystem built in. Install in one command."
+    />
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+  </head>
+  <body>
+
+    <!-- ============================================================
+         Navigation
+    ============================================================ -->
+    <header class="site-header">
+      <div class="container">
+        <a class="brand" href="/">t<span>info</span></a>
+        <nav class="site-nav" id="site-nav" aria-label="Primary">
+          <a href="#features">Features</a>
+          <a href="#demo">Demo</a>
+          <a href="#comparison">Why tinfo</a>
+          <a href="#install">Install</a>
+          <a href="#plugins">Plugins</a>
+          <a href="policies/">Policies</a>
+          <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
+        </nav>
+        <a class="btn btn-ghost nav-cta" href="#install">Get Started</a>
+        <button class="hamburger" id="hamburger" aria-label="Toggle menu">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ============================================================
+         Hero
+    ============================================================ -->
+    <section class="hero">
+      <div class="container">
+        <div class="hero-inner">
+
+          <div class="hero-copy">
+            <div class="hero-badge">v1.0 Stable &middot; Rust &middot; Apache 2.0</div>
+            <h1>The <span class="highlight">Extensible</span><br>Terminal Toolbox</h1>
+            <p class="hero-sub">
+              A fast, Rust-powered platform for system information, diagnostics, and
+              developer utilities &mdash; with a plugin ecosystem built right in.
+            </p>
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="#install">Install Now</a>
+              <a class="btn btn-outline" href="https://github.com/T-1234567890/terminal-info" target="_blank" rel="noopener">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
+                View on GitHub
+              </a>
+            </div>
+            <div class="hero-install" id="hero-install-box">
+              <code id="hero-install-cmd">curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash</code>
+              <button class="copy-btn" id="hero-copy-btn" title="Copy install command">Copy</button>
+            </div>
+          </div>
+
+          <div class="hero-terminal">
+            <div class="term-window">
+              <div class="term-titlebar">
+                <span class="term-dot red"></span>
+                <span class="term-dot yellow"></span>
+                <span class="term-dot green"></span>
+                <span class="term-title">tinfo &mdash; bash</span>
+              </div>
+              <div class="term-body">
+                <div class="term-line"><span class="term-ps">$</span><span class="term-cmd">tinfo</span></div>
+                <div class="term-line"><span class="term-out term-box-border">&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;</span></div>
+                <div class="term-line"><span class="term-out term-box-border">&#x2502;</span><span class="term-out term-title-txt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Terminal Info&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&#x2502;</span></div>
+                <div class="term-line"><span class="term-out term-box-border">&#x251C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2524;</span></div>
+                <div class="term-line"><span class="term-out term-box-border">&#x2502;&nbsp;</span><span class="term-key">Location:&nbsp;&nbsp;</span><span class="term-val">Shenzhen&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&nbsp;&#x2502;</span></div>
+                <div class="term-line"><span class="term-out term-box-border">&#x2502;&nbsp;</span><span class="term-key">Weather:&nbsp;&nbsp;&nbsp;</span><span class="term-val">Clear sky, 20.3&deg;C&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&nbsp;&#x2502;</span></div>
+                <div class="term-line"><span class="term-out term-box-border">&#x2502;&nbsp;</span><span class="term-key">Time:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-val">2026-03-28 09:08:31&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&nbsp;&#x2502;</span></div>
+                <div class="term-line"><span class="term-out term-box-border">&#x2502;&nbsp;</span><span class="term-key">Network:&nbsp;&nbsp;&nbsp;</span><span class="term-val">203.0.113.42&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&nbsp;&#x2502;</span></div>
+                <div class="term-line"><span class="term-out term-box-border">&#x2502;&nbsp;</span><span class="term-key">CPU:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-val">19.3%&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&nbsp;&#x2502;</span></div>
+                <div class="term-line"><span class="term-out term-box-border">&#x2502;&nbsp;</span><span class="term-key">Memory:&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-val">16.2 / 24.0 GiB&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="term-out term-box-border">&nbsp;&#x2502;</span></div>
+                <div class="term-line"><span class="term-out term-box-border">&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;</span></div>
+                <div class="term-line" style="margin-top:0.5rem"><span class="term-ps">$</span><span class="term-cursor"></span></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Stats Strip
+    ============================================================ -->
+    <div class="stats-strip">
+      <div class="container">
+        <div class="stats-inner">
+          <div class="stat-item"><div class="stat-num">v1.0</div><div class="stat-label">Stable Release</div></div>
+          <div class="stat-item"><div class="stat-num">4</div><div class="stat-label">Platforms</div></div>
+          <div class="stat-item"><div class="stat-num">50+</div><div class="stat-label">Commands</div></div>
+          <div class="stat-item"><div class="stat-num">&infin;</div><div class="stat-label">Plugin Extensions</div></div>
+          <div class="stat-item"><div class="stat-num">Rust</div><div class="stat-label">Powered</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         Features
+    ============================================================ -->
+    <section class="features section" id="features">
+      <div class="container">
+        <div class="section-header">
+          <p class="eyebrow">Features</p>
+          <h2>Everything you need in your terminal</h2>
+          <p>Terminal Info is a platform, not just a tool. Built around an extensible core with batteries included.</p>
+        </div>
+        <div class="features-grid">
+          <div class="feature-card">
+            <span class="feature-icon">&#x1F50C;</span>
+            <h3>Plugin Platform</h3>
+            <p>Extend tinfo with community or custom plugins. Install from the registry, trust plugins locally, and add your own commands &mdash; without touching the core.</p>
+          </div>
+          <div class="feature-card">
+            <span class="feature-icon">&#x1F4CA;</span>
+            <h3>Live Dashboard</h3>
+            <p>Run <code>tinfo</code> to see an instant overview &mdash; weather, time, network, CPU, and memory. Widgets are configurable and support plugin data too.</p>
+          </div>
+          <div class="feature-card">
+            <span class="feature-icon">&#x1F30D;</span>
+            <h3>Weather &amp; Network</h3>
+            <p>Check current conditions, hourly forecasts, and weather alerts. Inspect public/local IPs, DNS, latency, and run multi-target ping diagnostics.</p>
+          </div>
+          <div class="feature-card">
+            <span class="feature-icon">&#x1FA7A;</span>
+            <h3>Diagnostic Suite</h3>
+            <p>Full network, system, performance, and security diagnostics. Optional server mode extends checks for VPS &mdash; DNS visibility, load average, and more.</p>
+          </div>
+          <div class="feature-card">
+            <span class="feature-icon">&#x23F1;&#xFE0F;</span>
+            <h3>Productivity Tools</h3>
+            <p>Built-in timer, stopwatch, tasks, quick notes, command history, and reminders &mdash; all integrated into the dashboard and run as CLI commands.</p>
+          </div>
+          <div class="feature-card">
+            <span class="feature-icon">&#x2699;&#xFE0F;</span>
+            <h3>Flexible Output &amp; Config</h3>
+            <p>Use <code>--json</code>, <code>--plain</code>, <code>--compact</code>, or <code>--color</code> for any command. Configure profiles, location aliases, themes, and widgets in one TOML file.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Interactive Demo
+    ============================================================ -->
+    <section class="demo-section" id="demo">
+      <div class="container">
+        <div class="section-header">
+          <p class="eyebrow">Interactive Demo</p>
+          <h2>See it in action</h2>
+          <p>Select a scenario to explore what tinfo can do.</p>
+        </div>
+        <div class="demo-tabs" role="tablist" aria-label="Demo scenarios">
+          <button class="demo-tab active" role="tab" aria-selected="true"  data-demo="dashboard">Dashboard</button>
+          <button class="demo-tab"        role="tab" aria-selected="false" data-demo="weather">Weather</button>
+          <button class="demo-tab"        role="tab" aria-selected="false" data-demo="diagnostic">Diagnostic</button>
+          <button class="demo-tab"        role="tab" aria-selected="false" data-demo="productivity">Productivity</button>
+          <button class="demo-tab"        role="tab" aria-selected="false" data-demo="plugin">Plugin</button>
+        </div>
+        <div class="demo-container">
+          <div class="demo-info" id="demo-info"></div>
+          <div class="demo-window">
+            <div class="term-window">
+              <div class="term-titlebar">
+                <span class="term-dot red"></span>
+                <span class="term-dot yellow"></span>
+                <span class="term-dot green"></span>
+                <span class="term-title" id="demo-term-title">tinfo &mdash; bash</span>
+              </div>
+              <div class="term-body" id="demo-term-body" style="min-height:280px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Comparison
+    ============================================================ -->
+    <section class="comparison-section section" id="comparison">
+      <div class="container">
+        <div class="section-header">
+          <p class="eyebrow">Why terminal-info</p>
+          <h2>Built to be a platform,<br>not just a tool</h2>
+          <p>There are already many great terminal tools. tinfo takes a different approach &mdash; it&rsquo;s a modular ecosystem designed to grow with you.</p>
+        </div>
+
+        <div class="comparison-group">
+          <h3>vs. System info tools</h3>
+          <table class="comparison-table">
+            <thead>
+              <tr><th>Tool</th><th>Description</th><th>Plugin system</th><th>Extensible</th><th>Ecosystem</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>neofetch</td>
+                <td>Classic system info with ASCII logos</td>
+                <td><span class="cross">&times;</span></td>
+                <td><span class="partial">Limited</span></td>
+                <td><span class="cross">&times;</span></td>
+              </tr>
+              <tr>
+                <td>fastfetch</td>
+                <td>Modern, faster alternative to neofetch</td>
+                <td><span class="cross">&times;</span></td>
+                <td><span class="partial">Limited</span></td>
+                <td><span class="cross">&times;</span></td>
+              </tr>
+              <tr class="highlight">
+                <td>terminal-info</td>
+                <td>Modular terminal toolbox &amp; platform</td>
+                <td><span class="check">&#x2713;</span></td>
+                <td><span class="check">Yes</span></td>
+                <td><span class="check">Join us</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="comparison-group">
+          <h3>vs. Monitoring tools</h3>
+          <table class="comparison-table">
+            <thead>
+              <tr><th>Tool</th><th>Description</th><th>Plugin ecosystem</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>btop / htop</td>
+                <td>Terminal system monitoring</td>
+                <td><span class="cross">&times;</span></td>
+              </tr>
+              <tr>
+                <td>glances</td>
+                <td>Multi-metric system monitor</td>
+                <td><span class="cross">&times;</span></td>
+              </tr>
+              <tr class="highlight">
+                <td>terminal-info</td>
+                <td>Extensible toolbox with custom modules</td>
+                <td><span class="check">&#x2713;</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="comparison-group">
+          <h3>vs. CLI platforms</h3>
+          <table class="comparison-table">
+            <thead>
+              <tr><th>Tool</th><th>Purpose</th><th>Plugin model</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>kubectl</td>
+                <td>Kubernetes CLI</td>
+                <td><span class="partial">Plugins</span></td>
+              </tr>
+              <tr>
+                <td>cargo</td>
+                <td>Rust package manager</td>
+                <td><span class="partial">Subcommands</span></td>
+              </tr>
+              <tr>
+                <td>brew</td>
+                <td>Package manager</td>
+                <td><span class="partial">Taps</span></td>
+              </tr>
+              <tr class="highlight">
+                <td>terminal-info</td>
+                <td>General-purpose terminal toolbox</td>
+                <td><span class="check">Registry + SDK</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Installation
+    ============================================================ -->
+    <section class="install-section section" id="install">
+      <div class="container">
+        <div class="section-header" style="margin-bottom:2.5rem">
+          <p class="eyebrow">Installation</p>
+          <h2>Up and running in seconds</h2>
+          <p>Choose the method that works best for your environment.</p>
+        </div>
+
+        <div class="install-tabs" role="tablist" aria-label="Installation methods">
+          <button class="install-tab active" role="tab" data-install="script">
+            Install Script
+            <span style="font-size:0.7rem;background:var(--accent);color:#fff;padding:1px 6px;border-radius:999px;margin-left:5px;vertical-align:middle">Recommended</span>
+          </button>
+          <button class="install-tab" role="tab" data-install="cargo">Cargo</button>
+          <button class="install-tab" role="tab" data-install="source">Build from Source</button>
+        </div>
+
+        <div class="install-content active" id="install-script">
+          <div class="install-grid">
+            <div class="install-desc">
+              <h3>One-command install</h3>
+              <p>The install script downloads the correct binary for your platform, verifies the Minisign signature, and places <code>tinfo</code> in your <code>PATH</code>.</p>
+              <div class="platform-chips">
+                <span class="platform-chip">&#x1F34E; macOS Intel</span>
+                <span class="platform-chip">&#x1F34E; macOS Apple Silicon</span>
+                <span class="platform-chip">&#x1F427; Linux x86_64</span>
+                <span class="platform-chip">&#x1FA9F; Windows x86_64</span>
+              </div>
+              <p class="install-note">
+                You can <a href="https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh" target="_blank" rel="noopener">inspect the script</a> before running it.
+                Binaries are also available on the <a href="https://github.com/T-1234567890/terminal-info/releases" target="_blank" rel="noopener">GitHub Releases page</a>.
+              </p>
+            </div>
+            <div>
+              <div class="code-block">
+                <div class="code-block-header">
+                  <span>bash</span>
+                  <button class="code-copy" data-copy="curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash">Copy</button>
+                </div>
+                <pre>curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash</pre>
+              </div>
+              <div class="code-block">
+                <div class="code-block-header"><span>Verify it works</span></div>
+                <pre>tinfo --version
+tinfo</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="install-content" id="install-cargo">
+          <div class="install-grid">
+            <div class="install-desc">
+              <h3>Cargo install</h3>
+              <p>If you have Rust and Cargo installed, you can install tinfo directly from crates.io.</p>
+              <p class="install-note">Requires Rust 1.70+. Get Rust at <a href="https://rustup.rs" target="_blank" rel="noopener">rustup.rs</a>.</p>
+            </div>
+            <div>
+              <div class="code-block">
+                <div class="code-block-header">
+                  <span>bash</span>
+                  <button class="code-copy" data-copy="cargo install terminal-info">Copy</button>
+                </div>
+                <pre>cargo install terminal-info</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="install-content" id="install-source">
+          <div class="install-grid">
+            <div class="install-desc">
+              <h3>Build from source</h3>
+              <p>For contributors and plugin developers who want the full development environment.</p>
+              <p class="install-note">Requires Rust and Cargo. See <a href="https://github.com/T-1234567890/terminal-info/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">CONTRIBUTING.md</a> for full dev setup.</p>
+            </div>
+            <div>
+              <div class="code-block">
+                <div class="code-block-header">
+                  <span>bash</span>
+                  <button class="code-copy" data-copy="git clone https://github.com/T-1234567890/terminal-info
+cd terminal-info
+cargo build --release">Copy</button>
+                </div>
+                <pre>git clone https://github.com/T-1234567890/terminal-info
+cd terminal-info
+cargo build --release</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Plugin Ecosystem
+    ============================================================ -->
+    <section class="plugins-section section" id="plugins">
+      <div class="container">
+        <div class="plugins-inner">
+          <div class="plugin-cmds">
+            <div class="plugin-cmds-header">plugin commands</div>
+            <div class="plugin-cmd-list">
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin search</span></div>
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin browse</span><span class="pdesc">&nbsp; # visual browser</span></div>
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin install &lt;name&gt;</span></div>
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin trust &lt;name&gt;</span></div>
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin verify</span></div>
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin update &lt;name&gt;</span></div>
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin list</span></div>
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin remove &lt;name&gt;</span></div>
+              <div class="plugin-cmd-item" style="margin-top:0.75rem;opacity:0.5;font-size:0.75rem">&#x2014; develop your own &#x2014;</div>
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin init hello</span></div>
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin inspect</span></div>
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin test</span></div>
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin keygen</span></div>
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin pack</span></div>
+              <div class="plugin-cmd-item"><span class="pcmd">tinfo plugin publish-check</span></div>
+            </div>
+          </div>
+          <div class="plugins-copy">
+            <p class="eyebrow">Plugin Ecosystem</p>
+            <h2>Extend anything.<br>Build anything.</h2>
+            <p>Terminal Info is designed as a platform. The plugin system lets you add new commands, dashboard widgets, and workflows &mdash; without touching the core binary.</p>
+            <ul class="plugin-features">
+              <li>Install community plugins from the verified registry</li>
+              <li>Plugins run as local executables &mdash; no daemon, no runtime</li>
+              <li>Minisign signature verification on every install</li>
+              <li>Official Rust SDK: <code>tinfo-plugin</code> crate</li>
+              <li>Plugins can expose dashboard widgets via structured JSON</li>
+              <li>Full dev workflow: scaffold &rarr; test &rarr; sign &rarr; pack &rarr; publish</li>
+            </ul>
+            <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+              <a class="btn btn-primary" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md" target="_blank" rel="noopener">Plugin Docs</a>
+              <a class="btn btn-ghost" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/sdk.md" target="_blank" rel="noopener">SDK Reference</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Footer
+    ============================================================ -->
+    <footer class="site-footer">
+      <div class="container">
+        <div class="footer-inner">
+          <div>
+            <div class="footer-brand">t<span>info</span></div>
+            <div class="footer-tagline">The extensible terminal toolbox.</div>
+          </div>
+          <div class="footer-links">
+            <a href="https://github.com/T-1234567890/terminal-info" target="_blank" rel="noopener">GitHub</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md" target="_blank" rel="noopener">Plugin Docs</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/commands.md" target="_blank" rel="noopener">Commands</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/roadmap.md" target="_blank" rel="noopener">Roadmap</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a>
+            <a href="policies/">Disclaimer &amp; Privacy</a>
+          </div>
+        </div>
+        <div class="footer-divider"></div>
+        <div class="footer-bottom">
+          <span class="footer-copy">&copy; 2026 Terminal Info. Licensed under Apache 2.0.</span>
+          <div class="footer-legal">
+            <a href="mailto:support@pomodoro-app.tech">support@pomodoro-app.tech</a>
+            <a href="policies/">Disclaimer</a>
+            <a href="https://github.com/T-1234567890/terminal-info" target="_blank" rel="noopener">GitHub</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
