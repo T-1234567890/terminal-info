@@ -665,6 +665,64 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
 }
 .install-desc p { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem; }
 
+/* ---- Docs ---- */
+.docs-section { background: var(--bg); }
+.docs-inner {
+  display: grid;
+  grid-template-columns: 0.95fr 1.05fr;
+  gap: 3.5rem;
+  align-items: start;
+}
+.docs-copy h2 {
+  font-size: clamp(1.5rem, 2.5vw, 2rem);
+  font-weight: 800;
+  margin-bottom: 1rem;
+}
+.docs-copy p {
+  color: var(--text-muted);
+  margin-bottom: 1.25rem;
+  font-size: 0.95rem;
+}
+.docs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.doc-item {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--bg-border);
+}
+.doc-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.doc-name {
+  display: block;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+}
+.doc-desc {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+.doc-item:hover .doc-name,
+.doc-item:focus-visible .doc-name {
+  color: var(--accent);
+}
+.docs-more {
+  padding-top: 0.4rem;
+}
+.docs-more .btn {
+  font-size: 0.95rem;
+}
+
 /* ---- Plugin Ecosystem ---- */
 .plugins-section { background: var(--bg); }
 .plugins-inner {
@@ -871,6 +929,7 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
   .features-grid { grid-template-columns: repeat(2, 1fr); }
   .demo-container { grid-template-columns: 1fr; }
   .install-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+  .docs-inner { grid-template-columns: 1fr; gap: 2rem; }
   .plugins-inner { grid-template-columns: 1fr; }
   .footer-inner { grid-template-columns: 1fr; }
   .footer-links { text-align: left; }
