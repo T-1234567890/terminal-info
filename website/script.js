@@ -6,13 +6,13 @@
   "use strict";
 
   var RELEASE_API = "https://api.github.com/repos/T-1234567890/terminal-info/releases/latest";
-  var VERSION_CACHE_KEY = "tinfo-stable-version";
-  var VERSION_CACHE_TTL = 6 * 60 * 60 * 1000;
+  var VERSION_CACHE_KEY = "tinfo-version";
+  var VERSION_CACHE_TTL = 10 * 60 * 1000;
 
   function normalizeVersion(tag) {
-    if (!tag || typeof tag !== "string") return "latest";
+    if (!tag || typeof tag !== "string") return null;
     var value = tag.trim();
-    return value || "latest";
+    return value || null;
   }
 
   function readVersionCache() {
@@ -26,18 +26,19 @@
       if (Date.now() - parsed.cachedAt > VERSION_CACHE_TTL) {
         return null;
       }
-      return parsed.version;
+      return parsed;
     } catch (_err) {
       return null;
     }
   }
 
-  function writeVersionCache(version) {
+  function writeVersionCache(version, releaseUrl) {
     try {
       window.localStorage.setItem(
         VERSION_CACHE_KEY,
         JSON.stringify({
           version: version,
+          releaseUrl: releaseUrl || null,
           cachedAt: Date.now()
         })
       );
@@ -46,9 +47,13 @@
     }
   }
 
-  function updateVersionDisplays(version) {
+  function updateVersionDisplays(version, releaseUrl) {
+    if (!version) return;
     document.querySelectorAll("[data-stable-version]").forEach(function (node) {
       node.textContent = version;
+      if (releaseUrl && node.tagName === "A") {
+        node.setAttribute("href", releaseUrl);
+      }
     });
   }
 
@@ -230,39 +235,44 @@
     }, 6200);
   }
 
-  function loadStableVersion() {
+  async function loadStableVersion() {
     var cached = readVersionCache();
     if (cached) {
-      updateVersionDisplays(cached);
+      updateVersionDisplays(cached.version, cached.releaseUrl);
     }
 
     if (!window.fetch) {
-      if (!cached) updateVersionDisplays("latest");
-      return Promise.resolve(cached || "latest");
+      return cached ? cached.version : null;
     }
 
-    return window.fetch(RELEASE_API, {
-      headers: {
-        Accept: "application/vnd.github+json"
-      }
-    })
-      .then(function (response) {
-        if (!response.ok) {
-          throw new Error("GitHub release lookup failed");
+    try {
+      var response = await window.fetch(RELEASE_API, {
+        headers: {
+          Accept: "application/vnd.github+json"
         }
-        return response.json();
-      })
-      .then(function (payload) {
-        var version = normalizeVersion(payload && payload.tag_name);
-        updateVersionDisplays(version);
-        writeVersionCache(version);
-        return version;
-      })
-      .catch(function () {
-        var fallback = cached || "latest";
-        updateVersionDisplays(fallback);
-        return fallback;
       });
+      if (!response.ok) {
+        throw new Error("GitHub release lookup failed");
+      }
+
+      var payload = await response.json();
+      var version = normalizeVersion(payload && payload.tag_name);
+      var releaseUrl = payload && payload.html_url ? String(payload.html_url) : null;
+
+      if (!version) {
+        throw new Error("Latest release tag missing");
+      }
+
+      updateVersionDisplays(version, releaseUrl);
+      writeVersionCache(version, releaseUrl);
+      return version;
+    } catch (_err) {
+      if (cached) {
+        updateVersionDisplays(cached.version, cached.releaseUrl);
+        return cached.version;
+      }
+      return null;
+    }
   }
 
   /* ------------------------------------------
