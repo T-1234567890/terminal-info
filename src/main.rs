@@ -62,7 +62,7 @@ use crate::productivity::{
     add_note, add_reminder, add_task, clear_notes, complete_task, delete_task,
     has_active_timer_state, interactive_task_menu, list_notes, list_tasks,
     replace_notes_with_single_entry, show_history, start_stopwatch, start_timer,
-    stop_stopwatch, stop_timer, timer_dashboard_output,
+    stop_stopwatch, stop_timer, timer_dashboard_output, timer_live_active, TimerLiveTarget,
 };
 use crate::theme::{AccentColor, BorderStyle, format_box_table, set_theme};
 use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, WeatherReport};
@@ -671,7 +671,7 @@ fn main() {
         }
         Some(Command::Time { city }) => live_time(city, live_view_freeze),
         Some(Command::Timer { command }) => handle_timer(command, live_view_freeze, &config),
-        Some(Command::Stopwatch { command }) => handle_stopwatch(command),
+        Some(Command::Stopwatch { command }) => handle_stopwatch(command, live_view_freeze),
         Some(Command::Task { command }) => handle_task(&config, command),
         Some(Command::Note { command }) => handle_note(command),
         Some(Command::History { limit }) => show_history(limit),
@@ -906,9 +906,22 @@ fn live_weather(config: &Config, view: WeatherView, freeze: bool) -> Result<(), 
     })
 }
 
-fn run_live_loop<F>(interval: Duration, freeze: bool, mut render: F) -> Result<(), String>
+fn run_live_loop<F>(interval: Duration, freeze: bool, render: F) -> Result<(), String>
 where
     F: FnMut() -> Result<String, String>,
+{
+    run_live_loop_until(interval, freeze, render, || Ok(true))
+}
+
+fn run_live_loop_until<F, C>(
+    interval: Duration,
+    freeze: bool,
+    mut render: F,
+    mut should_continue: C,
+) -> Result<(), String>
+where
+    F: FnMut() -> Result<String, String>,
+    C: FnMut() -> Result<bool, String>,
 {
     if freeze {
         print!("{}", render()?);
@@ -932,6 +945,9 @@ where
 
         let deadline = Instant::now() + interval;
         while Instant::now() < deadline {
+            if !should_continue()? {
+                return Ok(());
+            }
             if event::poll(Duration::from_millis(100))
                 .map_err(|err| format!("Failed to read terminal input: {err}"))?
             {
@@ -1487,7 +1503,12 @@ fn handle_task(config: &Config, command: Option<TaskCommand>) -> Result<(), Stri
 
 fn handle_timer(command: Option<TimerCommand>, freeze: bool, config: &Config) -> Result<(), String> {
     match command {
-        Some(TimerCommand::Start { duration }) => start_timer(duration.as_deref(), &config.timer),
+        Some(TimerCommand::Start { duration }) => {
+            start_timer(duration.as_deref(), &config.timer)?;
+            run_live_loop_until(Duration::from_secs(1), freeze, timer_dashboard_output, || {
+                timer_live_active(TimerLiveTarget::Countdown)
+            })
+        }
         Some(TimerCommand::Stop) => stop_timer(),
         None => {
             if config.timer.auto_start && !has_active_timer_state()? {
@@ -1498,9 +1519,14 @@ fn handle_timer(command: Option<TimerCommand>, freeze: bool, config: &Config) ->
     }
 }
 
-fn handle_stopwatch(command: StopwatchCommand) -> Result<(), String> {
+fn handle_stopwatch(command: StopwatchCommand, freeze: bool) -> Result<(), String> {
     match command {
-        StopwatchCommand::Start => start_stopwatch(),
+        StopwatchCommand::Start => {
+            start_stopwatch()?;
+            run_live_loop_until(Duration::from_secs(1), freeze, timer_dashboard_output, || {
+                timer_live_active(TimerLiveTarget::Stopwatch)
+            })
+        }
         StopwatchCommand::Stop => stop_stopwatch(),
     }
 }

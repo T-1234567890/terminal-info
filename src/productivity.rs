@@ -110,6 +110,12 @@ pub struct NotesWidget;
 pub struct HistoryWidget;
 pub struct ReminderWidget;
 
+#[derive(Clone, Copy, Debug)]
+pub enum TimerLiveTarget {
+    Countdown,
+    Stopwatch,
+}
+
 pub fn timer_dashboard_output() -> Result<String, String> {
     let store = load_timer_store()?;
     if json_output() {
@@ -197,6 +203,17 @@ pub fn stop_stopwatch() -> Result<(), String> {
 pub fn has_active_timer_state() -> Result<bool, String> {
     let store = load_timer_store()?;
     Ok(store.countdown.is_some() || store.stopwatch.is_some())
+}
+
+pub fn timer_live_active(target: TimerLiveTarget) -> Result<bool, String> {
+    let store = load_timer_store()?;
+    Ok(match target {
+        TimerLiveTarget::Countdown => store
+            .countdown
+            .as_ref()
+            .is_some_and(countdown_is_running),
+        TimerLiveTarget::Stopwatch => store.stopwatch.is_some(),
+    })
 }
 
 pub fn add_task(text: &str) -> Result<(), String> {
@@ -866,6 +883,12 @@ fn countdown_status_line(state: &TimerState) -> String {
     }
 }
 
+fn countdown_is_running(state: &TimerState) -> bool {
+    let duration = state.duration_secs.unwrap_or_default();
+    let elapsed = now_unix().saturating_sub(state.started_at);
+    elapsed < duration
+}
+
 fn recent_history(limit: usize) -> Result<Vec<String>, String> {
     let path = history_file_path()?;
     let contents = fs::read_to_string(path).unwrap_or_default();
@@ -1214,5 +1237,20 @@ mod tests {
     fn parses_zsh_history_lines() {
         assert_eq!(parse_history_line(": 1710000000:0;git status"), "git status");
         assert_eq!(parse_history_line("cargo test"), "cargo test");
+    }
+
+    #[test]
+    fn countdown_running_detects_completion() {
+        let running = TimerState {
+            started_at: now_unix().saturating_sub(2),
+            duration_secs: Some(5),
+        };
+        let completed = TimerState {
+            started_at: now_unix().saturating_sub(5),
+            duration_secs: Some(3),
+        };
+
+        assert!(countdown_is_running(&running));
+        assert!(!countdown_is_running(&completed));
     }
 }

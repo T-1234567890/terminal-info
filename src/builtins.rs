@@ -596,82 +596,233 @@ pub fn run_config_doctor(config: &Config) -> Result<(), String> {
 }
 
 pub fn run_diagnostic_network(server_mode: bool) -> Result<(), String> {
-    let mut checks = Vec::new();
     let dns_ok = ("github.com", 443)
         .to_socket_addrs()
         .map(|mut addrs| addrs.next().is_some())
         .unwrap_or(false);
-    checks.push(doctor_status(
-        "DNS resolution",
-        if dns_ok { "PASS" } else { "FAIL" },
-        if dns_ok { "info" } else { "error" },
-        if dns_ok { "ok" } else { "failed" },
-        if dns_ok {
-            "none"
-        } else {
-            "check your DNS settings or network connection"
-        },
-    ));
-
     let http_ok = http_reachable("http://example.com");
-    checks.push(doctor_status(
-        "HTTP reachability",
-        if http_ok { "PASS" } else { "FAIL" },
-        if http_ok { "info" } else { "error" },
-        if http_ok { "reachable" } else { "unreachable" },
-        if http_ok {
-            "none"
-        } else {
-            "verify outbound HTTP access"
-        },
-    ));
+    let google_ping = tcp_ping_latency("google.com").ok();
+    let cloudflare_ping = tcp_ping_latency("cloudflare.com").ok();
+    let network = gather_network_info();
 
-    let tls_ok = http_reachable("https://github.com");
-    checks.push(doctor_status(
-        "TLS handshake",
-        if tls_ok { "PASS" } else { "FAIL" },
-        if tls_ok { "info" } else { "error" },
-        if tls_ok { "ok" } else { "failed" },
-        if tls_ok {
-            "none"
-        } else {
-            "verify system certificates and outbound HTTPS access"
-        },
-    ));
-    checks.push(api_reachability_check());
-    checks.push(proxy_detection_check());
-
-    if server_mode {
-        for (label, url) in SERVER_API_ENDPOINTS {
-            checks.push(endpoint_doctor_check(
-                label,
-                url,
-                "check outbound HTTPS access, DNS, or firewall rules",
-            ));
-        }
-        match dns_server() {
-            Ok(server) => checks.push(doctor_status(
-                "DNS server",
-                "PASS",
-                "info",
-                &server,
+    if crate::output::json_output() {
+        let mut checks = vec![
+            doctor_status(
+                "DNS resolution",
+                if dns_ok { "PASS" } else { "FAIL" },
+                if dns_ok { "info" } else { "error" },
+                if dns_ok { "ok" } else { "failed" },
+                if dns_ok {
+                    "none"
+                } else {
+                    "check your DNS settings or network connection"
+                },
+            ),
+            doctor_status(
+                "External ping",
+                if google_ping.is_some() { "PASS" } else { "FAIL" },
+                if google_ping.is_some() { "info" } else { "error" },
+                &google_ping
+                    .map(|ms| format!("google.com {ms:.0}ms"))
+                    .unwrap_or_else(|| "failed".to_string()),
+                if google_ping.is_some() {
+                    "none"
+                } else {
+                    "verify outbound network connectivity"
+                },
+            ),
+            doctor_status(
+                "HTTP reachability",
+                if http_ok { "PASS" } else { "FAIL" },
+                if http_ok { "info" } else { "error" },
+                if http_ok { "reachable" } else { "unreachable" },
+                if http_ok {
+                    "none"
+                } else {
+                    "verify outbound HTTP access"
+                },
+            ),
+            doctor_status(
+                "Cloudflare ping",
+                if cloudflare_ping.is_some() {
+                    "PASS"
+                } else {
+                    "FAIL"
+                },
+                if cloudflare_ping.is_some() {
+                    "info"
+                } else {
+                    "error"
+                },
+                &cloudflare_ping
+                    .map(|ms| format!("{ms:.0}ms"))
+                    .unwrap_or_else(|| "failed".to_string()),
+                if cloudflare_ping.is_some() {
+                    "none"
+                } else {
+                    "verify external network routing"
+                },
+            ),
+            doctor_status(
+                "Public IP",
+                if network.public_ip.is_some() { "PASS" } else { "WARN" },
+                if network.public_ip.is_some() {
+                    "info"
+                } else {
+                    "warning"
+                },
+                network.public_ip.as_deref().unwrap_or("unavailable"),
                 "none",
-            )),
-            Err(_) => checks.push(doctor_status(
-                "DNS server",
-                "WARN",
-                "warning",
-                "unavailable",
-                "check local DNS resolver configuration",
-            )),
+            ),
+            doctor_status(
+                "Local IP",
+                if network.local_ip.is_some() { "PASS" } else { "WARN" },
+                if network.local_ip.is_some() {
+                    "info"
+                } else {
+                    "warning"
+                },
+                network.local_ip.as_deref().unwrap_or("unavailable"),
+                "none",
+            ),
+            doctor_status(
+                "ISP",
+                if network.isp.is_some() { "PASS" } else { "WARN" },
+                if network.isp.is_some() {
+                    "info"
+                } else {
+                    "warning"
+                },
+                network.isp.as_deref().unwrap_or("unavailable"),
+                "none",
+            ),
+            api_reachability_check(),
+            proxy_detection_check(),
+        ];
+        if server_mode {
+            for (label, url) in SERVER_API_ENDPOINTS {
+                checks.push(endpoint_doctor_check(
+                    label,
+                    url,
+                    "check outbound HTTPS access, DNS, or firewall rules",
+                ));
+            }
+            match dns_server() {
+                Ok(server) => checks.push(doctor_status("DNS server", "PASS", "info", &server, "none")),
+                Err(_) => checks.push(doctor_status(
+                    "DNS server",
+                    "WARN",
+                    "warning",
+                    "unavailable",
+                    "check local DNS resolver configuration",
+                )),
+            }
         }
+        print_doctor_checks(&checks)?;
+        if server_mode {
+            print_server_mode_footer();
+        }
+        return Ok(());
     }
-    print_doctor_checks(&checks)?;
+
+    let width = 18usize;
+    print_network_line(
+        "DNS resolution",
+        dns_ok,
+        if dns_ok {
+            Some("✓ ok".to_string())
+        } else {
+            Some("✗ failed".to_string())
+        },
+        width,
+    );
+    print_network_line(
+        "External ping",
+        google_ping.is_some(),
+        Some(
+            google_ping
+                .map(|ms| format!("✓ ok (google.com {:.0}ms)", ms))
+                .unwrap_or_else(|| "✗ failed".to_string()),
+        ),
+        width,
+    );
+    print_network_line(
+        "HTTP reachability",
+        http_ok,
+        if http_ok {
+            Some("✓ ok".to_string())
+        } else {
+            Some("✗ failed".to_string())
+        },
+        width,
+    );
+    print_network_line(
+        "Cloudflare ping",
+        cloudflare_ping.is_some(),
+        Some(
+            cloudflare_ping
+                .map(|ms| format!("✓ ok ({:.0}ms)", ms))
+                .unwrap_or_else(|| "✗ failed".to_string()),
+        ),
+        width,
+    );
+    println!(
+        "  {:<width$} {}",
+        "Public IP",
+        network.public_ip.as_deref().unwrap_or("unavailable"),
+        width = width
+    );
+    println!(
+        "  {:<width$} {}",
+        "Local IP",
+        network.local_ip.as_deref().unwrap_or("unavailable"),
+        width = width
+    );
+    println!(
+        "  {:<width$} {}",
+        "ISP",
+        network.isp.as_deref().unwrap_or("unavailable"),
+        width = width
+    );
+
+    if dns_ok && google_ping.is_some() && http_ok && cloudflare_ping.is_some() {
+        println!("  All network checks passed.");
+    } else {
+        println!("  Some network checks failed.");
+    }
+
     if server_mode {
+        println!();
+        for (label, url) in SERVER_API_ENDPOINTS {
+            let ok = http_reachable(url);
+            println!(
+                "  {:<width$} {} {}",
+                label,
+                if ok { "✓" } else { "✗" },
+                if ok { "ok" } else { "failed" },
+                width = width
+            );
+        }
         print_server_mode_footer();
     }
 
     Ok(())
+}
+
+fn print_network_line(name: &str, ok: bool, detail: Option<String>, width: usize) {
+    match detail {
+        Some(detail) => {
+            println!("  {:<width$} {}", name, detail, width = width);
+        }
+        None => {
+            println!(
+                "  {:<width$} {}",
+                name,
+                if ok { "✓ ok" } else { "✗ failed" },
+                width = width
+            );
+        }
+    }
 }
 
 pub fn run_diagnostic_system(server_mode: bool) -> Result<(), String> {
