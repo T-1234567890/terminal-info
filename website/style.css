@@ -1,0 +1,9 @@
+:root {
+  color-scheme: light;
+  --bg: #f7f5f2;
+  --text: #2c2a28;
+  --muted: #6b6763;
+  --accent: #a67c52;
+  --measure: 740px;
+  --container: 940px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
