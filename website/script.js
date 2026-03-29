@@ -84,6 +84,10 @@
       }
     });
 
+    document.querySelectorAll("[data-lang-content]").forEach(function (node) {
+      node.hidden = node.getAttribute("data-lang-content") !== currentLanguage;
+    });
+
     var heroCopyBtn = document.getElementById("hero-copy-btn");
     if (heroCopyBtn) {
       heroCopyBtn.title = currentLanguage === "zh" ? "复制安装命令" : "Copy install command";
