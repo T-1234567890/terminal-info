@@ -8,6 +8,8 @@ BINARY_NAME="tinfo"
 PRIMARY_INSTALL_DIR="/usr/local/bin"
 FALLBACK_INSTALL_DIR="${HOME}/.local/bin"
 MINISIGN_PUBLIC_KEY="RWRgzvl/IRChlCdww8KtvuohEfnRA++x8Ro1hql1KOvVAVItAXEsC0jN"
+DOWNLOAD_RETRIES=3
+DOWNLOAD_RETRY_DELAY_SECS=2
 
 detect_arch() {
   local arch
@@ -52,6 +54,10 @@ require_cmd() {
   fi
 }
 
+is_interactive() {
+  [ -t 0 ]
+}
+
 require_sha_tool() {
   if command -v sha256sum >/dev/null 2>&1; then
     echo "sha256sum"
@@ -65,6 +71,77 @@ require_sha_tool() {
 
   echo "Missing required command: sha256sum or shasum" >&2
   exit 1
+}
+
+print_minisign_instructions() {
+  echo "Minisign is required to verify the release." >&2
+  echo "Install minisign, then run the installer again." >&2
+  echo >&2
+  echo "macOS:   brew install minisign" >&2
+  echo "Ubuntu:  sudo apt install -y minisign" >&2
+  echo "Fedora:  sudo dnf install -y minisign" >&2
+}
+
+fail_minisign_install() {
+  echo "Automatic minisign installation did not succeed." >&2
+  print_minisign_instructions
+  exit 1
+}
+
+install_minisign() {
+  local os distro
+  os="$(uname -s)"
+
+  case "$os" in
+    Darwin)
+      if ! command -v brew >/dev/null 2>&1; then
+        echo "Automatic minisign installation is only supported on macOS with Homebrew." >&2
+        fail_minisign_install
+      fi
+      if ! brew install minisign; then
+        fail_minisign_install
+      fi
+      return 0
+      ;;
+    Linux)
+      if [ -r /etc/os-release ]; then
+        distro="$(. /etc/os-release && printf '%s' "${ID:-}")"
+      else
+        distro=""
+      fi
+
+      case "$distro" in
+        ubuntu|debian)
+          if ! command -v sudo >/dev/null 2>&1 || ! command -v apt >/dev/null 2>&1; then
+            fail_minisign_install
+          fi
+          if ! sudo apt install -y minisign; then
+            fail_minisign_install
+          fi
+          return 0
+          ;;
+        fedora)
+          if ! command -v sudo >/dev/null 2>&1 || ! command -v dnf >/dev/null 2>&1; then
+            fail_minisign_install
+          fi
+          if ! sudo dnf install -y minisign; then
+            fail_minisign_install
+          fi
+          return 0
+          ;;
+        *)
+          echo "Automatic minisign installation is not supported on this Linux distribution." >&2
+          print_minisign_instructions
+          exit 1
+          ;;
+      esac
+      ;;
+    *)
+      echo "Automatic minisign installation is not supported on this platform." >&2
+      print_minisign_instructions
+      exit 1
+      ;;
+  esac
 }
 
 select_install_dir() {
@@ -86,8 +163,22 @@ path_contains_dir() {
 download_file() {
   local url="$1"
   local destination="$2"
+  local attempt
 
-  curl -fsSL "$url" -o "$destination"
+  for attempt in 1 2 3; do
+    if curl -fsSL "$url" -o "$destination"; then
+      return 0
+    fi
+
+    if [ "$attempt" -lt "$DOWNLOAD_RETRIES" ]; then
+      echo "Download failed (${attempt}/${DOWNLOAD_RETRIES}), retrying..."
+      sleep "$DOWNLOAD_RETRY_DELAY_SECS"
+    fi
+  done
+
+  echo "This may be due to network issues or temporary CDN delays." >&2
+  echo "Please try again in a few minutes." >&2
+  exit 1
 }
 
 parse_checksum() {
@@ -167,9 +258,15 @@ main() {
   require_cmd chmod
 
   if ! command -v minisign >/dev/null 2>&1; then
-    echo "Missing required command: minisign" >&2
-    echo "Install minisign and run the installer again." >&2
-    exit 1
+    if is_interactive; then
+      echo "Minisign is required to verify the release."
+      echo "Press Enter to install minisign automatically, or Ctrl+C to cancel."
+      read -r
+      install_minisign
+    else
+      print_minisign_instructions
+      exit 1
+    fi
   fi
 
   local arch platform archive_name archive_url signature_url checksum_url tmp_dir archive_path
