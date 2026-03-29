@@ -549,8 +549,8 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
 
 .demo-container {
   display: grid;
-  grid-template-columns: 1fr 1.5fr;
-  gap: 4rem;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr);
+  gap: 5.5rem;
   align-items: start;
 }
 
@@ -589,11 +589,16 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
   color: var(--accent);
 }
 
-.demo-window { position: relative; z-index: 1; }
+.demo-window {
+  position: relative;
+  z-index: 1;
+  justify-self: end;
+  width: min(100%, 56rem);
+}
 
 @media (max-width: 900px) {
   .demo-container {
-    gap: 2rem;
+    gap: 2.5rem;
   }
 }
 
@@ -692,6 +697,12 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
   overflow-x: auto;
   line-height: 1.7;
 }
+.code-block pre.install-command-display {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-height: 4.9rem;
+}
 .code-block .code-copy {
   background: none;
   border: none;
@@ -733,16 +744,27 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
 
 .install-grid {
   display: grid;
-  grid-template-columns: 1.1fr 1fr;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
   gap: 3rem;
   align-items: start;
+}
+.install-grid > div:last-child {
+  width: 100%;
 }
 .install-desc h3 {
   font-size: 1.1rem;
   font-weight: 700;
   margin-bottom: 0.5rem;
 }
-.install-desc p { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem; }
+.install-desc p {
+  max-width: 26ch;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+.install-grid .code-block {
+  width: 100%;
+}
 
 /* ---- Docs ---- */
 .docs-section { background: var(--bg); }
