@@ -2,7 +2,7 @@
 
 ## Core Binary Signing
 
-Terminal Info release archives are signed with the official Terminal Info Minisign key.
+Terminal Info release archives are published with both an official SHA-256 checksum and an official Minisign signature.
 
 Core release assets are published as:
 
@@ -22,9 +22,9 @@ The GitHub Actions release workflow builds each target on a native runner:
 - macOS Apple Silicon on `macos-14`
 - Windows on `windows-latest`
 
-The `tinfo update` command downloads the release archive and its `.minisig` file, then verifies the signature using the public key embedded in the Terminal Info binary from `keys/minisign.pub`.
+The install script and `tinfo update` command both download the release archive, its `.sha256` file, and its `.minisig` file. They verify the SHA-256 checksum first, then verify the Minisign signature using the public key embedded in the installer or the running Terminal Info binary from `keys/minisign.pub`.
 
-If the signature does not verify, the update is aborted.
+If either verification step fails, installation or update is aborted.
 
 ## Release Signing Workflow
 
@@ -42,9 +42,10 @@ For each release artifact, the workflow:
 2. packages the archive with the exact name `tinfo-<target>.tar.gz` or `tinfo-<target>.zip`
 3. writes the secret key to `minisign.key`
 4. runs `minisign -S` to produce `archive.minisig`
-5. uploads both the archive and the signature to the GitHub release
+5. writes a SHA-256 checksum file for the archive
+6. uploads the archive, checksum, and signature to the GitHub release
 
-The `.sha256` file is optional extra metadata. Signature verification is the required trust check.
+Both checksum verification and signature verification are required before Terminal Info installs or updates a core release.
 
 ## Signing Key Rotation
 
@@ -79,4 +80,4 @@ Terminal Info verifies plugin downloads against the plugin-specific `pubkey` sto
 
 ## Checksums
 
-SHA-256 checksums are optional extra integrity metadata for releases and plugins. They do not replace Minisign signatures.
+SHA-256 checksums are part of the required verification flow for official core installs and updates. They complement Minisign signatures and do not replace them.

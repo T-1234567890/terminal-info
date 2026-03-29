@@ -5,6 +5,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
+use crate::config::home_dir_path;
+
 #[derive(Serialize, Deserialize)]
 struct CacheEntry<T> {
     timestamp: u64,
@@ -49,8 +51,7 @@ pub fn cache_dir_path() -> Result<PathBuf, String> {
         return Ok(PathBuf::from(dir));
     }
 
-    let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    Ok(PathBuf::from(home).join(".tinfo").join("cache"))
+    Ok(home_dir_path().join(".tinfo").join("cache"))
 }
 
 pub fn now_unix() -> u64 {

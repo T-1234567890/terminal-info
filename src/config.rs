@@ -555,9 +555,30 @@ pub fn config_path() -> Result<PathBuf, String> {
     Ok(config_dir()?.join("config.toml"))
 }
 
+pub fn home_dir_path() -> PathBuf {
+    if let Some(path) = dirs::home_dir() {
+        return path;
+    }
+
+    if let Ok(path) = env::var("USERPROFILE") {
+        let trimmed = path.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+
+    if let Ok(path) = env::var("HOME") {
+        let trimmed = path.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+
+    env::current_dir().unwrap_or_else(|_| env::temp_dir())
+}
+
 pub fn config_dir() -> Result<PathBuf, String> {
-    let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    Ok(PathBuf::from(home).join(".tinfo"))
+    Ok(home_dir_path().join(".tinfo"))
 }
 
 pub fn data_dir_path() -> Result<PathBuf, String> {
@@ -565,8 +586,7 @@ pub fn data_dir_path() -> Result<PathBuf, String> {
 }
 
 pub fn legacy_json_config_path() -> Result<PathBuf, String> {
-    let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    Ok(PathBuf::from(home).join(".tw").join("config.json"))
+    Ok(home_dir_path().join(".tw").join("config.json"))
 }
 
 pub fn plugin_dir_path() -> Result<PathBuf, String> {
@@ -574,13 +594,11 @@ pub fn plugin_dir_path() -> Result<PathBuf, String> {
         return Ok(PathBuf::from(dir));
     }
 
-    let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    Ok(PathBuf::from(home).join(".terminal-info").join("plugins"))
+    Ok(home_dir_path().join(".terminal-info").join("plugins"))
 }
 
 pub fn legacy_plugin_dir_path() -> Result<PathBuf, String> {
-    let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    Ok(PathBuf::from(home).join(".tinfo").join("plugins"))
+    Ok(home_dir_path().join(".tinfo").join("plugins"))
 }
 
 #[cfg(test)]

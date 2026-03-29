@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use sysinfo::{Disks, System};
 
 use crate::cache::{read_cache, write_cache};
-use crate::config::{Config, config_path};
+use crate::config::{Config, config_path, home_dir_path};
 use crate::migration::inspect_migration_status;
 use crate::output::{error_prefix, success_prefix, warn_prefix};
 use crate::plugin::{plugin_diagnostic_summary, run_diagnostic_plugins, verify_plugins};
@@ -2414,14 +2414,11 @@ fn collect_leak_checks(config: &Config) -> Vec<DoctorCheck> {
 }
 
 fn plugin_dir_path() -> Result<PathBuf, String> {
-    let home =
-        std::env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    Ok(PathBuf::from(home).join(".terminal-info").join("plugins"))
+    Ok(home_dir_path().join(".terminal-info").join("plugins"))
 }
 
 fn registry_cache_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_default();
-    PathBuf::from(home)
+    home_dir_path()
         .join(".terminal-info")
         .join("cache")
         .join("plugins.json")

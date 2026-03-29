@@ -8,7 +8,10 @@ use chrono::{Local, LocalResult, NaiveTime, TimeZone};
 use dialoguer::{Input, Select, theme::ColorfulTheme};
 use serde::{Deserialize, Serialize};
 
-use crate::config::{Config, RemindersConfig, TaskSortOrder, TasksConfig, TimerConfig, data_dir_path};
+use crate::config::{
+    Config, RemindersConfig, TaskSortOrder, TasksConfig, TimerConfig, data_dir_path,
+    home_dir_path,
+};
 use crate::output::{OutputMode, json_output, output_mode};
 use crate::plugin::{PluginWidget, PluginWidgetBody};
 use crate::theme::format_box_table;
@@ -916,14 +919,14 @@ fn history_file_path() -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var("HISTFILE") {
         return Ok(PathBuf::from(path));
     }
-    let home = std::env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
+    let home = home_dir_path();
     let shell = std::env::var("SHELL").unwrap_or_default();
     let path = if shell.contains("zsh") {
-        PathBuf::from(&home).join(".zsh_history")
+        home.join(".zsh_history")
     } else if shell.contains("fish") {
-        PathBuf::from(&home).join(".local/share/fish/fish_history")
+        home.join(".local/share/fish/fish_history")
     } else {
-        PathBuf::from(&home).join(".bash_history")
+        home.join(".bash_history")
     };
     Ok(path)
 }

@@ -48,7 +48,7 @@ use crate::builtins::{
     run_diagnostic_system, run_ping, show_network_info, show_system_info,
 };
 use crate::cache::{read_cache, write_cache};
-use crate::config::{ApiProvider, Config, DefaultOutput, Units, config_path};
+use crate::config::{ApiProvider, Config, DefaultOutput, Units, config_path, home_dir_path};
 use crate::config_menu::show_config_menu;
 use crate::output::{OutputMode, set_json_output, set_output_mode};
 use crate::plugin::{
@@ -1679,17 +1679,16 @@ pub(crate) fn completion_status_for_current_shell() -> Result<(), String> {
 
 fn completion_install_target() -> Result<(CompletionCommand, PathBuf), String> {
     let shell = std::env::var("SHELL").unwrap_or_default();
-    let home =
-        std::env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
+    let home = home_dir_path();
     if shell.ends_with("zsh") {
         Ok((
             CompletionCommand::Zsh,
-            PathBuf::from(&home).join(".zsh/completions/_tinfo"),
+            home.join(".zsh/completions/_tinfo"),
         ))
     } else if shell.ends_with("fish") {
         Ok((
             CompletionCommand::Fish,
-            PathBuf::from(&home).join(".config/fish/completions/tinfo.fish"),
+            home.join(".config/fish/completions/tinfo.fish"),
         ))
     } else if shell.to_ascii_lowercase().contains("powershell") {
         Ok((
@@ -1880,11 +1879,10 @@ fn handle_update_inner(force: bool) -> Result<(), String> {
             .ok_or_else(|| format!("No minisign signature found for '{}'.", asset.name))?;
         download_to_path(&asset.browser_download_url, &archive_path)?;
         let signature = download_text(&signature_asset.browser_download_url, "update signature")?;
-        if let Some(checksum_asset) = select_update_checksum_asset(&release.assets, &asset.name) {
-            let expected_checksum =
-                download_checksum(&checksum_asset.browser_download_url, &asset.name)?;
-            verify_download_checksum(&archive_path, &expected_checksum)?;
-        }
+        let checksum_asset = select_update_checksum_asset(&release.assets, &asset.name)
+            .ok_or_else(|| format!("No SHA-256 checksum found for '{}'.", asset.name))?;
+        let expected_checksum = download_checksum(&checksum_asset.browser_download_url, &asset.name)?;
+        verify_download_checksum(&archive_path, &expected_checksum)?;
         verify_download_signature(&archive_path, &signature)?;
 
         println!("Extracting archive");
@@ -2040,9 +2038,7 @@ fn find_tinfo_binary() -> Result<PathBuf, String> {
 }
 
 fn validate_binary_path(path: &Path) -> Result<(), String> {
-    let home =
-        std::env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    let allowed_local = PathBuf::from(home).join(".local").join("bin").join("tinfo");
+    let allowed_local = home_dir_path().join(".local").join("bin").join("tinfo");
     let allowed_global = PathBuf::from("/usr/local/bin/tinfo");
 
     if path == allowed_global || path == allowed_local {
@@ -2056,9 +2052,7 @@ fn validate_binary_path(path: &Path) -> Result<(), String> {
 }
 
 fn terminal_info_data_dir() -> Result<PathBuf, String> {
-    let home =
-        std::env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    Ok(PathBuf::from(home).join(".terminal-info"))
+    Ok(home_dir_path().join(".terminal-info"))
 }
 
 #[derive(Deserialize)]

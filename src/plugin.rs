@@ -20,6 +20,7 @@ use sha2::{Digest, Sha256};
 use tar::{Archive, Builder};
 use zip::ZipArchive;
 
+use crate::config::home_dir_path;
 use crate::output::{error_prefix, success_prefix};
 
 pub const RESERVED_COMMANDS: &[&str] = &[
@@ -2296,8 +2297,7 @@ fn plugin_dir_path() -> Result<PathBuf, String> {
         return Ok(PathBuf::from(dir));
     }
 
-    let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    Ok(PathBuf::from(home).join(".terminal-info").join("plugins"))
+    Ok(home_dir_path().join(".terminal-info").join("plugins"))
 }
 
 fn plugin_cache_root() -> Result<PathBuf, String> {
@@ -2305,8 +2305,7 @@ fn plugin_cache_root() -> Result<PathBuf, String> {
         return Ok(PathBuf::from(path));
     }
 
-    let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    Ok(PathBuf::from(home).join(".terminal-info").join("cache"))
+    Ok(home_dir_path().join(".terminal-info").join("cache"))
 }
 
 fn plugin_index_cache_path() -> Result<PathBuf, String> {
@@ -3408,8 +3407,7 @@ jobs:
 }
 
 fn trusted_plugins_path() -> Result<PathBuf, String> {
-    let home = env::var("HOME").map_err(|_| "Failed to determine home directory.".to_string())?;
-    Ok(PathBuf::from(home)
+    Ok(home_dir_path()
         .join(".terminal-info")
         .join("trusted_plugins.json"))
 }

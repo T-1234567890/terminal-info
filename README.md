@@ -64,7 +64,7 @@ This is the beginning of terminal-info as a platform, not just a tool.
 ### Install script 
 `Recommended`
 
-You can inspect the install script before running it:
+Downloads and verifies the release archive with SHA-256 and Minisign before installation:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash
@@ -513,7 +513,7 @@ Plugins must also be trusted locally before Terminal Info will execute them.
 `tinfo plugin search` groups installed plugins and registry plugins separately, ranks matches by name and description relevance, and shows short summaries when the registry provides them.
 `tinfo plugin browse` starts a local browser view on `127.0.0.1` for optional visual plugin discovery without replacing the CLI workflow.
 
-Core self-updates verify the official Terminal Info Minisign signature, and plugin installs verify the plugin author's Minisign signature from the reviewed registry entry. SHA-256 checksums remain an extra integrity check when present.
+Core installs and self-updates verify the official Terminal Info SHA-256 checksum and Minisign signature before replacing the binary. Plugin installs verify the plugin author's reviewed checksum and Minisign signature before installation.
 
 Developer quick start:
 
