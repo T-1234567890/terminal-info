@@ -67,14 +67,7 @@ This is the beginning of terminal-info as a platform, not just a tool.
 Downloads and verifies the release archive with SHA-256 and Minisign before installation:
 
 ```bash
-curl -fsSL https://github.com/T-1234567890/terminal-info/releases/latest/download/install.sh | bash
-```
-
-Download first, then run locally:
-
-```bash
-curl -fsSL -o install.sh https://github.com/T-1234567890/terminal-info/releases/latest/download/install.sh
-bash install.sh
+curl -fsSL -o install.sh https://github.com/T-1234567890/terminal-info/releases/latest/download/install.sh && bash install.sh
 ```
 
 Supported release assets include:
