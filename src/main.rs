@@ -36,7 +36,8 @@ use flate2::read::GzDecoder;
 use minisign_verify::{PublicKey, Signature};
 use reqwest::blocking::Client;
 use reqwest::header::ACCEPT_ENCODING;
-use serde::Deserialize;
+use semver::Version;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tar::Archive;
 #[cfg(target_os = "windows")]
@@ -665,6 +666,7 @@ fn main() {
     set_json_output(cli.json);
     let live_view_freeze = resolve_live_view_freeze(&cli);
     let dashboard_freeze = resolve_dashboard_freeze(&cli, &config);
+    let update_notice = maybe_get_update_notice(&cli);
 
     let result = match cli.command {
         Some(Command::Weather { command }) => handle_weather(&mut config, command, live_view_freeze),
@@ -715,6 +717,10 @@ fn main() {
     if let Err(err) = result {
         eprintln!("{err}");
         process::exit(1);
+    }
+
+    if let Some(notice) = update_notice {
+        handle_update_notice(notice);
     }
 }
 
@@ -1974,6 +1980,7 @@ mod dashboard_mode_tests {
     #[test]
     fn dashboard_freeze_flag_overrides_live_and_config() {
         let cli = Cli {
+            version: None,
             plain: false,
             compact: false,
             color: false,
@@ -1990,6 +1997,7 @@ mod dashboard_mode_tests {
     #[test]
     fn dashboard_live_flag_overrides_config_freeze() {
         let cli = Cli {
+            version: None,
             plain: false,
             compact: false,
             color: false,
@@ -2006,6 +2014,7 @@ mod dashboard_mode_tests {
     #[test]
     fn dashboard_config_freeze_applies_without_flags() {
         let cli = Cli {
+            version: None,
             plain: false,
             compact: false,
             color: false,
@@ -2054,6 +2063,24 @@ fn terminal_info_data_dir() -> Result<PathBuf, String> {
     Ok(home_dir_path().join(".terminal-info"))
 }
 
+const UPDATE_CHECK_TTL_SECS: u64 = 60 * 60;
+const UPDATE_NOTIFY_INTERVAL_SECS: u64 = 24 * 60 * 60;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct UpdateCheckCache {
+    last_checked: u64,
+    latest_version: String,
+    #[serde(default)]
+    dismissed_version: Option<String>,
+    #[serde(default)]
+    last_notified: Option<u64>,
+}
+
+enum UpdateNotice {
+    Message(String),
+    Prompt(String),
+}
+
 #[derive(Deserialize)]
 struct TerminalInfoRelease {
     tag_name: String,
@@ -2080,6 +2107,220 @@ fn fetch_terminal_info_release() -> Result<TerminalInfoRelease, String> {
         .map_err(|err| format!("Failed to check latest version: {err}"))?
         .json()
         .map_err(|err| format!("Failed to parse release metadata: {err}"))
+}
+
+fn maybe_get_update_notice(cli: &Cli) -> Option<UpdateNotice> {
+    if !should_check_for_updates(cli) {
+        return None;
+    }
+
+    match read_update_cache() {
+        Some(cache) => {
+            if !update_cache_is_fresh(&cache) {
+                spawn_update_cache_refresh();
+            }
+            build_update_notice(&cache)
+        }
+        _ => {
+            spawn_update_cache_refresh();
+            None
+        }
+    }
+}
+
+fn should_check_for_updates(cli: &Cli) -> bool {
+    if cli.json {
+        return false;
+    }
+
+    !matches!(
+        cli.command,
+        Some(Command::Update)
+            | Some(Command::SelfRepair)
+            | Some(Command::Reinstall)
+            | Some(Command::Uninstall { .. })
+            | Some(Command::Completion { .. })
+    )
+}
+
+fn update_cache_path() -> PathBuf {
+    if let Some(dir) = dirs::config_dir() {
+        return dir.join("tinfo").join("update.json");
+    }
+    home_dir_path().join(".config").join("tinfo").join("update.json")
+}
+
+fn read_update_cache() -> Option<UpdateCheckCache> {
+    let path = update_cache_path();
+    let contents = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&contents).ok()
+}
+
+fn update_cache_is_fresh(cache: &UpdateCheckCache) -> bool {
+    now_unix().saturating_sub(cache.last_checked) < UPDATE_CHECK_TTL_SECS
+}
+
+fn build_update_notice(cache: &UpdateCheckCache) -> Option<UpdateNotice> {
+    let latest = newer_version(&cache.latest_version)?;
+    if update_notice_rate_limited(cache) {
+        return None;
+    }
+
+    let message = format!("New version available: v{latest}");
+    if !stdin_stdout_interactive() {
+        return Some(UpdateNotice::Message(message));
+    }
+
+    if cache.dismissed_version.as_deref() == Some(cache.latest_version.as_str()) {
+        Some(UpdateNotice::Message(message))
+    } else {
+        Some(UpdateNotice::Prompt(message))
+    }
+}
+
+fn update_notice_rate_limited(cache: &UpdateCheckCache) -> bool {
+    match cache.last_notified {
+        Some(last_notified) => now_unix().saturating_sub(last_notified) < UPDATE_NOTIFY_INTERVAL_SECS,
+        None => false,
+    }
+}
+
+fn spawn_update_cache_refresh() {
+    thread::spawn(|| {
+        let _ = refresh_update_cache();
+    });
+}
+
+fn refresh_update_cache() -> Result<(), String> {
+    let release = fetch_terminal_info_release()?;
+    let existing = read_update_cache();
+    write_update_cache(&UpdateCheckCache {
+        last_checked: now_unix(),
+        latest_version: release.tag_name,
+        dismissed_version: existing.as_ref().and_then(|cache| cache.dismissed_version.clone()),
+        last_notified: existing.as_ref().and_then(|cache| cache.last_notified),
+    })
+}
+
+fn write_update_cache(cache: &UpdateCheckCache) -> Result<(), String> {
+    let path = update_cache_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("Failed to create update cache directory: {err}"))?;
+    }
+    let body = serde_json::to_string(cache)
+        .map_err(|err| format!("Failed to serialize update cache: {err}"))?;
+    fs::write(path, body).map_err(|err| format!("Failed to write update cache: {err}"))
+}
+
+fn handle_update_notice(notice: UpdateNotice) {
+    match notice {
+        UpdateNotice::Message(message) => {
+            eprintln!("{message}");
+            eprintln!("Run: tinfo update");
+            mark_update_notice_shown(None);
+        }
+        UpdateNotice::Prompt(message) => {
+            eprintln!("{message}");
+            eprint!("Update now? [Y/n]: ");
+            let _ = io::stderr().flush();
+            let mut input = String::new();
+            match io::stdin().read_line(&mut input) {
+                Ok(_) => {
+                    let reply = input.trim();
+                    if reply.is_empty()
+                        || reply.eq_ignore_ascii_case("y")
+                        || reply.eq_ignore_ascii_case("yes")
+                    {
+                        mark_update_notice_shown(None);
+                        if let Err(err) = handle_update() {
+                            eprintln!("{err}");
+                        }
+                    } else {
+                        mark_update_notice_shown(read_update_cache().map(|cache| cache.latest_version));
+                    }
+                }
+                Err(_) => {
+                    eprintln!("Run: tinfo update");
+                    mark_update_notice_shown(None);
+                }
+            }
+        }
+    }
+}
+
+fn mark_update_notice_shown(dismissed_version: Option<String>) {
+    let mut cache = match read_update_cache() {
+        Some(cache) => cache,
+        None => return,
+    };
+    cache.last_notified = Some(now_unix());
+    if dismissed_version.is_some() {
+        cache.dismissed_version = dismissed_version;
+    }
+    let _ = write_update_cache(&cache);
+}
+
+fn stdin_stdout_interactive() -> bool {
+    io::stdin().is_terminal() && io::stdout().is_terminal()
+}
+
+fn newer_version(latest: &str) -> Option<Version> {
+    let latest = normalize_version(latest)?;
+    let current = normalize_version(env!("CARGO_PKG_VERSION"))?;
+    if latest > current {
+        Some(latest)
+    } else {
+        None
+    }
+}
+
+fn normalize_version(value: &str) -> Option<Version> {
+    Version::parse(value.trim().trim_start_matches('v')).ok()
+}
+
+fn now_unix() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+#[cfg(test)]
+mod update_check_tests {
+    use super::{UpdateCheckCache, newer_version, normalize_version, update_cache_is_fresh};
+
+    #[test]
+    fn normalize_version_strips_prefix() {
+        let parsed = normalize_version("v1.2.3").expect("expected semver");
+        assert_eq!(parsed.to_string(), "1.2.3");
+    }
+
+    #[test]
+    fn newer_version_uses_semver_ordering() {
+        let newer = newer_version("v1.10.0").expect("expected newer version");
+        assert_eq!(newer.to_string(), "1.10.0");
+        assert!(newer_version("v1.2.4").is_none());
+    }
+
+    #[test]
+    fn fresh_cache_respects_ttl() {
+        let now = super::now_unix();
+        let fresh = UpdateCheckCache {
+            last_checked: now.saturating_sub(60),
+            latest_version: "v9.9.9".to_string(),
+            dismissed_version: None,
+            last_notified: None,
+        };
+        let stale = UpdateCheckCache {
+            last_checked: now.saturating_sub(super::UPDATE_CHECK_TTL_SECS + 1),
+            latest_version: "v9.9.9".to_string(),
+            dismissed_version: None,
+            last_notified: None,
+        };
+        assert!(update_cache_is_fresh(&fresh));
+        assert!(!update_cache_is_fresh(&stale));
+    }
 }
 
 fn prepare_update_dir() -> Result<PathBuf, String> {
