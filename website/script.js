@@ -8,6 +8,8 @@
   var RELEASE_API = "https://api.github.com/repos/T-1234567890/terminal-info/releases/latest";
   var VERSION_CACHE_KEY = "tinfo-version";
   var VERSION_CACHE_TTL = 10 * 60 * 1000;
+  var LANGUAGE_KEY = "tinfo-language";
+  var currentLanguage = "en";
 
   function normalizeVersion(tag) {
     if (!tag || typeof tag !== "string") return null;
@@ -54,6 +56,69 @@
       if (releaseUrl && node.tagName === "A") {
         node.setAttribute("href", releaseUrl);
       }
+    });
+  }
+
+  function getLocalizedText(node, lang) {
+    if (!node || !node.dataset) return null;
+    if (lang === "zh" && node.dataset.zh) return node.dataset.zh;
+    if (node.dataset.en) return node.dataset.en;
+    return null;
+  }
+
+  function updateLanguageButtons(lang) {
+    document.querySelectorAll("[data-lang-btn]").forEach(function (btn) {
+      btn.classList.toggle("active", btn.getAttribute("data-lang-btn") === lang);
+      btn.setAttribute("aria-pressed", btn.getAttribute("data-lang-btn") === lang ? "true" : "false");
+    });
+  }
+
+  function applyLanguage(lang) {
+    currentLanguage = lang === "zh" ? "zh" : "en";
+    document.documentElement.lang = currentLanguage === "zh" ? "zh-CN" : "en";
+
+    document.querySelectorAll("[data-en][data-zh]").forEach(function (node) {
+      var next = getLocalizedText(node, currentLanguage);
+      if (typeof next === "string") {
+        node.textContent = next;
+      }
+    });
+
+    var heroCopyBtn = document.getElementById("hero-copy-btn");
+    if (heroCopyBtn) {
+      heroCopyBtn.title = currentLanguage === "zh" ? "复制安装命令" : "Copy install command";
+    }
+
+    updateLanguageButtons(currentLanguage);
+
+    if (document.getElementById("demo-info")) {
+      var activeTab = document.querySelector(".demo-tab.active");
+      if (activeTab) {
+        renderInfo(activeTab.getAttribute("data-demo"));
+      }
+    }
+
+    try {
+      window.localStorage.setItem(LANGUAGE_KEY, currentLanguage);
+    } catch (_err) {
+      // Ignore storage failures.
+    }
+  }
+
+  function initLanguageToggle() {
+    var saved = null;
+    try {
+      saved = window.localStorage.getItem(LANGUAGE_KEY);
+    } catch (_err) {
+      saved = null;
+    }
+
+    applyLanguage(saved === "zh" ? "zh" : "en");
+
+    document.querySelectorAll("[data-lang-btn]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        applyLanguage(btn.getAttribute("data-lang-btn"));
+      });
     });
   }
 
@@ -284,11 +349,17 @@
       command: "tinfo",
       info: {
         heading: "Instant system overview",
+        headingZh: "即时系统总览",
         bullets: [
           "Shows location, weather, time, network, CPU, and memory in one view",
           "Timers and reminders appear directly in the main summary",
           "Useful as a quick status check when you open the tool",
         ],
+        bulletsZh: [
+          "在一个视图中显示位置、天气、时间、网络、CPU 和内存",
+          "计时器和提醒会直接出现在主摘要里",
+          "适合在打开工具时快速查看当前状态"
+        ]
       },
       lines: [
         {
@@ -317,11 +388,17 @@
       command: "tinfo weather now",
       info: {
         heading: "Real-time weather",
+        headingZh: "实时天气",
         bullets: [
           "Shows the current conditions in a compact boxed view",
           "Includes temperature, wind, and humidity",
           "Useful when you want a quick weather check without leaving the terminal",
         ],
+        bulletsZh: [
+          "以紧凑的盒式视图显示当前天气",
+          "包含温度、风速和湿度",
+          "适合在不离开终端时快速查看天气"
+        ]
       },
       lines: [
         {
@@ -345,11 +422,17 @@
       command: "tinfo diagnostic network",
       info: {
         heading: "Network diagnostics",
+        headingZh: "网络诊断",
         bullets: [
           "Checks DNS, ping, HTTP reachability, and Cloudflare connectivity",
           "Also reports public IP, local IP, and ISP details",
           "Useful when you want a fast connectivity check from the CLI",
         ],
+        bulletsZh: [
+          "检查 DNS、ping、HTTP 可达性和 Cloudflare 连通性",
+          "同时报告公网 IP、本地 IP 和运营商信息",
+          "适合在 CLI 中快速检查连接状态"
+        ]
       },
       lines: [
         { type: "check", key: "  DNS resolution     ", val: "ok", good: true },
@@ -369,11 +452,17 @@
       command: "tinfo timer start 25m",
       info: {
         heading: "Built-in productivity",
+        headingZh: "内置效率工具",
         bullets: [
           "Starts a countdown timer from the command line",
           "Shows the remaining time in a compact live view",
           "Useful for focused work sessions directly in the terminal",
         ],
+        bulletsZh: [
+          "可以直接从命令行启动倒计时",
+          "以紧凑的实时视图显示剩余时间",
+          "适合在终端中进行专注工作"
+        ]
       },
       lines: [
         { type: "out", cls: "term-output", text: "Started countdown timer for 25m 0s." },
@@ -397,11 +486,17 @@
       command: "tinfo plugin install news",
       info: {
         heading: "Plugin management",
+        headingZh: "插件管理",
         bullets: [
           "The install command resolves a plugin name and places the binary in the managed plugin directory",
           "Installed plugins become available as first-class terminal commands",
           "Useful for extending the CLI without modifying the core tool",
         ],
+        bulletsZh: [
+          "安装命令会解析插件名称，并将二进制文件放入受管理的插件目录",
+          "安装后的插件会作为一等终端命令提供使用",
+          "适合在不修改核心工具的情况下扩展 CLI"
+        ]
       },
       lines: [
         { type: "out", cls: "good", text: "Installed plugin 'news' at /Users/you/.terminal-info/plugins/docker/tinfo-news." },
@@ -416,14 +511,16 @@
     var d = demos[key];
     if (!d) return;
     var info = d.info;
-    var html = '<h3>' + info.heading + '</h3>';
+    var heading = currentLanguage === "zh" && info.headingZh ? info.headingZh : info.heading;
+    var bullets = currentLanguage === "zh" && info.bulletsZh ? info.bulletsZh : info.bullets;
+    var html = '<h3>' + heading + '</h3>';
     if (info.desc) {
       html += '<p>' + info.desc + '</p>';
     }
-    if (info.bullets && info.bullets.length) {
+    if (bullets && bullets.length) {
       html += '<ul>';
-      for (var i = 0; i < info.bullets.length; i++) {
-        html += '<li>' + info.bullets[i] + '</li>';
+      for (var i = 0; i < bullets.length; i++) {
+        html += '<li>' + bullets[i] + '</li>';
       }
       html += '</ul>';
     }
@@ -770,8 +867,8 @@
   }
 
   function flashBtn(btn) {
-    var original = btn.textContent;
-    btn.textContent = "Copied!";
+    var original = getLocalizedText(btn, currentLanguage) || btn.textContent;
+    btn.textContent = currentLanguage === "zh" ? "已复制" : "Copied!";
     btn.classList.add("copied");
     setTimeout(function () {
       btn.textContent = original;
@@ -866,6 +963,7 @@
      Init
   ------------------------------------------ */
   document.addEventListener("DOMContentLoaded", function () {
+    initLanguageToggle();
     loadStableVersion();
     initSectionReveal();
     initHeroTerminalUpdates();

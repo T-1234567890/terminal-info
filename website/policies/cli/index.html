@@ -10,21 +10,26 @@
     />
     <link rel="stylesheet" href="../../style.css" />
   </head>
-  <body>
+  <body class="policy-page">
     <header class="site-header">
       <div class="container">
         <a class="brand" href="../../">t<span>info</span></a>
         <nav class="site-nav" id="site-nav" aria-label="Primary">
-          <a href="../../#features">Features</a>
-          <a href="../../#demo">Demo</a>
-          <a href="../../#comparison">Why tinfo</a>
-          <a href="../../#install">Install</a>
-          <a href="../../#docs">Docs</a>
-          <a href="../../#plugins">Plugins</a>
-          <a href="../">Policies</a>
-          <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
+          <a href="../../#features" data-en="Features" data-zh="功能">Features</a>
+          <a href="../../#demo" data-en="Demo" data-zh="演示">Demo</a>
+          <a href="../../#comparison" data-en="Why tinfo" data-zh="为什么选择 tinfo">Why tinfo</a>
+          <a href="../../#install" data-en="Install" data-zh="安装">Install</a>
+          <a href="../../#docs" data-en="Docs" data-zh="文档">Docs</a>
+          <a href="../../#plugins" data-en="Plugins" data-zh="插件">Plugins</a>
+          <a href="../" data-en="Policies" data-zh="政策">Policies</a>
+          <a href="https://github.com/T-1234567890/terminal-info" data-en="GitHub" data-zh="GitHub">GitHub</a>
         </nav>
-        <a class="btn nav-cta" href="../../#install">Get started &rarr;</a>
+        <div class="lang-switcher" aria-label="Language switcher">
+          <button type="button" class="lang-btn active" data-lang-btn="en">EN</button>
+          <span>/</span>
+          <button type="button" class="lang-btn" data-lang-btn="zh">中文</button>
+        </div>
+        <a class="btn nav-cta" href="../../#install" data-en="Get started →" data-zh="开始使用 →">Get started &rarr;</a>
         <button class="hamburger" id="hamburger" aria-label="Toggle menu">
           <span></span><span></span><span></span>
         </button>
@@ -35,14 +40,14 @@
       <div class="container">
         <div class="hero-inner">
           <div class="hero-copy">
-            <div class="hero-badge">Policies</div>
-            <h1>Terminal Info (CLI)</h1>
-            <p class="hero-sub">
+            <div class="hero-badge" data-en="Policies" data-zh="政策">Policies</div>
+            <h1 data-en="Terminal Info (CLI)" data-zh="Terminal Info（CLI）">Terminal Info (CLI)</h1>
+            <p class="hero-sub" data-en="Runs locally and keeps its privacy model simple." data-zh="在本地运行，并保持简洁清晰的隐私边界。">
               Runs locally and keeps its privacy model simple.
             </p>
             <div class="hero-actions">
-              <a class="btn" href="../">All Policies &rarr;</a>
-              <a class="btn" href="../website/">Website Privacy &rarr;</a>
+              <a class="btn" href="../" data-en="All Policies →" data-zh="所有政策 →">All Policies &rarr;</a>
+              <a class="btn" href="../website/" data-en="Website Privacy →" data-zh="网站隐私 →">Website Privacy &rarr;</a>
             </div>
           </div>
         </div>
@@ -52,15 +57,15 @@
     <main class="section legal-page">
       <div class="container legal-layout">
         <div class="section-copy">
-          <p class="eyebrow">CLI Privacy</p>
-          <h2 class="legal-title">What to expect from Terminal Info</h2>
-          <p>
+          <p class="eyebrow" data-en="CLI Privacy" data-zh="CLI 隐私">CLI Privacy</p>
+          <h2 class="legal-title" data-en="What to expect from Terminal Info" data-zh="关于 Terminal Info，你可以预期什么">What to expect from Terminal Info</h2>
+          <p data-en="Terminal Info is designed to be transparent and local-first. It runs on your machine, and its built-in features are intended to be clear about when they read local system state and when they contact a remote service." data-zh="Terminal Info 的设计强调透明和本地优先。它运行在你的机器上，并尽量清楚说明何时读取本地系统状态、何时联系远程服务。">
             Terminal Info is designed to be transparent and local-first. It runs
             on your machine, and its built-in features are intended to be clear
             about when they read local system state and when they contact a
             remote service.
           </p>
-          <p>
+          <p data-en="This page describes the boundaries of the core project, the risk model for plugins, and the small set of cases where network requests are part of normal use." data-zh="本页说明核心项目的边界、插件的风险模型，以及网络请求在正常使用中会出现的少数场景。">
             This page describes the boundaries of the core project, the risk
             model for plugins, and the small set of cases where network requests
             are part of normal use.
@@ -68,8 +73,8 @@
         </div>
 
         <section class="disclaimer">
-          <h2>Disclaimer</h2>
-          <p>
+          <h2 data-en="Disclaimer" data-zh="免责声明">Disclaimer</h2>
+          <p data-en="While Terminal Info aims to be safe and transparent, users should understand that:" data-zh="尽管 Terminal Info 致力于安全与透明，用户仍应了解：">
             While Terminal Info aims to be safe and transparent, users should
             understand that:
           </p>
@@ -85,7 +90,7 @@
             </li>
           </ul>
 
-          <h3>Third-party plugins</h3>
+          <h3 data-en="Third-party plugins" data-zh="第三方插件">Third-party plugins</h3>
           <p>
             Third-party plugins are not developed by the Terminal Info project.
             Installing a plugin may execute external code on your system.
@@ -100,14 +105,14 @@
             repositories before installing them.
           </p>
 
-          <h3>Installation scripts</h3>
+          <h3 data-en="Installation scripts" data-zh="安装脚本">Installation scripts</h3>
           <p>
             If you install Terminal Info using the provided installation script,
             you may review the script before running it. You may also download
             binaries directly from the GitHub Releases page.
           </p>
 
-          <h3>Privacy</h3>
+          <h3 data-en="Privacy" data-zh="隐私">Privacy</h3>
           <p>Terminal Info does not collect personal data or identifiers.</p>
           <p>Network requests are only used for specific features such as:</p>
           <ul>
@@ -123,11 +128,11 @@
         </section>
 
         <section class="policy-note">
-          <h3>Looking for website privacy?</h3>
-          <p>
+          <h3 data-en="Looking for website privacy?" data-zh="想查看网站隐私？">Looking for website privacy?</h3>
+          <p data-en="The website has its own privacy and external-link boundaries." data-zh="网站有自己独立的隐私与外部链接边界。">
             The website has its own privacy and external-link boundaries.
           </p>
-          <a class="policy-link" href="../website/">View Website Privacy Policy &rarr;</a>
+          <a class="policy-link" href="../website/" data-en="View Website Privacy Policy →" data-zh="查看网站隐私政策 →">View Website Privacy Policy &rarr;</a>
         </section>
       </div>
     </main>
@@ -137,14 +142,14 @@
         <div class="footer-inner">
           <div>
             <div class="footer-brand">t<span>info</span></div>
-            <div class="footer-tagline">The extensible terminal toolbox.</div>
+            <div class="footer-tagline" data-en="The extensible terminal toolbox." data-zh="可扩展的终端工具箱。">The extensible terminal toolbox.</div>
           </div>
           <div class="footer-links">
-            <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
-            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md">Plugin Docs</a>
-            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/commands.md">Commands</a>
-            <a href="https://github.com/T-1234567890/terminal-info/blob/main/CONTRIBUTING.md">Contributing</a>
-            <a href="../">Policies</a>
+            <a href="https://github.com/T-1234567890/terminal-info" data-en="GitHub" data-zh="GitHub">GitHub</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md" data-en="Plugin Docs" data-zh="插件文档">Plugin Docs</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/commands.md" data-en="Commands" data-zh="命令">Commands</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/CONTRIBUTING.md" data-en="Contributing" data-zh="贡献">Contributing</a>
+            <a href="../" data-en="Policies" data-zh="政策">Policies</a>
           </div>
         </div>
         <div class="footer-divider"></div>
@@ -152,8 +157,8 @@
           <span class="footer-copy">&copy; 2026 Terminal Info. Licensed under Apache 2.0.</span>
           <div class="footer-legal">
             <a href="mailto:support@pomodoro-app.tech">support@pomodoro-app.tech</a>
-            <a href="../website/">Website Privacy</a>
-            <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
+            <a href="../website/" data-en="Website Privacy" data-zh="网站隐私">Website Privacy</a>
+            <a href="https://github.com/T-1234567890/terminal-info" data-en="GitHub" data-zh="GitHub">GitHub</a>
           </div>
         </div>
       </div>

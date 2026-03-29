@@ -20,16 +20,21 @@
       <div class="container">
         <a class="brand" href="/">t<span>info</span></a>
         <nav class="site-nav" id="site-nav" aria-label="Primary">
-          <a href="#features">Features</a>
-          <a href="#demo">Demo</a>
-          <a href="#comparison">Why tinfo</a>
-          <a href="#install">Install</a>
-          <a href="#docs">Docs</a>
-          <a href="#plugins">Plugins</a>
-          <a href="policies/">Policies</a>
-          <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
+          <a href="#features" data-en="Features" data-zh="功能">Features</a>
+          <a href="#demo" data-en="Demo" data-zh="演示">Demo</a>
+          <a href="#comparison" data-en="Why tinfo" data-zh="为什么选择 tinfo">Why tinfo</a>
+          <a href="#install" data-en="Install" data-zh="安装">Install</a>
+          <a href="#docs" data-en="Docs" data-zh="文档">Docs</a>
+          <a href="#plugins" data-en="Plugins" data-zh="插件">Plugins</a>
+          <a href="policies/" data-en="Policies" data-zh="政策">Policies</a>
+          <a href="https://github.com/T-1234567890/terminal-info" data-en="GitHub" data-zh="GitHub">GitHub</a>
         </nav>
-        <a class="btn nav-cta" href="#install">Get started &rarr;</a>
+        <div class="lang-switcher" aria-label="Language switcher">
+          <button type="button" class="lang-btn active" data-lang-btn="en">EN</button>
+          <span>/</span>
+          <button type="button" class="lang-btn" data-lang-btn="zh">中文</button>
+        </div>
+        <a class="btn nav-cta" href="#install" data-en="Get started →" data-zh="开始使用 →">Get started &rarr;</a>
         <button class="hamburger" id="hamburger" aria-label="Toggle menu">
           <span></span><span></span><span></span>
         </button>
@@ -45,30 +50,25 @@
 
           <div class="hero-copy">
             <div class="hero-badge">Rust &middot; Apache 2.0</div>
-            <h1>The <span class="highlight">Extensible</span><br>Terminal Toolbox</h1>
-            <p class="hero-sub">
+            <h1 data-en="The Extensible Terminal Toolbox" data-zh="可扩展的终端工具箱">The Extensible Terminal Toolbox</h1>
+            <p class="hero-sub" data-en="A fast, Rust-powered platform for system information, diagnostics, and developer utilities — with a plugin ecosystem built right in." data-zh="一个快速、由 Rust 驱动的平台，用于系统信息、诊断和开发者工具，并内置插件生态。">
               A fast, Rust-powered platform for system information, diagnostics, and
               developer utilities &mdash; with a plugin ecosystem built right in.
             </p>
             <div class="hero-actions">
-              <a class="btn" href="#install">Install &rarr;</a>
-              <a class="btn" href="https://github.com/T-1234567890/terminal-info" target="_blank" rel="noopener">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
-                GitHub &rarr;
-              </a>
+              <a class="btn" href="#install" data-en="Install →" data-zh="安装 →">Install &rarr;</a>
+              <a class="btn" href="https://github.com/T-1234567890/terminal-info" target="_blank" rel="noopener" data-en="GitHub →" data-zh="GitHub →">GitHub &rarr;</a>
             </div>
             <div class="hero-install" id="hero-install-box">
               <div class="hero-install-row">
-                <div class="hero-install-label">
-                  Quick install
-                </div>
+                <div class="hero-install-label" data-en="Quick install" data-zh="快速安装">Quick install</div>
               </div>
               <div class="hero-install-expanded" id="hero-install-expanded">
                 <span id="hero-install-cmd" hidden data-copy="curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash"></span>
                 <div class="hero-install-actions">
-                  <button class="copy-btn" id="hero-copy-btn" title="Copy install command">Copy</button>
-                  <a href="https://github.com/T-1234567890/terminal-info/blob/main/install.sh" target="_blank" rel="noopener">Inspect</a>
-                  <a href="#install">More install ways</a>
+                  <button class="copy-btn" id="hero-copy-btn" title="Copy install command" data-en="Copy" data-zh="复制">Copy</button>
+                  <a href="https://github.com/T-1234567890/terminal-info/blob/main/install.sh" target="_blank" rel="noopener" data-en="Inspect" data-zh="查看">Inspect</a>
+                  <a href="#install" data-en="More install ways" data-zh="更多安装方式">More install ways</a>
                 </div>
               </div>
             </div>
@@ -96,11 +96,11 @@
     <div class="stats-strip">
       <div class="container">
         <div class="stats-inner">
-          <div class="stat-item"><div class="stat-num" data-stable-version>latest</div><div class="stat-label">Stable Release</div></div>
-          <div class="stat-item"><div class="stat-num">Universal</div><div class="stat-label">Support</div></div>
-          <div class="stat-item"><div class="stat-num">100+</div><div class="stat-label">Commands</div></div>
-          <div class="stat-item"><div class="stat-num">&infin;</div><div class="stat-label">Plugin Extensions</div></div>
-          <div class="stat-item"><div class="stat-num">Rust</div><div class="stat-label">Powered</div></div>
+          <div class="stat-item"><div class="stat-num" data-stable-version>latest</div><div class="stat-label" data-en="Stable Release" data-zh="稳定版本">Stable Release</div></div>
+          <div class="stat-item"><div class="stat-num" data-en="Universal" data-zh="跨平台">Universal</div><div class="stat-label" data-en="Support" data-zh="支持">Support</div></div>
+          <div class="stat-item"><div class="stat-num">100+</div><div class="stat-label" data-en="Commands" data-zh="命令">Commands</div></div>
+          <div class="stat-item"><div class="stat-num">&infin;</div><div class="stat-label" data-en="Plugin Extensions" data-zh="插件扩展">Plugin Extensions</div></div>
+          <div class="stat-item"><div class="stat-num">Rust</div><div class="stat-label" data-en="Powered" data-zh="驱动">Powered</div></div>
         </div>
       </div>
     </div>
@@ -110,7 +110,7 @@
     ============================================================ -->
     <section class="availability-strip section-sm">
       <div class="container">
-        <p class="availability-title">Available On</p>
+        <p class="availability-title" data-en="Available On" data-zh="可在这些平台获取">Available On</p>
         <div class="availability-row" aria-label="Terminal Info ecosystem presence">
           <a class="logo-link" href="https://crates.io/crates/terminal-info" target="_blank" rel="noopener" aria-label="Open terminal-info on crates.io">
             <img
@@ -139,40 +139,40 @@
     <section class="features section" id="features">
       <div class="container">
         <div class="section-header" data-reveal style="--reveal-delay: 0s;">
-          <p class="eyebrow">Features</p>
-          <h2>Everything you need in your terminal</h2>
-          <p>Terminal Info is a platform, not just a tool. Built around an extensible core with batteries included.</p>
+          <p class="eyebrow" data-en="Features" data-zh="功能">Features</p>
+          <h2 data-en="Everything you need in your terminal" data-zh="终端里你需要的一切">Everything you need in your terminal</h2>
+          <p data-en="Terminal Info is a platform, not just a tool. Built around an extensible core with batteries included." data-zh="Terminal Info 不只是一个工具，而是一个平台。它围绕可扩展核心构建，并自带完整能力。">Terminal Info is a platform, not just a tool. Built around an extensible core with batteries included.</p>
         </div>
         <div class="features-grid">
           <div class="feature-card" data-reveal style="--reveal-delay: 0.06s;">
             <span class="feature-icon">&#x1F50C;</span>
-            <h3>Plugin Platform</h3>
-            <p>Extend tinfo with community or custom plugins. Install from the registry, trust plugins locally, and add your own commands &mdash; without touching the core.</p>
+            <h3 data-en="Plugin Platform" data-zh="插件平台">Plugin Platform</h3>
+            <p data-en="Extend tinfo with community or custom plugins. Install from the registry, trust plugins locally, and add your own commands — without touching the core." data-zh="使用社区或自定义插件扩展 tinfo。可从注册表安装、在本地信任插件，并添加自己的命令，而无需修改核心。">Extend tinfo with community or custom plugins. Install from the registry, trust plugins locally, and add your own commands &mdash; without touching the core.</p>
           </div>
           <div class="feature-card" data-reveal style="--reveal-delay: 0.12s;">
             <span class="feature-icon">&#x1F4CA;</span>
-            <h3>Live Dashboard</h3>
-            <p>Run <code>tinfo</code> to see an instant overview &mdash; weather, time, network, CPU, and memory. Widgets are configurable and support plugin data too.</p>
+            <h3 data-en="Live Dashboard" data-zh="实时仪表板">Live Dashboard</h3>
+            <p data-en="Run tinfo to see an instant overview — weather, time, network, CPU, and memory. Widgets are configurable and support plugin data too." data-zh="运行 tinfo 即可查看天气、时间、网络、CPU 和内存的即时总览。小组件可配置，也支持插件数据。">Run <code>tinfo</code> to see an instant overview &mdash; weather, time, network, CPU, and memory. Widgets are configurable and support plugin data too.</p>
           </div>
           <div class="feature-card" data-reveal style="--reveal-delay: 0.18s;">
             <span class="feature-icon">&#x1F30D;</span>
-            <h3>Weather &amp; Network</h3>
-            <p>Check current conditions, hourly forecasts, and weather alerts. Inspect public/local IPs, DNS, latency, and run multi-target ping diagnostics.</p>
+            <h3 data-en="Weather & Network" data-zh="天气与网络">Weather &amp; Network</h3>
+            <p data-en="Check current conditions, hourly forecasts, and weather alerts. Inspect public/local IPs, DNS, latency, and run multi-target ping diagnostics." data-zh="查看当前天气、逐小时预报和天气提醒。检查公网/本地 IP、DNS、延迟，并运行多目标网络诊断。">Check current conditions, hourly forecasts, and weather alerts. Inspect public/local IPs, DNS, latency, and run multi-target ping diagnostics.</p>
           </div>
           <div class="feature-card" data-reveal style="--reveal-delay: 0.24s;">
             <span class="feature-icon">&#x1FA7A;</span>
-            <h3>Diagnostic Suite</h3>
-            <p>Full network, system, performance, and security diagnostics. Optional server mode extends checks for VPS &mdash; DNS visibility, load average, and more.</p>
+            <h3 data-en="Diagnostic Suite" data-zh="诊断套件">Diagnostic Suite</h3>
+            <p data-en="Full network, system, performance, and security diagnostics. Optional server mode extends checks for VPS — DNS visibility, load average, and more." data-zh="提供完整的网络、系统、性能和安全诊断。可选的服务器模式还会为 VPS 扩展 DNS 可见性、负载等检查。">Full network, system, performance, and security diagnostics. Optional server mode extends checks for VPS &mdash; DNS visibility, load average, and more.</p>
           </div>
           <div class="feature-card" data-reveal style="--reveal-delay: 0.3s;">
             <span class="feature-icon">&#x23F1;&#xFE0F;</span>
-            <h3>Productivity Tools</h3>
-            <p>Built-in timer, stopwatch, tasks, quick notes, command history, and reminders &mdash; all integrated into the dashboard and run as CLI commands.</p>
+            <h3 data-en="Productivity Tools" data-zh="效率工具">Productivity Tools</h3>
+            <p data-en="Built-in timer, stopwatch, tasks, quick notes, command history, and reminders — all integrated into the dashboard and run as CLI commands." data-zh="内置计时器、秒表、任务、速记、命令历史和提醒，全部集成到仪表板中，也可作为 CLI 命令运行。">Built-in timer, stopwatch, tasks, quick notes, command history, and reminders &mdash; all integrated into the dashboard and run as CLI commands.</p>
           </div>
           <div class="feature-card" data-reveal style="--reveal-delay: 0.36s;">
             <span class="feature-icon">&#x2699;&#xFE0F;</span>
-            <h3>Flexible Output &amp; Config</h3>
-            <p>Use <code>--json</code>, <code>--plain</code>, <code>--compact</code>, or <code>--color</code> for any command. Configure profiles, location aliases, themes, and widgets in one TOML file.</p>
+            <h3 data-en="Flexible Output & Config" data-zh="灵活输出与配置">Flexible Output &amp; Config</h3>
+            <p data-en="Use --json, --plain, --compact, or --color for any command. Configure profiles, location aliases, themes, and widgets in one TOML file." data-zh="任何命令都支持 --json、--plain、--compact 或 --color。可在一个 TOML 文件中配置档案、位置别名、主题和小组件。">Use <code>--json</code>, <code>--plain</code>, <code>--compact</code>, or <code>--color</code> for any command. Configure profiles, location aliases, themes, and widgets in one TOML file.</p>
           </div>
         </div>
       </div>
@@ -184,16 +184,16 @@
     <section class="demo-section section" id="demo">
       <div class="container">
         <div class="section-header" data-reveal style="--reveal-delay: 0s;">
-          <p class="eyebrow">Interactive Demo</p>
-          <h2>See it in action</h2>
-          <p>Select a scenario to explore what tinfo can do.</p>
+          <p class="eyebrow" data-en="Interactive Demo" data-zh="交互演示">Interactive Demo</p>
+          <h2 data-en="See it in action" data-zh="看看它如何工作">See it in action</h2>
+          <p data-en="Select a scenario to explore what tinfo can do." data-zh="选择一个场景，看看 tinfo 可以做什么。">Select a scenario to explore what tinfo can do.</p>
         </div>
         <div class="demo-tabs install-tabs" role="tablist" aria-label="Demo scenarios" data-reveal style="--reveal-delay: 0.08s;">
-          <button class="demo-tab install-tab active" role="tab" aria-selected="true"  data-demo="dashboard">Dashboard</button>
-          <button class="demo-tab install-tab"        role="tab" aria-selected="false" data-demo="weather">Weather</button>
-          <button class="demo-tab install-tab"        role="tab" aria-selected="false" data-demo="diagnostic">Diagnostic</button>
-          <button class="demo-tab install-tab"        role="tab" aria-selected="false" data-demo="productivity">Productivity</button>
-          <button class="demo-tab install-tab"        role="tab" aria-selected="false" data-demo="plugin">Plugin</button>
+          <button class="demo-tab install-tab active" role="tab" aria-selected="true"  data-demo="dashboard" data-en="Dashboard" data-zh="仪表板">Dashboard</button>
+          <button class="demo-tab install-tab"        role="tab" aria-selected="false" data-demo="weather" data-en="Weather" data-zh="天气">Weather</button>
+          <button class="demo-tab install-tab"        role="tab" aria-selected="false" data-demo="diagnostic" data-en="Diagnostic" data-zh="诊断">Diagnostic</button>
+          <button class="demo-tab install-tab"        role="tab" aria-selected="false" data-demo="productivity" data-en="Productivity" data-zh="效率">Productivity</button>
+          <button class="demo-tab install-tab"        role="tab" aria-selected="false" data-demo="plugin" data-en="Plugin" data-zh="插件">Plugin</button>
         </div>
         <div class="demo-container" data-reveal style="--reveal-delay: 0.16s;">
           <div class="demo-info" id="demo-info"></div>
@@ -218,9 +218,9 @@
     <section class="comparison-section section" id="comparison">
       <div class="container">
         <div class="section-header" data-reveal style="--reveal-delay: 0s;">
-          <p class="eyebrow">Why terminal-info</p>
-          <h2>Built to be a platform,<br>not just a tool</h2>
-          <p>There are already many great terminal tools. tinfo takes a different approach &mdash; it&rsquo;s a modular ecosystem designed to grow with you.</p>
+          <p class="eyebrow" data-en="Why terminal-info" data-zh="为什么选择 terminal-info">Why terminal-info</p>
+          <h2 data-en="Built to be a platform, not just a tool" data-zh="它被设计成一个平台，而不只是工具">Built to be a platform,<br>not just a tool</h2>
+          <p data-en="There are already many great terminal tools. tinfo takes a different approach — it’s a modular ecosystem designed to grow with you." data-zh="终端工具已经有很多优秀选择。tinfo 采取了不同的方向，它是一个可随着你一起成长的模块化生态。">There are already many great terminal tools. tinfo takes a different approach &mdash; it&rsquo;s a modular ecosystem designed to grow with you.</p>
         </div>
 
         <div class="comparison-group" data-reveal style="--reveal-delay: 0.08s;">
@@ -320,9 +320,9 @@
     <section class="install-section section" id="install">
       <div class="container">
         <div class="section-header" data-reveal style="margin-bottom:2.5rem; --reveal-delay: 0s;">
-          <p class="eyebrow">Installation</p>
-          <h2>Quick Install</h2>
-          <p>Choose the method that works best for your environment.</p>
+          <p class="eyebrow" data-en="Installation" data-zh="安装">Installation</p>
+          <h2 data-en="Quick Install" data-zh="快速安装">Quick Install</h2>
+          <p data-en="Choose the method that works best for your environment." data-zh="选择最适合你环境的安装方式。">Choose the method that works best for your environment.</p>
         </div>
 
         <div class="platform-chips" data-reveal style="--reveal-delay: 0.08s;">
@@ -333,30 +333,29 @@
         </div>
 
         <div class="install-tabs" role="tablist" aria-label="Installation methods" data-reveal style="--reveal-delay: 0.16s;">
-          <button class="install-tab active" role="tab" data-install="script">
+          <button class="install-tab active" role="tab" data-install="script" data-en="Install Script" data-zh="安装脚本">
             Install Script
-            <span style="font-size:0.7rem;color:var(--accent);margin-left:5px;vertical-align:middle">Recommended</span>
           </button>
-          <button class="install-tab" role="tab" data-install="cargo">Cargo</button>
-          <button class="install-tab" role="tab" data-install="source">Build from Source</button>
+          <button class="install-tab" role="tab" data-install="cargo" data-en="Cargo" data-zh="Cargo">Cargo</button>
+          <button class="install-tab" role="tab" data-install="source" data-en="Build from Source" data-zh="从源码构建">Build from Source</button>
         </div>
 
         <div class="install-content active" id="install-script">
           <div class="install-grid" data-reveal style="--reveal-delay: 0.24s;">
             <div class="install-desc">
-              <h3>One-command install</h3>
-              <p>The install script downloads the correct binary for your platform, verifies the Minisign signature, and places <code>tinfo</code> in your <code>PATH</code>.</p>
+              <h3 data-en="One-command install" data-zh="一条命令完成安装">One-command install</h3>
+              <p data-en="The install script downloads the correct binary for your platform, verifies the Minisign signature, and places tinfo in your PATH." data-zh="安装脚本会为你的平台下载正确的二进制文件，验证 Minisign 签名，并将 tinfo 放入 PATH。">The install script downloads the correct binary for your platform, verifies the Minisign signature, and places <code>tinfo</code> in your <code>PATH</code>.</p>
             </div>
             <div>
               <div class="code-block">
                 <div class="code-block-header">
                   <span>bash</span>
-                  <button class="code-copy" data-copy="curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash">Copy</button>
+                  <button class="code-copy" data-copy="curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash" data-en="Copy" data-zh="复制">Copy</button>
                 </div>
                 <pre>curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash</pre>
               </div>
               <div class="code-block">
-                <div class="code-block-header"><span>Verify it works</span></div>
+                <div class="code-block-header"><span data-en="Verify it works" data-zh="验证是否可用">Verify it works</span></div>
                 <pre>tinfo --version
 tinfo</pre>
               </div>
@@ -367,20 +366,20 @@ tinfo</pre>
         <div class="install-content" id="install-cargo">
           <div class="install-grid">
             <div class="install-desc">
-              <h3>Cargo install</h3>
-              <p>If you have Rust and Cargo installed, you can install tinfo directly from crates.io.</p>
-              <p class="install-note">Requires Rust 1.70+. Get Rust at <a href="https://rustup.rs" target="_blank" rel="noopener">rustup.rs</a>.</p>
+              <h3 data-en="Cargo install" data-zh="Cargo 安装">Cargo install</h3>
+              <p data-en="If you have Rust and Cargo installed, you can install tinfo directly from crates.io." data-zh="如果你已经安装 Rust 和 Cargo，可以直接从 crates.io 安装 tinfo。">If you have Rust and Cargo installed, you can install tinfo directly from crates.io.</p>
+              <p class="install-note" data-en="Requires Rust 1.70+. Get Rust at rustup.rs." data-zh="需要 Rust 1.70+。可在 rustup.rs 获取 Rust。">Requires Rust 1.70+. Get Rust at <a href="https://rustup.rs" target="_blank" rel="noopener">rustup.rs</a>.</p>
             </div>
             <div>
               <div class="code-block">
                 <div class="code-block-header">
                   <span>bash</span>
-                  <button class="code-copy" data-copy="cargo install terminal-info">Copy</button>
+                  <button class="code-copy" data-copy="cargo install terminal-info" data-en="Copy" data-zh="复制">Copy</button>
                 </div>
                 <pre>cargo install terminal-info</pre>
               </div>
               <div class="code-block">
-                <div class="code-block-header"><span>Verify it works</span></div>
+                <div class="code-block-header"><span data-en="Verify it works" data-zh="验证是否可用">Verify it works</span></div>
                 <pre>tinfo --version
 tinfo</pre>
               </div>
@@ -391,9 +390,9 @@ tinfo</pre>
         <div class="install-content" id="install-source">
           <div class="install-grid">
             <div class="install-desc">
-              <h3>Build from source</h3>
-              <p>For contributors and plugin developers who want the full development environment.</p>
-              <p class="install-note">Requires Rust and Cargo. See <a href="https://github.com/T-1234567890/terminal-info/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">CONTRIBUTING.md</a> for full dev setup.</p>
+              <h3 data-en="Build from source" data-zh="从源码构建">Build from source</h3>
+              <p data-en="For contributors and plugin developers who want the full development environment." data-zh="适合需要完整开发环境的贡献者和插件开发者。">For contributors and plugin developers who want the full development environment.</p>
+              <p class="install-note" data-en="Requires Rust and Cargo. See CONTRIBUTING.md for full dev setup." data-zh="需要 Rust 和 Cargo。完整开发环境请查看 CONTRIBUTING.md。">Requires Rust and Cargo. See <a href="https://github.com/T-1234567890/terminal-info/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">CONTRIBUTING.md</a> for full dev setup.</p>
             </div>
             <div>
               <div class="code-block">
@@ -401,14 +400,14 @@ tinfo</pre>
                   <span>bash</span>
                   <button class="code-copy" data-copy="git clone https://github.com/T-1234567890/terminal-info
 cd terminal-info
-cargo build --release">Copy</button>
+cargo build --release" data-en="Copy" data-zh="复制">Copy</button>
                 </div>
                 <pre>git clone https://github.com/T-1234567890/terminal-info
 cd terminal-info
 cargo build --release</pre>
               </div>
               <div class="code-block">
-                <div class="code-block-header"><span>Verify it works</span></div>
+                <div class="code-block-header"><span data-en="Verify it works" data-zh="验证是否可用">Verify it works</span></div>
                 <pre>./target/release/tinfo --version
 ./target/release/tinfo</pre>
               </div>
@@ -425,25 +424,25 @@ cargo build --release</pre>
       <div class="container">
         <div class="docs-inner">
           <div class="docs-copy" data-reveal style="--reveal-delay: 0.08s;">
-            <p class="eyebrow">Docs</p>
-            <h2>Read the parts that matter most.</h2>
-            <p>The GitHub docs folder covers the command surface, configuration, widgets, plugins, and release workflow. Start with the core guides, then go deeper as needed.</p>
+            <p class="eyebrow" data-en="Docs" data-zh="文档">Docs</p>
+            <h2 data-en="Read the parts that matter most." data-zh="先读最重要的部分。">Read the parts that matter most.</h2>
+            <p data-en="The GitHub docs folder covers the command surface, configuration, widgets, plugins, and release workflow. Start with the core guides, then go deeper as needed." data-zh="GitHub 文档目录涵盖命令、配置、小组件、插件和发布流程。先从核心指南开始，再按需深入。">The GitHub docs folder covers the command surface, configuration, widgets, plugins, and release workflow. Start with the core guides, then go deeper as needed.</p>
           </div>
           <div class="docs-list" data-reveal style="--reveal-delay: 0.16s;">
             <a class="doc-item" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/commands.md" target="_blank" rel="noopener">
-              <span class="doc-name">Commands</span>
-              <span class="doc-desc">Command reference for the CLI surface and common flows.</span>
+              <span class="doc-name" data-en="Commands" data-zh="命令">Commands</span>
+              <span class="doc-desc" data-en="Command reference for the CLI surface and common flows." data-zh="CLI 命令面和常见流程的参考文档。">Command reference for the CLI surface and common flows.</span>
             </a>
             <a class="doc-item" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md" target="_blank" rel="noopener">
-              <span class="doc-name">Plugin Development</span>
-              <span class="doc-desc">Build, test, sign, and publish plugins with the SDK workflow.</span>
+              <span class="doc-name" data-en="Plugin Development" data-zh="插件开发">Plugin Development</span>
+              <span class="doc-desc" data-en="Build, test, sign, and publish plugins with the SDK workflow." data-zh="使用 SDK 工作流构建、测试、签名并发布插件。">Build, test, sign, and publish plugins with the SDK workflow.</span>
             </a>
             <a class="doc-item" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/config.md" target="_blank" rel="noopener">
-              <span class="doc-name">Configuration</span>
-              <span class="doc-desc">Profiles, themes, widgets, and config file behavior.</span>
+              <span class="doc-name" data-en="Configuration" data-zh="配置">Configuration</span>
+              <span class="doc-desc" data-en="Profiles, themes, widgets, and config file behavior." data-zh="配置档案、主题、小组件和配置文件行为。">Profiles, themes, widgets, and config file behavior.</span>
             </a>
             <div class="docs-more">
-              <a class="btn" href="https://github.com/T-1234567890/terminal-info/tree/main/docs" target="_blank" rel="noopener">More Docs &rarr;</a>
+              <a class="btn" href="https://github.com/T-1234567890/terminal-info/tree/main/docs" target="_blank" rel="noopener" data-en="More Docs →" data-zh="更多文档 →">More Docs &rarr;</a>
             </div>
           </div>
         </div>
@@ -477,9 +476,9 @@ cargo build --release</pre>
             </div>
           </div>
           <div class="plugins-copy" data-reveal style="--reveal-delay: 0.18s;">
-            <p class="eyebrow">Plugin Ecosystem</p>
-            <h2>Extend anything.<br>Build anything.</h2>
-            <p>Terminal Info is designed as a platform. The plugin system lets you add new commands, dashboard widgets, and workflows &mdash; without touching the core binary.</p>
+            <p class="eyebrow" data-en="Plugin Ecosystem" data-zh="插件生态">Plugin Ecosystem</p>
+            <h2 data-en="Extend anything. Build anything." data-zh="扩展一切，构建一切。">Extend anything.<br>Build anything.</h2>
+            <p data-en="Terminal Info is designed as a platform. The plugin system lets you add new commands, dashboard widgets, and workflows — without touching the core binary." data-zh="Terminal Info 被设计成一个平台。插件系统让你无需改动核心二进制，就能添加新命令、仪表板小组件和工作流。">Terminal Info is designed as a platform. The plugin system lets you add new commands, dashboard widgets, and workflows &mdash; without touching the core binary.</p>
             <ul class="plugin-features">
               <li>Install community plugins from the verified registry</li>
               <li>Plugins run as local executables &mdash; no daemon, no runtime</li>
@@ -489,8 +488,8 @@ cargo build --release</pre>
               <li>Full dev workflow: scaffold &rarr; test &rarr; sign &rarr; pack &rarr; publish</li>
             </ul>
             <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
-              <a class="btn" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md" target="_blank" rel="noopener">Plugin Docs &rarr;</a>
-              <a class="btn" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/sdk.md" target="_blank" rel="noopener">SDK Reference &rarr;</a>
+              <a class="btn" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md" target="_blank" rel="noopener" data-en="Plugin Docs →" data-zh="插件文档 →">Plugin Docs &rarr;</a>
+              <a class="btn" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/sdk.md" target="_blank" rel="noopener" data-en="SDK Reference →" data-zh="SDK 参考 →">SDK Reference &rarr;</a>
             </div>
           </div>
         </div>
@@ -504,35 +503,35 @@ cargo build --release</pre>
       <div class="container">
         <div class="join-shell">
           <div class="section-header join-header" data-reveal style="--reveal-delay: 0s;">
-            <p class="eyebrow">Join Us</p>
-            <h2>Build tinfo together</h2>
-            <p>Help shape the future of a composable terminal toolbox.</p>
+            <p class="eyebrow" data-en="Join Us" data-zh="加入我们">Join Us</p>
+            <h2 data-en="Build tinfo together" data-zh="一起构建 tinfo">Build tinfo together</h2>
+            <p data-en="Help shape the future of a composable terminal toolbox." data-zh="一起塑造可组合终端工具箱的未来。">Help shape the future of a composable terminal toolbox.</p>
           </div>
 
           <div class="join-grid" data-reveal style="--reveal-delay: 0.08s;">
             <article class="join-item">
               <div class="join-icon" aria-hidden="true">🛠️</div>
-              <h3>Build tinfo with us</h3>
-              <p>Code, plugins, docs, reviews.</p>
-              <a class="join-link" href="https://github.com/T-1234567890/terminal-info" target="_blank" rel="noopener">Contribute on GitHub &rarr;</a>
+              <h3 data-en="Build tinfo with us" data-zh="一起构建 tinfo">Build tinfo with us</h3>
+              <p data-en="Code, plugins, docs, reviews." data-zh="代码、插件、文档与评审。">Code, plugins, docs, reviews.</p>
+              <a class="join-link" href="https://github.com/T-1234567890/terminal-info" target="_blank" rel="noopener" data-en="Contribute on GitHub →" data-zh="在 GitHub 上参与贡献 →">Contribute on GitHub &rarr;</a>
             </article>
             <article class="join-item">
               <div class="join-icon" aria-hidden="true">🧩</div>
-              <h3>Start with small tasks</h3>
-              <p>Pick up good first issues.</p>
-              <a class="join-link" href="https://github.com/T-1234567890/terminal-info/issues" target="_blank" rel="noopener">View issues &rarr;</a>
+              <h3 data-en="Start with small tasks" data-zh="从小任务开始">Start with small tasks</h3>
+              <p data-en="Pick up good first issues." data-zh="从适合入门的问题开始。">Pick up good first issues.</p>
+              <a class="join-link" href="https://github.com/T-1234567890/terminal-info/issues" target="_blank" rel="noopener" data-en="View issues →" data-zh="查看问题 →">View issues &rarr;</a>
             </article>
             <article class="join-item">
               <div class="join-icon" aria-hidden="true">✉️</div>
-              <h3>Share ideas and friction</h3>
-              <p>Help improve the experience.</p>
-              <a class="join-link" href="https://github.com/T-1234567890/terminal-info/discussions" target="_blank" rel="noopener">Send feedback &rarr;</a>
+              <h3 data-en="Share ideas and friction" data-zh="分享想法与摩擦点">Share ideas and friction</h3>
+              <p data-en="Help improve the experience." data-zh="帮助改进整体体验。">Help improve the experience.</p>
+              <a class="join-link" href="https://github.com/T-1234567890/terminal-info/discussions" target="_blank" rel="noopener" data-en="Send feedback →" data-zh="提供反馈 →">Send feedback &rarr;</a>
             </article>
             <article class="join-item">
               <div class="join-icon" aria-hidden="true">🔌</div>
-              <h3>Build plugins</h3>
-              <p>Extend tinfo with your own tools.</p>
-              <a class="join-link" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md" target="_blank" rel="noopener">Create a plugin &rarr;</a>
+              <h3 data-en="Build plugins" data-zh="构建插件">Build plugins</h3>
+              <p data-en="Extend tinfo with your own tools." data-zh="用你自己的工具扩展 tinfo。">Extend tinfo with your own tools.</p>
+              <a class="join-link" href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md" target="_blank" rel="noopener" data-en="Create a plugin →" data-zh="创建插件 →">Create a plugin &rarr;</a>
             </article>
           </div>
         </div>
@@ -547,15 +546,15 @@ cargo build --release</pre>
         <div class="footer-inner">
           <div>
             <div class="footer-brand">t<span>info</span></div>
-            <div class="footer-tagline">The extensible terminal toolbox.</div>
+            <div class="footer-tagline" data-en="The extensible terminal toolbox." data-zh="可扩展的终端工具箱。">The extensible terminal toolbox.</div>
           </div>
           <div class="footer-links">
-            <a href="https://github.com/T-1234567890/terminal-info" target="_blank" rel="noopener">GitHub</a>
-            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md" target="_blank" rel="noopener">Plugin Docs</a>
-            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/commands.md" target="_blank" rel="noopener">Commands</a>
-            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/roadmap.md" target="_blank" rel="noopener">Roadmap</a>
-            <a href="https://github.com/T-1234567890/terminal-info/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a>
-            <a href="policies/">Policies</a>
+            <a href="https://github.com/T-1234567890/terminal-info" target="_blank" rel="noopener" data-en="GitHub" data-zh="GitHub">GitHub</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md" target="_blank" rel="noopener" data-en="Plugin Docs" data-zh="插件文档">Plugin Docs</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/commands.md" target="_blank" rel="noopener" data-en="Commands" data-zh="命令">Commands</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/roadmap.md" target="_blank" rel="noopener" data-en="Roadmap" data-zh="路线图">Roadmap</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener" data-en="Contributing" data-zh="贡献">Contributing</a>
+            <a href="policies/" data-en="Policies" data-zh="政策">Policies</a>
           </div>
         </div>
         <div class="footer-divider"></div>
@@ -563,8 +562,8 @@ cargo build --release</pre>
           <span class="footer-copy">&copy; 2026 Terminal Info. Licensed under Apache 2.0.</span>
           <div class="footer-legal">
             <a href="mailto:support@pomodoro-app.tech">support@pomodoro-app.tech</a>
-            <a href="policies/">Policies</a>
-            <a href="https://github.com/T-1234567890/terminal-info" target="_blank" rel="noopener">GitHub</a>
+            <a href="policies/" data-en="Policies" data-zh="政策">Policies</a>
+            <a href="https://github.com/T-1234567890/terminal-info" target="_blank" rel="noopener" data-en="GitHub" data-zh="GitHub">GitHub</a>
           </div>
         </div>
       </div>

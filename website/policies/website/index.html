@@ -10,21 +10,26 @@
     />
     <link rel="stylesheet" href="../../style.css" />
   </head>
-  <body>
+  <body class="policy-page">
     <header class="site-header">
       <div class="container">
         <a class="brand" href="../../">t<span>info</span></a>
         <nav class="site-nav" id="site-nav" aria-label="Primary">
-          <a href="../../#features">Features</a>
-          <a href="../../#demo">Demo</a>
-          <a href="../../#comparison">Why tinfo</a>
-          <a href="../../#install">Install</a>
-          <a href="../../#docs">Docs</a>
-          <a href="../../#plugins">Plugins</a>
-          <a href="../">Policies</a>
-          <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
+          <a href="../../#features" data-en="Features" data-zh="功能">Features</a>
+          <a href="../../#demo" data-en="Demo" data-zh="演示">Demo</a>
+          <a href="../../#comparison" data-en="Why tinfo" data-zh="为什么选择 tinfo">Why tinfo</a>
+          <a href="../../#install" data-en="Install" data-zh="安装">Install</a>
+          <a href="../../#docs" data-en="Docs" data-zh="文档">Docs</a>
+          <a href="../../#plugins" data-en="Plugins" data-zh="插件">Plugins</a>
+          <a href="../" data-en="Policies" data-zh="政策">Policies</a>
+          <a href="https://github.com/T-1234567890/terminal-info" data-en="GitHub" data-zh="GitHub">GitHub</a>
         </nav>
-        <a class="btn nav-cta" href="../../#install">Get started &rarr;</a>
+        <div class="lang-switcher" aria-label="Language switcher">
+          <button type="button" class="lang-btn active" data-lang-btn="en">EN</button>
+          <span>/</span>
+          <button type="button" class="lang-btn" data-lang-btn="zh">中文</button>
+        </div>
+        <a class="btn nav-cta" href="../../#install" data-en="Get started →" data-zh="开始使用 →">Get started &rarr;</a>
         <button class="hamburger" id="hamburger" aria-label="Toggle menu">
           <span></span><span></span><span></span>
         </button>
@@ -35,15 +40,15 @@
       <div class="container">
         <div class="hero-inner">
           <div class="hero-copy">
-            <div class="hero-badge">Policies</div>
-            <h1>This Website</h1>
-            <p class="hero-sub">
+            <div class="hero-badge" data-en="Policies" data-zh="政策">Policies</div>
+            <h1 data-en="This Website" data-zh="本网站">This Website</h1>
+            <p class="hero-sub" data-en="A short explanation of how this website handles analytics and external links." data-zh="简要说明本网站如何处理分析数据与外部链接。">
               A short explanation of how this website handles analytics and
               external links.
             </p>
             <div class="hero-actions">
-              <a class="btn" href="../">All Policies &rarr;</a>
-              <a class="btn" href="../cli/">CLI Privacy &rarr;</a>
+              <a class="btn" href="../" data-en="All Policies →" data-zh="所有政策 →">All Policies &rarr;</a>
+              <a class="btn" href="../cli/" data-en="CLI Privacy →" data-zh="CLI 隐私 →">CLI Privacy &rarr;</a>
             </div>
           </div>
         </div>
@@ -53,9 +58,9 @@
     <main class="section legal-page">
       <div class="container legal-layout">
         <div class="section-copy">
-          <p class="eyebrow">Website Privacy</p>
-          <h2 class="legal-title">What this website does</h2>
-          <p>
+          <p class="eyebrow" data-en="Website Privacy" data-zh="网站隐私">Website Privacy</p>
+          <h2 class="legal-title" data-en="What this website does" data-zh="本网站做什么">What this website does</h2>
+          <p data-en="This website is a static product site for Terminal Info. Its purpose is to explain the project, link to documentation, and point visitors to official download and source locations." data-zh="本网站是 Terminal Info 的静态产品网站，用于介绍项目、链接文档，并指向官方的下载和源码位置。">
             This website is a static product site for Terminal Info. Its purpose
             is to explain the project, link to documentation, and point
             visitors to official download and source locations.
@@ -63,33 +68,33 @@
         </div>
 
         <section class="disclaimer">
-          <h2>Analytics</h2>
-          <p>
+          <h2 data-en="Analytics" data-zh="分析">Analytics</h2>
+          <p data-en="This website uses Cloudflare Web Analytics to understand general traffic patterns, such as page views and visits." data-zh="本网站使用 Cloudflare Web Analytics 来了解一般流量模式，例如页面浏览量和访问次数。">
             This website uses Cloudflare Web Analytics to understand general
             traffic patterns, such as page views and visits.
           </p>
-          <p>
+          <p data-en="This analytics system is privacy-focused and does not use cookies or track personal identity." data-zh="该分析系统注重隐私，不使用 Cookie，也不会追踪个人身份。">
             This analytics system is privacy-focused and does not use cookies
             or track personal identity.
           </p>
 
-          <h2>External links</h2>
-          <p>
+          <h2 data-en="External links" data-zh="外部链接">External links</h2>
+          <p data-en="The website links out to external services such as GitHub, crates.io, and lib.rs." data-zh="本网站会链接到 GitHub、crates.io 和 lib.rs 等外部服务。">
             The website links out to external services such as GitHub,
             crates.io, and lib.rs.
           </p>
-          <p>
+          <p data-en="Those services operate under their own terms and privacy policies once you leave this site." data-zh="一旦离开本网站，这些服务将按照它们各自的条款和隐私政策运行。">
             Those services operate under their own terms and privacy policies
             once you leave this site.
           </p>
 
-          <h2>CLI privacy is separate</h2>
-          <p>
+          <h2 data-en="CLI privacy is separate" data-zh="CLI 隐私与网站分开">CLI privacy is separate</h2>
+          <p data-en="Using this website is not the same as running the Terminal Info CLI. The CLI runs locally on your machine and has its own separate policy page." data-zh="使用本网站并不等同于运行 Terminal Info CLI。CLI 在你的机器上本地运行，并拥有独立的政策页面。">
             Using this website is not the same as running the Terminal Info CLI.
             The CLI runs locally on your machine and has its own separate policy
             page.
           </p>
-          <a class="policy-link" href="../cli/">View CLI Privacy Policy &rarr;</a>
+          <a class="policy-link" href="../cli/" data-en="View CLI Privacy Policy →" data-zh="查看 CLI 隐私政策 →">View CLI Privacy Policy &rarr;</a>
         </section>
       </div>
     </main>
@@ -99,14 +104,14 @@
         <div class="footer-inner">
           <div>
             <div class="footer-brand">t<span>info</span></div>
-            <div class="footer-tagline">The extensible terminal toolbox.</div>
+            <div class="footer-tagline" data-en="The extensible terminal toolbox." data-zh="可扩展的终端工具箱。">The extensible terminal toolbox.</div>
           </div>
           <div class="footer-links">
-            <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
-            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md">Plugin Docs</a>
-            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/commands.md">Commands</a>
-            <a href="https://github.com/T-1234567890/terminal-info/blob/main/CONTRIBUTING.md">Contributing</a>
-            <a href="../">Policies</a>
+            <a href="https://github.com/T-1234567890/terminal-info" data-en="GitHub" data-zh="GitHub">GitHub</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md" data-en="Plugin Docs" data-zh="插件文档">Plugin Docs</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/commands.md" data-en="Commands" data-zh="命令">Commands</a>
+            <a href="https://github.com/T-1234567890/terminal-info/blob/main/CONTRIBUTING.md" data-en="Contributing" data-zh="贡献">Contributing</a>
+            <a href="../" data-en="Policies" data-zh="政策">Policies</a>
           </div>
         </div>
         <div class="footer-divider"></div>
@@ -114,8 +119,8 @@
           <span class="footer-copy">&copy; 2026 Terminal Info. Licensed under Apache 2.0.</span>
           <div class="footer-legal">
             <a href="mailto:support@pomodoro-app.tech">support@pomodoro-app.tech</a>
-            <a href="../cli/">CLI Privacy</a>
-            <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
+            <a href="../cli/" data-en="CLI Privacy" data-zh="CLI 隐私">CLI Privacy</a>
+            <a href="https://github.com/T-1234567890/terminal-info" data-en="GitHub" data-zh="GitHub">GitHub</a>
           </div>
         </div>
       </div>

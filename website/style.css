@@ -160,7 +160,32 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
 }
 .site-nav a:hover { color: var(--text); text-decoration: none; }
 
-.site-header .nav-cta { margin-left: auto; }
+.lang-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+.lang-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.lang-btn.active {
+  color: var(--text);
+  font-weight: 600;
+}
+.lang-btn:hover,
+.lang-btn:focus-visible {
+  color: var(--accent);
+}
+
+.site-header .nav-cta { margin-left: 1rem; }
 
 .hamburger {
   display: none;
@@ -1114,6 +1139,7 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
   .site-nav.open a { font-size: 1.1rem; padding: 0.5rem 0; }
   .hamburger { display: flex; }
   .nav-cta { display: none; }
+  .lang-switcher { margin-left: auto; }
   .footer-bottom { flex-direction: column; align-items: flex-start; }
   .hero-install code { font-size: 0.72rem; }
   .hero-install-row {
