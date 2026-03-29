@@ -6,7 +6,7 @@
     <title>tinfo Policies</title>
     <meta
       name="description"
-      content="Policies and disclaimers for tinfo, the terminal dashboard with widgets, tasks, and system insights."
+      content="Understand how Terminal Info and this website handle data."
     />
     <link rel="stylesheet" href="../style.css" />
   </head>
@@ -19,6 +19,7 @@
           <a href="../#demo">Demo</a>
           <a href="../#comparison">Why tinfo</a>
           <a href="../#install">Install</a>
+          <a href="../#docs">Docs</a>
           <a href="../#plugins">Plugins</a>
           <a href="./">Policies</a>
           <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
@@ -35,32 +36,13 @@
         <div class="hero-inner">
           <div class="hero-copy">
             <div class="hero-badge">Policies</div>
-            <h1>Disclaimer and privacy</h1>
+            <h1>Policies</h1>
             <p class="hero-sub">
-              This page explains the security, plugin, installation, and privacy
-              expectations for Terminal Info.
+              Understand how Terminal Info and this website handle data.
             </p>
             <div class="hero-actions">
-              <a class="btn" href="../#install">Install &rarr;</a>
-              <a class="btn" href="https://github.com/T-1234567890/terminal-info">GitHub &rarr;</a>
-            </div>
-          </div>
-
-          <div class="hero-terminal">
-            <div class="term-window">
-              <div class="term-titlebar">
-                <span class="term-dot red"></span>
-                <span class="term-dot yellow"></span>
-                <span class="term-dot green"></span>
-                <span class="term-title">tinfo &mdash; policies</span>
-              </div>
-              <div class="term-body">
-                <div class="term-line"><span class="term-ps">$</span><span class="term-cmd">tinfo plugin install news</span></div>
-                <div class="term-line"><span class="term-out">Only install plugins from sources you trust.</span></div>
-                <div class="term-line"><span class="term-out">Review plugin repositories before installing them.</span></div>
-                <div class="term-line" style="margin-top:0.5rem"><span class="term-ps">$</span><span class="term-cmd">tinfo</span></div>
-                <div class="term-line"><span class="term-out">Terminal Info runs locally on your machine.</span></div>
-              </div>
+              <a class="btn" href="../">Back to homepage &rarr;</a>
+              <a class="btn" href="https://github.com/T-1234567890/terminal-info/tree/main/docs">Docs &rarr;</a>
             </div>
           </div>
         </div>
@@ -68,77 +50,25 @@
     </section>
 
     <main class="section legal-page">
-      <div class="container legal-layout">
-        <div class="section-copy">
-          <p class="eyebrow">Policies</p>
-          <h2 class="legal-title">What to expect from tinfo</h2>
-          <p>
-            Terminal Info is designed to be transparent and local-first. It runs
-            on your machine, and its built-in features are intended to be clear
-            about when they read local system state and when they contact a
-            remote service.
-          </p>
-          <p>
-            This page describes the boundaries of the core project, the risk
-            model for plugins, and the small set of cases where network requests
-            are part of normal use.
-          </p>
+      <div class="container">
+        <div class="policy-shell">
+          <div class="policy-grid">
+            <a class="policy-option" href="./cli/" data-reveal style="--reveal-delay: 0s;">
+              <h3>Terminal Info (CLI)</h3>
+              <p>Runs locally and does not collect or transmit personal data.</p>
+              <span class="policy-link">View CLI Privacy Policy &rarr;</span>
+            </a>
+
+            <a class="policy-option" href="./website/" data-reveal style="--reveal-delay: 0.06s;">
+              <h3>This Website</h3>
+              <p>
+                Information about how this website handles analytics and
+                external links.
+              </p>
+              <span class="policy-link">View Website Privacy Policy &rarr;</span>
+            </a>
+          </div>
         </div>
-
-        <section class="disclaimer">
-          <h2>Disclaimer</h2>
-          <p>
-            While Terminal Info aims to be safe and transparent, users should
-            understand that:
-          </p>
-          <ul>
-            <li>Terminal Info executes commands locally on your machine.</li>
-            <li>
-              Terminal Info may perform network requests for certain features,
-              for example weather data or IP-based location detection.
-            </li>
-            <li>
-              Terminal Info supports third-party plugins, which are external
-              executables developed by independent contributors.
-            </li>
-          </ul>
-
-          <h3>Third-party plugins</h3>
-          <p>
-            Third-party plugins are not developed by the Terminal Info project.
-            Installing a plugin may execute external code on your system.
-          </p>
-          <p>
-            Plugins listed in the official plugin registry go through a basic
-            review process. This review does not guarantee that plugins are safe
-            or free of malicious behavior.
-          </p>
-          <p>
-            Only install plugins from sources you trust and review plugin
-            repositories before installing them.
-          </p>
-
-          <h3>Installation scripts</h3>
-          <p>
-            If you install Terminal Info using the provided installation script,
-            you may review the script before running it. You may also download
-            binaries directly from the GitHub Releases page.
-          </p>
-
-          <h3>Privacy</h3>
-          <p>Terminal Info does not collect personal data or identifiers.</p>
-          <p>Network requests are only used for specific features such as:</p>
-          <ul>
-            <li>weather information</li>
-            <li>IP-based location detection</li>
-            <li>plugin registry queries</li>
-            <li>future features</li>
-          </ul>
-          <p>
-            By using Terminal Info, you acknowledge that you are responsible for
-            reviewing the software and plugins you install.
-          </p>
-        </section>
       </div>
     </main>
 
@@ -153,9 +83,8 @@
             <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
             <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/plugin-development.md">Plugin Docs</a>
             <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/commands.md">Commands</a>
-            <a href="https://github.com/T-1234567890/terminal-info/blob/main/docs/roadmap.md">Roadmap</a>
             <a href="https://github.com/T-1234567890/terminal-info/blob/main/CONTRIBUTING.md">Contributing</a>
-            <a href="./">Disclaimer &amp; Privacy</a>
+            <a href="./">Policies</a>
           </div>
         </div>
         <div class="footer-divider"></div>
@@ -163,8 +92,8 @@
           <span class="footer-copy">&copy; 2026 Terminal Info. Licensed under Apache 2.0.</span>
           <div class="footer-legal">
             <a href="mailto:support@pomodoro-app.tech">support@pomodoro-app.tech</a>
-            <a href="./">Disclaimer</a>
-            <a href="https://github.com/T-1234567890/terminal-info">GitHub</a>
+            <a href="./cli/">CLI Privacy</a>
+            <a href="./website/">Website Privacy</a>
           </div>
         </div>
       </div>

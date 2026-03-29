@@ -798,6 +798,31 @@
     });
   }
 
+  function initAvailabilityLogos() {
+    document.querySelectorAll(".logo-link .logo-icon").forEach(function (img) {
+      var link = img.closest(".logo-link");
+      if (!link) return;
+
+      function showFallback() {
+        img.style.display = "none";
+        link.classList.remove("has-icon");
+      }
+
+      function showIcon() {
+        link.classList.add("has-icon");
+      }
+
+      if (img.complete && img.naturalWidth > 0) {
+        showIcon();
+      } else if (img.complete) {
+        showFallback();
+      } else {
+        img.addEventListener("load", showIcon, { once: true });
+        img.addEventListener("error", showFallback, { once: true });
+      }
+    });
+  }
+
   /* ------------------------------------------
      Mobile hamburger menu
   ------------------------------------------ */
@@ -847,6 +872,7 @@
     initDemoTabs();
     initInstallTabs();
     initCopyButtons();
+    initAvailabilityLogos();
     initHamburger();
     initSmoothScroll();
   });

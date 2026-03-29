@@ -389,6 +389,60 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
   font-weight: 500;
 }
 
+/* ---- Ecosystem availability ---- */
+.availability-strip {
+  padding-block: 1.4rem 0.5rem;
+}
+.availability-title {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+  text-align: center;
+}
+.availability-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.75rem;
+  flex-wrap: wrap;
+}
+.logo-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  opacity: 0.66;
+  transition: opacity 0.2s var(--ease), color 0.2s var(--ease), filter 0.2s var(--ease);
+  text-decoration: none;
+  color: var(--text);
+}
+.logo-link:hover,
+.logo-link:focus-visible {
+  opacity: 1;
+  color: var(--accent);
+  text-decoration: none;
+}
+.logo-icon {
+  display: block;
+  height: 1.15rem;
+  width: auto;
+  filter: brightness(0) saturate(100%);
+}
+.logo-fallback {
+  display: inline-block;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: inherit;
+}
+.logo-link.has-icon .logo-fallback {
+  display: none;
+}
+.logo-text-only .logo-fallback {
+  font-weight: 500;
+}
+
 /* ---- Features ---- */
 .features { background: var(--bg); }
 .features-grid {
@@ -788,6 +842,112 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
   font-weight: 700;
 }
 
+/* ---- Join us ---- */
+.join-section {
+  background: var(--bg);
+}
+.join-shell {
+  max-width: 920px;
+  margin-inline: auto;
+}
+.join-header .eyebrow {
+  margin-bottom: 0;
+}
+.join-header h2 {
+  margin-top: 8px;
+}
+.join-header p {
+  margin-top: 14px;
+}
+.join-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 40px;
+}
+.join-icon {
+  font-size: 1.25rem;
+  margin-bottom: 0.9rem;
+}
+.join-item h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.45rem;
+}
+.join-item p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+.join-link {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.join-link:hover,
+.join-link:focus-visible {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* ---- Policy hub ---- */
+.policy-shell {
+  max-width: 920px;
+  margin-inline: auto;
+}
+.policy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2.5rem;
+  margin-top: 2.5rem;
+}
+.policy-option {
+  display: block;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--bg-border);
+  text-decoration: none;
+  color: inherit;
+}
+.policy-option:hover,
+.policy-option:focus-visible {
+  text-decoration: none;
+}
+.policy-option:hover .policy-link,
+.policy-option:focus-visible .policy-link {
+  color: var(--accent);
+}
+.policy-option h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 0.45rem;
+}
+.policy-option p {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin-bottom: 0.85rem;
+}
+.policy-link {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.policy-note {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--bg-border);
+}
+.policy-note h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+.policy-note p {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin-bottom: 0.8rem;
+}
+
 /* ---- Footer ---- */
 .site-footer {
   background: transparent;
@@ -931,12 +1091,15 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
   .install-grid { grid-template-columns: 1fr; gap: 1.5rem; }
   .docs-inner { grid-template-columns: 1fr; gap: 2rem; }
   .plugins-inner { grid-template-columns: 1fr; }
+  .policy-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+  .join-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .footer-inner { grid-template-columns: 1fr; }
   .footer-links { text-align: left; }
 }
 
 @media (max-width: 620px) {
   .features-grid { grid-template-columns: 1fr; }
+  .join-grid { grid-template-columns: 1fr; }
   .site-nav { display: none; }
   .site-nav.open {
     display: flex;
