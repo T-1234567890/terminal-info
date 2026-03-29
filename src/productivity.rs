@@ -9,7 +9,8 @@ use dialoguer::{Input, Select, theme::ColorfulTheme};
 use serde::{Deserialize, Serialize};
 
 use crate::config::{
-    Config, RemindersConfig, TaskSortOrder, TasksConfig, TimerConfig, data_dir_path,
+    Config, RemindersConfig, TaskSortOrder, TasksConfig, TimerConfig, TimerWidgetMode,
+    data_dir_path,
     home_dir_path,
 };
 use crate::output::{OutputMode, json_output, output_mode};
@@ -21,6 +22,7 @@ const TASKS_FILE: &str = "tasks.json";
 const NOTES_FILE: &str = "notes.json";
 const REMINDERS_FILE: &str = "reminders.json";
 const DELETED_TASK_RETENTION_SECS: u64 = 7 * 24 * 60 * 60;
+const COMPLETED_TIMER_GRACE_SECS: u64 = 2;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct TimerState {
@@ -121,15 +123,16 @@ pub enum TimerLiveTarget {
 
 pub fn timer_dashboard_output() -> Result<String, String> {
     let store = load_timer_store()?;
+    let settings = runtime_config().timer;
     if json_output() {
         let json = serde_json::json!({
-            "countdown": store.countdown.as_ref().map(|state| serde_json::json!({
-                "status": countdown_status_line(state),
+            "countdown": visible_countdown(&store, &settings).map(|state| serde_json::json!({
+                "status": countdown_status_line(state, &settings),
                 "started_at": state.started_at,
                 "duration_secs": state.duration_secs.unwrap_or_default(),
             })),
             "stopwatch": store.stopwatch.as_ref().map(|state| serde_json::json!({
-                "status": stopwatch_status_line(state),
+                "status": stopwatch_status_line(state, &settings),
                 "started_at": state.started_at,
             })),
         });
@@ -138,7 +141,7 @@ pub fn timer_dashboard_output() -> Result<String, String> {
             .map_err(|err| format!("Failed to serialize timer dashboard: {err}"));
     }
 
-    let rows = timer_dashboard_rows(store);
+    let rows = timer_dashboard_rows(store, &settings);
     match output_mode() {
         OutputMode::Compact => {
             let line = rows
@@ -557,17 +560,24 @@ impl DashboardDataWidget for TimerWidget {
         if !runtime_config().timer.show_in_widget {
             return Ok(None);
         }
-        let lines = timer_dashboard_lines()?;
+        let config = runtime_config();
+        let lines = timer_dashboard_lines(&config.timer)?;
         if lines.is_empty() {
             return Ok(None);
         }
         let summary = lines.join(" | ");
+        let full_content = match config.timer.mode {
+            TimerWidgetMode::Compact => lines.join(" | "),
+            TimerWidgetMode::Full => lines.join("\n"),
+        };
         Ok(Some(PluginWidget {
+            name: "timer".to_string(),
+            display_name: "Timers".to_string(),
+            description: Some("Shows active countdowns and stopwatches".to_string()),
+            enabled_by_default: true,
             title: "Timers".to_string(),
             refresh_interval_secs: Some(1),
-            full: PluginWidgetBody::Text {
-                content: lines.join("\n"),
-            },
+            full: PluginWidgetBody::Text { content: full_content },
             compact: Some(PluginWidgetBody::Text { content: summary }),
         }))
     }
@@ -601,6 +611,10 @@ impl DashboardDataWidget for TaskWidget {
             .collect::<Vec<_>>();
 
         Ok(Some(PluginWidget {
+            name: "tasks".to_string(),
+            display_name: "Tasks".to_string(),
+            description: Some("Shows pending task items".to_string()),
+            enabled_by_default: true,
             title: "Tasks".to_string(),
             refresh_interval_secs: Some(5),
             full: PluginWidgetBody::List {
@@ -627,6 +641,10 @@ impl DashboardDataWidget for NotesWidget {
             return Ok(None);
         }
         Ok(Some(PluginWidget {
+            name: "notes".to_string(),
+            display_name: "Notes".to_string(),
+            description: Some("Shows recent quick notes".to_string()),
+            enabled_by_default: true,
             title: "Notes".to_string(),
             refresh_interval_secs: Some(5),
             full: PluginWidgetBody::List {
@@ -650,6 +668,10 @@ impl DashboardDataWidget for HistoryWidget {
             return Ok(None);
         }
         Ok(Some(PluginWidget {
+            name: "history".to_string(),
+            display_name: "History".to_string(),
+            description: Some("Shows recent shell commands".to_string()),
+            enabled_by_default: true,
             title: "History".to_string(),
             refresh_interval_secs: Some(10),
             full: PluginWidgetBody::List {
@@ -687,6 +709,10 @@ impl DashboardDataWidget for ReminderWidget {
             .collect::<Vec<_>>();
 
         Ok(Some(PluginWidget {
+            name: "reminders".to_string(),
+            display_name: "Reminders".to_string(),
+            description: Some("Shows upcoming reminders".to_string()),
+            enabled_by_default: true,
             title: "Reminders".to_string(),
             refresh_interval_secs: Some(5),
             full: PluginWidgetBody::List {
@@ -845,21 +871,27 @@ fn trim_notes(notes: &mut Vec<NoteItem>, max_stored: usize) {
     }
 }
 
-fn timer_dashboard_lines() -> Result<Vec<String>, String> {
+fn timer_dashboard_lines(settings: &TimerConfig) -> Result<Vec<String>, String> {
     let store = load_timer_store()?;
-    Ok(timer_dashboard_rows(store)
+    Ok(timer_dashboard_rows(store, settings)
         .into_iter()
         .map(|(label, value)| format!("{label}: {value}"))
         .collect())
 }
 
-fn timer_dashboard_rows(store: TimerStore) -> Vec<(String, String)> {
+fn timer_dashboard_rows(store: TimerStore, settings: &TimerConfig) -> Vec<(String, String)> {
     let mut lines = Vec::new();
-    if let Some(countdown) = store.countdown {
-        lines.push(("Timer".to_string(), countdown_status_line(&countdown)));
+    if let Some(countdown) = visible_countdown(&store, settings) {
+        lines.push((
+            "Timer".to_string(),
+            countdown_status_line(countdown, settings),
+        ));
     }
     if let Some(stopwatch) = store.stopwatch {
-        lines.push(("Stopwatch".to_string(), stopwatch_status_line(&stopwatch)));
+        lines.push((
+            "Stopwatch".to_string(),
+            stopwatch_status_line(&stopwatch, settings),
+        ));
     }
     if lines.is_empty() {
         lines.push((
@@ -870,19 +902,37 @@ fn timer_dashboard_rows(store: TimerStore) -> Vec<(String, String)> {
     lines
 }
 
-fn stopwatch_status_line(state: &TimerState) -> String {
+fn stopwatch_status_line(state: &TimerState, settings: &TimerConfig) -> String {
     let elapsed = now_unix().saturating_sub(state.started_at);
-    format!("{} elapsed", format_hms(elapsed))
+    match settings.mode {
+        TimerWidgetMode::Compact => format_hms(elapsed),
+        TimerWidgetMode::Full => format!("{} elapsed", format_hms(elapsed)),
+    }
 }
 
-fn countdown_status_line(state: &TimerState) -> String {
+fn countdown_status_line(state: &TimerState, settings: &TimerConfig) -> String {
     let duration = state.duration_secs.unwrap_or_default();
     let elapsed = now_unix().saturating_sub(state.started_at);
     let remaining = duration.saturating_sub(elapsed);
     if remaining == 0 {
         "completed".to_string()
     } else {
-        format!("{} remaining", format_hms(remaining))
+        match settings.mode {
+            TimerWidgetMode::Compact => format_hms(remaining),
+            TimerWidgetMode::Full => format!("{} remaining", format_hms(remaining)),
+        }
+    }
+}
+
+fn visible_countdown<'a>(store: &'a TimerStore, settings: &TimerConfig) -> Option<&'a TimerState> {
+    let countdown = store.countdown.as_ref()?;
+    if !settings.hide_when_complete {
+        return Some(countdown);
+    }
+    if countdown_is_running(countdown) || countdown_completed_recently(countdown) {
+        Some(countdown)
+    } else {
+        None
     }
 }
 
@@ -890,6 +940,16 @@ fn countdown_is_running(state: &TimerState) -> bool {
     let duration = state.duration_secs.unwrap_or_default();
     let elapsed = now_unix().saturating_sub(state.started_at);
     elapsed < duration
+}
+
+fn countdown_completed_recently(state: &TimerState) -> bool {
+    let duration = state.duration_secs.unwrap_or_default();
+    if duration == 0 {
+        return false;
+    }
+    let completed_at = state.started_at.saturating_add(duration);
+    let now = now_unix();
+    now >= completed_at && now.saturating_sub(completed_at) <= COMPLETED_TIMER_GRACE_SECS
 }
 
 fn recent_history(limit: usize) -> Result<Vec<String>, String> {

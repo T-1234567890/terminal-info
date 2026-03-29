@@ -72,9 +72,32 @@ pub struct DashboardConfig {
     #[serde(default = "default_dashboard_refresh_interval")]
     pub refresh_interval: u64,
     #[serde(default)]
+    pub layout: DashboardLayout,
+    #[serde(default)]
+    pub columns: Option<usize>,
+    #[serde(default)]
     pub compact_mode: bool,
     #[serde(default)]
     pub freeze: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Default, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum DashboardLayout {
+    Vertical,
+    Horizontal,
+    #[default]
+    Auto,
+}
+
+impl DashboardLayout {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Vertical => "vertical",
+            Self::Horizontal => "horizontal",
+            Self::Auto => "auto",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Default, Eq, PartialEq)]
@@ -133,6 +156,27 @@ pub struct TimerConfig {
     pub auto_start: bool,
     #[serde(default = "default_true")]
     pub show_in_widget: bool,
+    #[serde(default = "default_true")]
+    pub hide_when_complete: bool,
+    #[serde(default)]
+    pub mode: TimerWidgetMode,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Default, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum TimerWidgetMode {
+    #[default]
+    Full,
+    Compact,
+}
+
+impl TimerWidgetMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::Compact => "compact",
+        }
+    }
 }
 
 impl Default for TimerConfig {
@@ -141,6 +185,8 @@ impl Default for TimerConfig {
             default_duration: default_timer_duration(),
             auto_start: false,
             show_in_widget: default_true(),
+            hide_when_complete: default_true(),
+            mode: TimerWidgetMode::default(),
         }
     }
 }
@@ -173,6 +219,8 @@ impl Default for DashboardConfig {
         Self {
             widgets: default_dashboard_widgets(),
             refresh_interval: default_dashboard_refresh_interval(),
+            layout: DashboardLayout::default(),
+            columns: None,
             compact_mode: false,
             freeze: false,
         }
@@ -305,7 +353,7 @@ pub struct Config {
     pub tasks: TasksConfig,
     #[serde(default)]
     pub notes: NotesConfig,
-    #[serde(default)]
+    #[serde(default, alias = "timers")]
     pub timer: TimerConfig,
     #[serde(default)]
     pub reminders: RemindersConfig,
@@ -410,6 +458,9 @@ impl Config {
         }
         if self.dashboard.refresh_interval == 0 {
             self.dashboard.refresh_interval = default_dashboard_refresh_interval();
+        }
+        if matches!(self.dashboard.columns, Some(0)) {
+            self.dashboard.columns = None;
         }
         if self.cache.weather_ttl_secs == 0 {
             self.cache.weather_ttl_secs = default_weather_cache_ttl();
@@ -611,6 +662,7 @@ mod tests {
         assert_eq!(config.config_version, CURRENT_CONFIG_VERSION);
         assert!(!config.server_mode);
         assert_eq!(config.dashboard.refresh_interval, 1);
+        assert_eq!(config.dashboard.layout, DashboardLayout::Auto);
         assert_eq!(config.cache.weather_ttl_secs, 60);
         assert_eq!(config.cache.network_ttl_secs, 30);
         assert_eq!(config.cache.time_ttl_secs, 10);

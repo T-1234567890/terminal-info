@@ -185,6 +185,7 @@ Configuration is stored in:
 ```
 
 `config widgets` provides quick dashboard widget changes without editing TOML manually.
+The interactive `tinfo config` menu also includes a widget picker that shows built-in and trusted plugin widgets together, lets you toggle them with `Enter`, and saves with `q`.
 
 ## Search
 

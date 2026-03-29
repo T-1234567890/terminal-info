@@ -15,6 +15,8 @@ Widget order is configured in `~/.tinfo/config.toml`:
 [dashboard]
 widgets = ["weather", "time", "network", "system", "timer", "tasks", "notes", "history", "reminders", "plugins"]
 refresh_interval = 1
+layout = "auto"
+columns = 2
 compact_mode = false
 freeze = false
 ```
@@ -44,6 +46,9 @@ Notes:
 - reminder entries include `id`, `message`, `trigger_at`, and `triggered`
 - `freeze = true` captures one snapshot and reuses it instead of refreshing live
 - `refresh_interval` controls the dashboard loop; plugin widgets can also provide their own refresh hint
+- `layout = "auto"` uses a responsive multi-column layout on wider terminals
+- `layout = "horizontal"` forces side-by-side widget boxes
+- `columns` can pin the preferred number of dashboard columns
 
 Quick widget commands:
 
@@ -99,6 +104,8 @@ tinfo dashboard notes clear
 Rendering behavior:
 
 - `timer` shows the active countdown and stopwatch state together and refreshes every second
+- `timer.hide_when_complete = true` keeps `completed` visible briefly before removing the finished countdown
+- `timer.mode = "compact"` shortens timer text in the dashboard widget
 - `tasks` shows recent tasks based on the task settings in `config.toml`
 - deleted tasks are not shown in the task widget
 - deleted tasks remain recoverable for 7 days before automatic removal
@@ -108,6 +115,7 @@ Rendering behavior:
 - compact mode reduces each widget to a single summary line
 - all productivity widgets are re-read on short intervals and do not block the rest of the dashboard
 - `tinfo remind ...` schedules the reminder and opens the live dashboard so the scheduler is active immediately
+- dashboard widget boxes adapt to terminal width and truncate overly long rows instead of overflowing
 
 ## Plugin Widget API
 

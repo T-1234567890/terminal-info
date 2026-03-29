@@ -4,7 +4,7 @@ When `tinfo` is run with no arguments, it shows a simple dashboard instead of co
 
 ## Current Sections
 
-The dashboard currently displays:
+The dashboard displays responsive widget boxes for:
 
 - `Location`
 - `Weather`
@@ -28,6 +28,22 @@ Network: 192.168.1.8
 CPU: 8.3%
 Memory: 7.2 GiB / 16.0 GiB used
 ```
+
+## Layout Behavior
+
+The dashboard now supports three layout modes in `~/.tinfo/config.toml`:
+
+```toml
+[dashboard]
+layout = "auto"
+columns = 2
+```
+
+- `vertical` stacks widget boxes top to bottom
+- `horizontal` renders them in multiple columns
+- `auto` switches layouts based on terminal width
+
+When the terminal is narrow, the dashboard falls back to a single column. On wider terminals it will tile widgets side by side and truncate long lines to avoid overflow.
 
 ## How It Works
 
@@ -126,6 +142,17 @@ The widgets are intentionally small and non-blocking. The dashboard reads local 
 The dashboard also acts as the reminder scheduler. `tinfo remind ...` writes reminder data to `~/.tinfo/data/reminders.json`, prints `Note: reminders trigger while the dashboard is running.`, and opens the live dashboard. While the dashboard is running it checks for due reminders, marks them as triggered, rings the terminal bell, and shows a temporary alert row.
 
 For tasks, deleted items are soft-deleted into a recoverable area instead of disappearing immediately. They can be restored from `tinfo task` for 7 days, and expired deleted tasks are purged automatically the next time the CLI loads the task store.
+
+Timer widgets can also be tuned through:
+
+```toml
+[timer]
+hide_when_complete = true
+mode = "compact"
+```
+
+- `hide_when_complete = true` shows `completed` briefly before removing the finished countdown
+- `mode = "compact"` shortens timer and stopwatch text inside the dashboard
 
 ## Freeze Mode
 

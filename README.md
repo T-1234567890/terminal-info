@@ -120,10 +120,10 @@ Instead of switching between multiple utilities, you get a unified system that c
 - TOML configuration with profiles in `~/.tinfo/config.toml`
 - Optional server mode for server and VPS diagnostics
 - Dashboard widget ordering in `~/.tinfo/config.toml`
-- Built-in dashboard widgets for weather, time, network, system, timer, tasks, notes, history, reminders, and trusted plugins
+- Built-in and trusted plugin dashboard widgets with a shared enable/disable list in config
 - Dashboard live mode, snapshot mode with `--freeze`, config-driven default freeze, and `--live` override
 - Lightweight productivity commands for timers, stopwatch, tasks, notes, history, and reminders
-- Interactive `tinfo config` / `tinfo configure` menu with sections for dashboard, widgets, tasks, notes, timer, and reminders
+- Interactive `tinfo config` / `tinfo configure` menu with sections for dashboard, widgets, tasks, notes, timer, and reminders, including a live widget toggle list
 - Shell completions for `bash`, `zsh`, and `fish`
 - Output modes for scripting and interactive use, including `--json`
 - Plugin discovery, install, update, trust, verification, search, and local browser-based browsing

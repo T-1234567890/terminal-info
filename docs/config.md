@@ -49,6 +49,8 @@ Supported top-level fields:
 - `locations.<alias>`
 - `dashboard.widgets`
 - `dashboard.refresh_interval`
+- `dashboard.layout`
+- `dashboard.columns`
 - `dashboard.compact_mode`
 - `dashboard.freeze`
 - `tasks.show_completed`
@@ -60,6 +62,8 @@ Supported top-level fields:
 - `timer.default_duration`
 - `timer.auto_start`
 - `timer.show_in_widget`
+- `timer.hide_when_complete`
+- `timer.mode`
 - `reminders.default_duration`
 - `reminders.enable_notifications`
 - `reminders.sound_alert`
@@ -87,6 +91,8 @@ Dashboard widget order:
 [dashboard]
 widgets = ["weather", "time", "network", "system", "timer", "tasks", "notes", "history", "reminders", "plugins"]
 refresh_interval = 1
+layout = "auto"
+columns = 2
 compact_mode = false
 freeze = false
 
@@ -104,6 +110,8 @@ show_in_widget = true
 default_duration = "25m"
 auto_start = false
 show_in_widget = true
+hide_when_complete = true
+mode = "full"
 
 [reminders]
 default_duration = "15m"
@@ -201,6 +209,21 @@ tinfo config theme unicode off
 `theme.border_style` controls the box corners used by the dashboard and boxed reports.
 `theme.accent_color` applies only in color mode.
 `theme.ascii_only = true` forces `+`, `-`, and `|` borders and ASCII status markers for older or limited terminals.
+
+Dashboard layout settings:
+
+- `layout = "auto"` is the default and switches to multiple columns on wider terminals
+- `layout = "vertical"` keeps the classic stacked layout
+- `layout = "horizontal"` tiles widgets side by side
+- `columns` lets you override the preferred column count for `horizontal` or `auto`
+- `dashboard.widgets` stores the enabled widget list; widgets not listed are disabled
+- `tinfo config` now includes a widget picker that shows built-in and trusted plugin widgets together
+- in the widget picker, `Enter` toggles a widget and `q` saves and exits
+
+Timer widget settings:
+
+- `hide_when_complete = true` shows `completed` briefly and then removes the countdown row
+- `mode = "compact"` shortens timer and stopwatch text inside the dashboard widget
 
 API settings:
 

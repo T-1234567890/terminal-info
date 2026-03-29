@@ -110,12 +110,32 @@ where
     T: AsRef<str>,
     U: AsRef<str>,
 {
-    let width = rows
+    format_box_table_with_width(title, rows, None)
+}
+
+pub fn format_box_table_with_width<T, U>(
+    title: &str,
+    rows: &[(T, U)],
+    max_content_width: Option<usize>,
+) -> String
+where
+    T: AsRef<str>,
+    U: AsRef<str>,
+{
+    let rendered_rows = rows
         .iter()
-        .map(|(label, value)| label.as_ref().len() + 2 + value.as_ref().len())
+        .map(|(label, value)| render_row(label.as_ref(), value.as_ref()))
+        .collect::<Vec<_>>();
+    let mut width = rendered_rows
+        .iter()
+        .map(|row| row.chars().count())
         .max()
         .unwrap_or(0)
-        .max(title.len());
+        .max(title.chars().count());
+    if let Some(limit) = max_content_width.filter(|limit| *limit > 0) {
+        width = width.min(limit);
+    }
+    let title = truncate_line(title, width);
     let border = border_chars(theme_config());
     let vertical = accentize(&border.vertical.to_string());
     let mut lines = vec![
@@ -125,7 +145,7 @@ where
             repeat(border.horizontal, width + 2),
             border.top_right
         )),
-        format!("{} {} {}", vertical, accentize(&center_line(title, width)), vertical),
+        format!("{} {} {}", vertical, accentize(&center_line(&title, width)), vertical),
         accentize(&format!(
             "{}{}{}",
             border.junction_left,
@@ -133,11 +153,11 @@ where
             border.junction_right
         )),
     ];
-    for (label, value) in rows {
+    for row in rendered_rows {
         lines.push(format!(
             "{} {} {}",
             vertical,
-            pad_line(&format!("{}: {}", label.as_ref(), value.as_ref()), width),
+            pad_line(&truncate_line(&row, width), width),
             vertical
         ));
     }
@@ -148,6 +168,14 @@ where
         border.bottom_right
     )));
     format!("{}\n", lines.join("\n"))
+}
+
+fn render_row(label: &str, value: &str) -> String {
+    if label.trim().is_empty() {
+        value.to_string()
+    } else {
+        format!("{label}: {value}")
+    }
 }
 
 fn border_chars(theme: ThemeConfig) -> BorderChars {
@@ -205,8 +233,25 @@ fn pad_line(value: &str, width: usize) -> String {
 }
 
 fn center_line(value: &str, width: usize) -> String {
-    let padding = width.saturating_sub(value.len());
+    let value_width = value.chars().count();
+    let padding = width.saturating_sub(value_width);
     let left = padding / 2;
     let right = padding - left;
     format!("{}{}{}", " ".repeat(left), value, " ".repeat(right))
+}
+
+fn truncate_line(value: &str, width: usize) -> String {
+    let chars = value.chars().collect::<Vec<_>>();
+    if chars.len() <= width {
+        return value.to_string();
+    }
+    if width <= 1 {
+        return "…".repeat(width);
+    }
+    let mut output = chars
+        .into_iter()
+        .take(width.saturating_sub(1))
+        .collect::<String>();
+    output.push('…');
+    output
 }

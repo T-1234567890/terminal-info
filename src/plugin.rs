@@ -231,6 +231,14 @@ struct PluginVerifyView {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PluginWidget {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub display_name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default = "default_widget_enabled")]
+    pub enabled_by_default: bool,
     pub title: String,
     #[serde(default)]
     pub refresh_interval_secs: Option<u64>,
@@ -257,6 +265,24 @@ struct LegacyPluginWidget {
 }
 
 impl PluginWidget {
+    pub fn key(&self) -> String {
+        if !self.name.trim().is_empty() {
+            self.name.trim().to_ascii_lowercase()
+        } else {
+            slugify_widget_name(&self.title)
+        }
+    }
+
+    pub fn label(&self) -> String {
+        if !self.display_name.trim().is_empty() {
+            self.display_name.trim().to_string()
+        } else if !self.title.trim().is_empty() {
+            self.title.trim().to_string()
+        } else {
+            self.key()
+        }
+    }
+
     pub fn body(&self, compact: bool) -> &PluginWidgetBody {
         if compact {
             self.compact.as_ref().unwrap_or(&self.full)
@@ -309,6 +335,10 @@ struct PluginInspectView {
 
 fn default_plugin_api() -> u32 {
     1
+}
+
+fn default_widget_enabled() -> bool {
+    true
 }
 
 pub struct PluginDiagnosticSummary {
@@ -1256,6 +1286,10 @@ fn parse_dashboard_widget_payload(text: &str) -> Option<PluginWidget> {
         serde_json::from_str::<LegacyPluginWidget>(text)
             .ok()
             .map(|legacy| PluginWidget {
+                name: slugify_widget_name(&legacy.title),
+                display_name: legacy.title.clone(),
+                description: None,
+                enabled_by_default: true,
                 title: legacy.title,
                 refresh_interval_secs: None,
                 full: PluginWidgetBody::Text {
@@ -1266,6 +1300,21 @@ fn parse_dashboard_widget_payload(text: &str) -> Option<PluginWidget> {
                 }),
             })
     })
+}
+
+fn slugify_widget_name(value: &str) -> String {
+    let mut slug = String::new();
+    let mut last_was_dash = false;
+    for ch in value.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+            last_was_dash = false;
+        } else if !last_was_dash {
+            slug.push('-');
+            last_was_dash = true;
+        }
+    }
+    slug.trim_matches('-').to_string()
 }
 
 pub fn search_plugins(query: Option<&str>) -> Result<(), String> {

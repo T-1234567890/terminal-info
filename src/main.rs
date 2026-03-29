@@ -50,6 +50,7 @@ use crate::builtins::{
 use crate::cache::{read_cache, write_cache};
 use crate::config::{ApiProvider, Config, DefaultOutput, Units, config_path, home_dir_path};
 use crate::config_menu::show_config_menu;
+use crate::dashboard::{available_widget_definitions, default_enabled_widget_names};
 use crate::output::{OutputMode, set_json_output, set_output_mode};
 use crate::plugin::{
     info_plugin, init_plugin_template, install_plugin, list_plugins, list_trusted_plugins,
@@ -68,8 +69,15 @@ use crate::theme::{AccentColor, BorderStyle, format_box_table, set_theme};
 use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, WeatherReport};
 
 #[derive(Parser, Debug)]
-#[command(name = "tinfo", version, about = "Terminal Info CLI")]
+#[command(
+    name = "tinfo",
+    version,
+    about = "Terminal Info CLI",
+    disable_version_flag = true
+)]
 struct Cli {
+    #[arg(short = 'v', long = "version", action = clap::ArgAction::Version, global = true)]
+    version: Option<bool>,
     /// Use minimal output for scripts
     #[arg(long, conflicts_with_all = ["compact", "color"])]
     plain: bool,
@@ -1080,31 +1088,22 @@ fn handle_config(config: &mut Config, command: Option<ConfigCommand>) -> Result<
     }
 }
 
-const SUPPORTED_DASHBOARD_WIDGETS: &[&str] = &[
-    "weather",
-    "time",
-    "network",
-    "system",
-    "timer",
-    "tasks",
-    "notes",
-    "history",
-    "reminders",
-    "plugins",
-];
-
 fn normalize_widget_name(name: &str) -> Result<String, String> {
     let normalized = name.trim().to_ascii_lowercase();
     if normalized.is_empty() {
         return Err("Widget name cannot be empty.".to_string());
     }
-    if SUPPORTED_DASHBOARD_WIDGETS.contains(&normalized.as_str()) {
+    let supported = available_widget_definitions()
+        .into_iter()
+        .map(|widget| widget.name)
+        .collect::<Vec<_>>();
+    if supported.iter().any(|entry| entry == &normalized) {
         Ok(normalized)
     } else {
         Err(format!(
             "Unsupported widget '{}'. Supported widgets: {}.",
             name,
-            SUPPORTED_DASHBOARD_WIDGETS.join(", ")
+            supported.join(", ")
         ))
     }
 }
@@ -1161,7 +1160,7 @@ fn handle_widgets_config(
             Ok(())
         }
         WidgetsCommand::Reset => {
-            config.dashboard.widgets = crate::config::DashboardConfig::default().widgets;
+            config.dashboard.widgets = default_enabled_widget_names();
             config.save()?;
             println!(
                 "Dashboard widgets reset to: {}",

@@ -2,14 +2,23 @@ use std::collections::BTreeMap;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crossterm::terminal;
 use sysinfo::{MINIMUM_CPU_UPDATE_INTERVAL, System};
 
 use crate::builtins::{DashboardSnapshot, build_dashboard_snapshot, memory_line};
-use crate::config::Config;
+use crate::config::{Config, DashboardLayout};
 use crate::output::{OutputMode, output_mode};
 use crate::plugin::{PluginWidget, PluginWidgetBody, dashboard_widgets};
 use crate::productivity::ProductivityWidgetManager;
-use crate::theme::format_box_table;
+use crate::theme::format_box_table_with_width;
+
+#[derive(Clone, Debug)]
+pub struct WidgetDefinition {
+    pub name: String,
+    pub display_name: String,
+    pub description: Option<String>,
+    pub enabled_by_default: bool,
+}
 
 pub struct DashboardRenderer {
     config: Config,
@@ -38,6 +47,16 @@ struct ReminderNotice {
 
 struct DashboardSystemSampler {
     system: System,
+}
+
+struct DashboardSection {
+    title: String,
+    rows: Vec<(String, String)>,
+}
+
+struct RenderedSection {
+    lines: Vec<String>,
+    width: usize,
 }
 
 #[allow(dead_code)]
@@ -77,9 +96,9 @@ impl DashboardRenderer {
         let title = "Terminal Info";
         let snapshot = self.system_sampler.snapshot(&self.config);
         let effective_dashboard = self.config.effective_dashboard();
-        let widgets = normalized_widgets(&effective_dashboard.widgets);
         let compact = effective_dashboard.compact_mode || matches!(output_mode(), OutputMode::Compact);
         let plugin_widgets = self.plugin_widgets(compact);
+        let widgets = normalized_widgets(&effective_dashboard.widgets, &plugin_widgets);
         let location = if self.config.uses_auto_location() {
             "auto".to_string()
         } else {
@@ -136,7 +155,7 @@ impl DashboardRenderer {
                     .iter()
                     .map(|notice| notice.message.clone())
                     .collect::<Vec<_>>();
-                let rows = dashboard_rows(
+                let sections = dashboard_sections(
                     &location,
                     &snapshot,
                     &widgets,
@@ -145,7 +164,7 @@ impl DashboardRenderer {
                     self,
                     false,
                 );
-                format_box_table(title, &rows)
+                render_dashboard_sections(title, sections, &effective_dashboard)
             }
         }
     }
@@ -226,36 +245,119 @@ impl DashboardSystemSampler {
     }
 }
 
-fn normalized_widgets(widgets: &[String]) -> Vec<String> {
+pub fn available_widget_definitions() -> Vec<WidgetDefinition> {
+    let mut definitions = core_widget_definitions();
+    for widget in dashboard_widgets(false) {
+        let name = widget.key();
+        if definitions.iter().any(|entry| entry.name == name) {
+            continue;
+        }
+        definitions.push(WidgetDefinition {
+            name,
+            display_name: widget.label(),
+            description: widget.description.clone(),
+            enabled_by_default: widget.enabled_by_default,
+        });
+    }
+    definitions
+}
+
+pub fn default_enabled_widget_names() -> Vec<String> {
+    available_widget_definitions()
+        .into_iter()
+        .filter(|widget| widget.enabled_by_default)
+        .map(|widget| widget.name)
+        .collect()
+}
+
+fn core_widget_definitions() -> Vec<WidgetDefinition> {
+    vec![
+        WidgetDefinition {
+            name: "weather".to_string(),
+            display_name: "Weather".to_string(),
+            description: Some("Shows current weather conditions".to_string()),
+            enabled_by_default: true,
+        },
+        WidgetDefinition {
+            name: "time".to_string(),
+            display_name: "Time".to_string(),
+            description: Some("Shows the current time".to_string()),
+            enabled_by_default: true,
+        },
+        WidgetDefinition {
+            name: "network".to_string(),
+            display_name: "Network".to_string(),
+            description: Some("Shows the current network status".to_string()),
+            enabled_by_default: true,
+        },
+        WidgetDefinition {
+            name: "system".to_string(),
+            display_name: "System".to_string(),
+            description: Some("Shows CPU and memory usage".to_string()),
+            enabled_by_default: true,
+        },
+        WidgetDefinition {
+            name: "timer".to_string(),
+            display_name: "Timers".to_string(),
+            description: Some("Shows active countdowns and stopwatches".to_string()),
+            enabled_by_default: true,
+        },
+        WidgetDefinition {
+            name: "tasks".to_string(),
+            display_name: "Tasks".to_string(),
+            description: Some("Shows pending task items".to_string()),
+            enabled_by_default: true,
+        },
+        WidgetDefinition {
+            name: "notes".to_string(),
+            display_name: "Notes".to_string(),
+            description: Some("Shows recent notes".to_string()),
+            enabled_by_default: true,
+        },
+        WidgetDefinition {
+            name: "history".to_string(),
+            display_name: "History".to_string(),
+            description: Some("Shows recent shell history".to_string()),
+            enabled_by_default: true,
+        },
+        WidgetDefinition {
+            name: "reminders".to_string(),
+            display_name: "Reminders".to_string(),
+            description: Some("Shows upcoming reminders".to_string()),
+            enabled_by_default: true,
+        },
+        WidgetDefinition {
+            name: "plugins".to_string(),
+            display_name: "Plugin widgets".to_string(),
+            description: Some("Shows dashboard widgets provided by trusted plugins".to_string()),
+            enabled_by_default: true,
+        },
+    ]
+}
+
+fn normalized_widgets(widgets: &[String], plugin_widgets: &[PluginWidget]) -> Vec<String> {
+    let mut allowed = core_widget_definitions()
+        .into_iter()
+        .map(|entry| entry.name)
+        .collect::<Vec<_>>();
+    for widget in plugin_widgets {
+        let name = widget.key();
+        if !allowed.iter().any(|entry| entry == &name) {
+            allowed.push(name);
+        }
+    }
     let mut normalized = widgets
         .iter()
         .map(|value| value.trim().to_ascii_lowercase())
-        .filter(|value| {
-            matches!(
-                value.as_str(),
-                "weather" | "time" | "network" | "system" | "timer" | "tasks" | "notes"
-                    | "history" | "reminders" | "plugins"
-            )
-        })
+        .filter(|value| allowed.iter().any(|entry| entry == value))
         .collect::<Vec<_>>();
     if normalized.is_empty() {
-        normalized = vec![
-            "weather".to_string(),
-            "time".to_string(),
-            "network".to_string(),
-            "system".to_string(),
-            "timer".to_string(),
-            "tasks".to_string(),
-            "notes".to_string(),
-            "history".to_string(),
-            "reminders".to_string(),
-            "plugins".to_string(),
-        ];
+        normalized = default_enabled_widget_names();
     }
     normalized
 }
 
-fn dashboard_rows(
+fn dashboard_sections(
     location: &str,
     snapshot: &crate::builtins::DashboardSnapshot,
     widgets: &[String],
@@ -263,58 +365,84 @@ fn dashboard_rows(
     reminder_messages: &[String],
     renderer: &mut DashboardRenderer,
     compact: bool,
-) -> Vec<(String, String)> {
-    let mut rows = vec![("Location".to_string(), location.to_string())];
+) -> Vec<DashboardSection> {
+    let mut sections = Vec::new();
+    let mut main_rows = vec![("Location".to_string(), location.to_string())];
     for message in reminder_messages {
-        rows.push(("Alert".to_string(), format!("Reminder: {message}")));
+        main_rows.push(("Alert".to_string(), format!("Reminder: {message}")));
     }
+    let plugin_widget_map = plugin_widgets
+        .iter()
+        .map(|widget| (widget.key(), widget))
+        .collect::<BTreeMap<_, _>>();
+
     for widget in widgets {
         match widget.as_str() {
             "weather" => {
-                rows.push(("Weather".to_string(), snapshot.weather.line.clone()));
+                main_rows.push(("Weather".to_string(), snapshot.weather.line.clone()));
                 if let Some(city) = &snapshot.weather.detected_location {
-                    rows.push(("Detected".to_string(), city.clone()));
+                    main_rows.push(("Detected".to_string(), city.clone()));
                 }
                 if let Some(hint) = &snapshot.weather.hint {
                     for line in hint.lines() {
-                        rows.push(("Tip".to_string(), line.to_string()));
+                        main_rows.push(("Tip".to_string(), normalize_tip_line(line)));
                     }
                 }
             }
-            "time" => rows.push(("Time".to_string(), snapshot.time.clone())),
-            "network" => rows.push(("Network".to_string(), snapshot.network.clone())),
+            "time" => main_rows.push(("Time".to_string(), snapshot.time.clone())),
+            "network" => main_rows.push(("Network".to_string(), snapshot.network.clone())),
             "system" => {
-                rows.push(("CPU".to_string(), snapshot.cpu.clone()));
-                rows.push(("Memory".to_string(), snapshot.memory.clone()));
+                main_rows.push(("CPU".to_string(), snapshot.cpu.clone()));
+                main_rows.push(("Memory".to_string(), snapshot.memory.clone()));
             }
             "timer" | "tasks" | "notes" | "history" | "reminders" => {
                 if let Some(widget) = renderer.built_in_widget(widget, compact) {
-                    rows.extend(render_widget_rows(&widget, compact));
+                    sections.push(DashboardSection {
+                        title: widget.title.clone(),
+                        rows: render_widget_rows(&widget, compact),
+                    });
                 }
             }
             "plugins" if !plugin_widgets.is_empty() => {
                 for widget in plugin_widgets {
-                    rows.extend(render_widget_rows(widget, compact));
+                    sections.push(DashboardSection {
+                        title: widget.label(),
+                        rows: render_widget_rows(widget, compact),
+                    });
                 }
             }
-            _ => {}
+            _ => {
+                if let Some(widget) = plugin_widget_map.get(widget) {
+                    sections.push(DashboardSection {
+                        title: widget.label(),
+                        rows: render_widget_rows(widget, compact),
+                    });
+                }
+            }
         }
     }
-    rows
+    sections.insert(
+        0,
+        DashboardSection {
+            title: "Terminal Info".to_string(),
+            rows: main_rows,
+        },
+    );
+    sections
 }
 
 fn render_widget_rows(widget: &PluginWidget, compact: bool) -> Vec<(String, String)> {
     match widget.body(compact) {
-        PluginWidgetBody::Text { content } => vec![(widget.title.clone(), content.clone())],
+        PluginWidgetBody::Text { content } => content
+            .lines()
+            .enumerate()
+            .map(|(index, line)| parse_text_widget_line(line, index))
+            .collect(),
         PluginWidgetBody::List { items } => {
             let mut rows = Vec::new();
             for (index, item) in items.iter().enumerate() {
                 rows.push((
-                    if index == 0 {
-                        widget.title.clone()
-                    } else {
-                        String::new()
-                    },
+                    if index == 0 { "Item" } else { "-" }.to_string(),
                     item.clone(),
                 ));
             }
@@ -325,19 +453,15 @@ fn render_widget_rows(widget: &PluginWidget, compact: bool) -> Vec<(String, Stri
             for (index, row) in rows.iter().enumerate() {
                 if row.len() >= 2 {
                     rendered.push((
-                        if index == 0 {
-                            format!("{} {}", widget.title, row[0])
-                        } else {
-                            row[0].clone()
-                        },
+                        row[0].clone(),
                         row[1..].join(" | "),
                     ));
                 } else if let Some(value) = row.first() {
                     rendered.push((
                         if index == 0 {
-                            widget.title.clone()
+                            headers.first().cloned().unwrap_or_else(|| "Value".to_string())
                         } else {
-                            headers.first().cloned().unwrap_or_default()
+                            "-".to_string()
                         },
                         value.clone(),
                     ));
@@ -346,6 +470,136 @@ fn render_widget_rows(widget: &PluginWidget, compact: bool) -> Vec<(String, Stri
             rendered
         }
     }
+}
+
+fn render_dashboard_sections(
+    title: &str,
+    sections: Vec<DashboardSection>,
+    dashboard: &crate::config::DashboardConfig,
+) -> String {
+    let terminal_width = terminal::size().ok().map(|(width, _)| width as usize);
+    let columns = resolved_columns(dashboard.layout, dashboard.columns, terminal_width, sections.len());
+    if columns <= 1 {
+        let width = terminal_width.map(|width| width.saturating_sub(4));
+        return sections
+            .into_iter()
+            .map(|section| {
+                let section_title = if section.title == "Terminal Info" {
+                    title.to_string()
+                } else {
+                    section.title
+                };
+                format_box_table_with_width(&section_title, &section.rows, width)
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+
+    let gap = 3;
+    let term_width = terminal_width.unwrap_or(120);
+    let cell_width = ((term_width.saturating_sub(gap * (columns - 1))) / columns).max(24);
+    let content_width = cell_width.saturating_sub(4);
+    let rendered = sections
+        .into_iter()
+        .map(|section| {
+            let section_title = if section.title == "Terminal Info" {
+                title.to_string()
+            } else {
+                section.title
+            };
+            let body = format_box_table_with_width(&section_title, &section.rows, Some(content_width));
+            RenderedSection {
+                lines: body.lines().map(|line| line.to_string()).collect(),
+                width: cell_width,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    render_section_grid(&rendered, columns, gap)
+}
+
+fn resolved_columns(
+    layout: DashboardLayout,
+    configured_columns: Option<usize>,
+    terminal_width: Option<usize>,
+    section_count: usize,
+) -> usize {
+    if section_count <= 1 {
+        return 1;
+    }
+
+    let mut columns = match layout {
+        DashboardLayout::Vertical => 1,
+        DashboardLayout::Horizontal => configured_columns.unwrap_or(2),
+        DashboardLayout::Auto => configured_columns.unwrap_or_else(|| match terminal_width.unwrap_or(0) {
+            0..=100 => 1,
+            101..=150 => 2,
+            _ => 3,
+        }),
+    }
+    .max(1)
+    .min(section_count);
+
+    if columns > 1 {
+        let gap = 3;
+        let terminal_width = terminal_width.unwrap_or(120);
+        while columns > 1
+            && (terminal_width.saturating_sub(gap * (columns - 1))) / columns < 28
+        {
+            columns -= 1;
+        }
+    }
+
+    columns.max(1)
+}
+
+fn render_section_grid(sections: &[RenderedSection], columns: usize, gap: usize) -> String {
+    let mut lines = Vec::new();
+    for row in sections.chunks(columns) {
+        let height = row.iter().map(|section| section.lines.len()).max().unwrap_or(0);
+        for line_idx in 0..height {
+            let parts = row
+                .iter()
+                .map(|section| {
+                    section
+                        .lines
+                        .get(line_idx)
+                        .cloned()
+                        .unwrap_or_else(|| " ".repeat(section.width))
+                })
+                .collect::<Vec<_>>();
+            lines.push(parts.join(&" ".repeat(gap)));
+        }
+        lines.push(String::new());
+    }
+    while lines.last().is_some_and(|line| line.is_empty()) {
+        lines.pop();
+    }
+    format!("{}\n", lines.join("\n"))
+}
+
+fn normalize_tip_line(line: &str) -> String {
+    let trimmed = line.trim();
+    trimmed
+        .strip_prefix("Tip:")
+        .map(str::trim)
+        .unwrap_or(trimmed)
+        .to_string()
+}
+
+fn parse_text_widget_line(line: &str, index: usize) -> (String, String) {
+    let trimmed = line.trim();
+    if let Some((label, value)) = trimmed.split_once(':') {
+        return (label.trim().to_string(), value.trim().to_string());
+    }
+    (
+        if index == 0 {
+            "Status".to_string()
+        } else {
+            "More".to_string()
+        },
+        trimmed.to_string(),
+    )
 }
 
 fn compact_widget_summary(widget: &PluginWidget, compact: bool) -> String {
@@ -358,5 +612,18 @@ fn compact_widget_summary(widget: &PluginWidget, compact: bool) -> String {
             .map(|row| row.join("/"))
             .collect::<Vec<_>>()
             .join("; "),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_enabled_widgets_include_core_defaults() {
+        let widgets = default_enabled_widget_names();
+        assert!(widgets.iter().any(|widget| widget == "weather"));
+        assert!(widgets.iter().any(|widget| widget == "time"));
+        assert!(widgets.iter().any(|widget| widget == "plugins"));
     }
 }

@@ -1,8 +1,14 @@
+use std::io::{self, Write};
+
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use dialoguer::{Confirm, Input, Password, Select, theme::ColorfulTheme};
 
 use crate::config::{
-    ApiProvider, Config, DashboardConfig, DefaultOutput, TaskSortOrder, Units, config_path,
+    ApiProvider, Config, DashboardConfig, DashboardLayout, DefaultOutput, TaskSortOrder,
+    TimerWidgetMode, Units, config_path,
 };
+use crate::dashboard::{WidgetDefinition, available_widget_definitions, default_enabled_widget_names};
 use crate::theme::{AccentColor, BorderStyle};
 use crate::{
     completion_status_for_current_shell, handle_config_edit, handle_config_open,
@@ -44,7 +50,7 @@ pub fn show_config_menu(config: &mut Config) -> Result<(), String> {
             Some(0) => run_first_run_setup(config)?,
             Some(1) => show_location_menu(config, &theme)?,
             Some(2) => show_dashboard_menu(config, &theme)?,
-            Some(3) => show_widgets_menu(config, &theme)?,
+            Some(3) => show_widgets_menu(config)?,
             Some(4) => show_tasks_menu(config, &theme)?,
             Some(5) => show_notes_menu(config, &theme)?,
             Some(6) => show_timer_menu(config, &theme)?,
@@ -193,6 +199,8 @@ fn show_timer_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), Str
             "Set default timer duration",
             "Toggle timer auto-start",
             "Toggle timer widget",
+            "Toggle hide completed timer",
+            "Set timer widget mode",
             "Back",
         ];
         let selection = Select::with_theme(theme)
@@ -223,7 +231,32 @@ fn show_timer_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), Str
                 config.save()?;
                 println!("Timer widget enabled: {}", config.timer.show_in_widget);
             }
-            Some(3) | None => break,
+            Some(3) => {
+                config.timer.hide_when_complete = !config.timer.hide_when_complete;
+                config.save()?;
+                println!("Hide completed timer: {}", config.timer.hide_when_complete);
+            }
+            Some(4) => {
+                let items = ["full", "compact", "Keep current"];
+                let default = match config.timer.mode {
+                    TimerWidgetMode::Full => 0,
+                    TimerWidgetMode::Compact => 1,
+                };
+                let selection = Select::with_theme(theme)
+                    .with_prompt("Timer widget mode")
+                    .items(&items)
+                    .default(default)
+                    .interact_opt()
+                    .map_err(|err| format!("Failed to read timer widget mode: {err}"))?;
+                match selection {
+                    Some(0) => config.timer.mode = TimerWidgetMode::Full,
+                    Some(1) => config.timer.mode = TimerWidgetMode::Compact,
+                    _ => {}
+                }
+                config.save()?;
+                println!("Timer widget mode: {}", config.timer.mode.label());
+            }
+            Some(5) | None => break,
             Some(_) => {}
         }
     }
@@ -406,6 +439,8 @@ fn show_dashboard_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(),
         let items = [
             "Apply a dashboard preset",
             "Set refresh interval",
+            "Set layout mode",
+            "Set column count",
             "Toggle compact mode",
             "Toggle freeze mode",
             "Back",
@@ -430,16 +465,71 @@ fn show_dashboard_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(),
                 println!("Dashboard refresh interval set to {}s.", config.dashboard.refresh_interval);
             }
             Some(2) => {
+                let items = ["vertical", "horizontal", "auto", "Keep current"];
+                let default = match config.dashboard.layout {
+                    DashboardLayout::Vertical => 0,
+                    DashboardLayout::Horizontal => 1,
+                    DashboardLayout::Auto => 2,
+                };
+                let selection = Select::with_theme(theme)
+                    .with_prompt("Dashboard layout mode")
+                    .items(&items)
+                    .default(default)
+                    .interact_opt()
+                    .map_err(|err| format!("Failed to read dashboard layout mode: {err}"))?;
+                match selection {
+                    Some(0) => config.dashboard.layout = DashboardLayout::Vertical,
+                    Some(1) => config.dashboard.layout = DashboardLayout::Horizontal,
+                    Some(2) => config.dashboard.layout = DashboardLayout::Auto,
+                    _ => {}
+                }
+                config.save()?;
+                println!("Dashboard layout mode: {}", config.dashboard.layout.label());
+            }
+            Some(3) => {
+                let prompt = match config.dashboard.columns {
+                    Some(columns) => format!("Column count (current: {columns}, blank for auto)"),
+                    None => "Column count (blank for auto)".to_string(),
+                };
+                let value = Input::<String>::with_theme(theme)
+                    .with_prompt(prompt)
+                    .allow_empty(true)
+                    .interact_text()
+                    .map_err(|err| format!("Failed to read dashboard columns: {err}"))?;
+                let trimmed = value.trim();
+                config.dashboard.columns = if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(
+                        trimmed
+                            .parse::<usize>()
+                            .map_err(|err| {
+                                format!("Failed to parse dashboard columns '{trimmed}': {err}")
+                            })?
+                            .max(1),
+                    )
+                };
+                config.save()?;
+                println!(
+                    "Dashboard columns: {}",
+                    config
+                        .dashboard
+                        .columns
+                        .map(|columns| columns.to_string())
+                        .unwrap_or_else(|| "auto".to_string())
+                );
+            }
+            Some(4) => {
                 config.dashboard.compact_mode = !config.dashboard.compact_mode;
                 config.save()?;
                 println!("Dashboard compact mode: {}", config.dashboard.compact_mode);
             }
-            Some(3) => {
+            Some(5) => {
                 config.dashboard.freeze = !config.dashboard.freeze;
                 config.save()?;
                 println!("Dashboard freeze mode: {}", config.dashboard.freeze);
             }
-            Some(4) | None => break,
+            Some(6) | None => break,
             Some(_) => {}
         }
     }
@@ -447,28 +537,16 @@ fn show_dashboard_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(),
     Ok(())
 }
 
-const SUPPORTED_WIDGETS: &[&str] = &[
-    "weather",
-    "time",
-    "network",
-    "system",
-    "timer",
-    "tasks",
-    "notes",
-    "history",
-    "reminders",
-    "plugins",
-];
-
-fn show_widgets_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
+fn show_widgets_menu(config: &mut Config) -> Result<(), String> {
+    let theme = ColorfulTheme::default();
     loop {
         let items = [
             "Show current widget order",
-            "Toggle widgets",
-            "Reset widget order",
+            "Configure enabled widgets",
+            "Reset enabled widgets",
             "Back",
         ];
-        let selection = Select::with_theme(theme)
+        let selection = Select::with_theme(&theme)
             .with_prompt("Widgets")
             .items(&items)
             .default(0)
@@ -480,12 +558,12 @@ fn show_widgets_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), S
                 println!("Dashboard widgets: {}", config.dashboard.widgets.join(", "));
             }
             Some(1) => {
-                toggle_widgets(config, theme)?;
+                configure_widgets(config)?;
             }
             Some(2) => {
-                config.dashboard.widgets = DashboardConfig::default().widgets;
+                config.dashboard.widgets = default_enabled_widget_names();
                 config.save()?;
-                println!("Widget order reset to defaults.");
+                println!("Enabled widgets reset to defaults.");
             }
             Some(3) | None => break,
             Some(_) => {}
@@ -495,49 +573,130 @@ fn show_widgets_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), S
     Ok(())
 }
 
-fn toggle_widgets(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
+fn configure_widgets(config: &mut Config) -> Result<(), String> {
+    let definitions = available_widget_definitions();
+    if definitions.is_empty() {
+        println!("No dashboard widgets are currently available.");
+        return Ok(());
+    }
+
+    let _raw_mode = RawModeGuard::enter()?;
+    let mut stdout = io::stdout();
+    let mut selected = 0usize;
+
     loop {
-        let current = SUPPORTED_WIDGETS
-            .iter()
-            .map(|widget| {
-                if config.dashboard.widgets.iter().any(|value| value == widget) {
-                    format!("[x] {widget}")
-                } else {
-                    format!("[ ] {widget}")
-                }
-            })
-            .chain(std::iter::once("Back".to_string()))
-            .collect::<Vec<_>>();
-
-        let selection = Select::with_theme(theme)
-            .with_prompt("Toggle dashboard widgets")
-            .items(&current)
-            .default(0)
-            .interact_opt()
-            .map_err(|err| format!("Failed to read widget toggle selection: {err}"))?;
-
-        match selection {
-            Some(index) if index < SUPPORTED_WIDGETS.len() => {
-                let widget = SUPPORTED_WIDGETS[index];
-                if let Some(position) = config
-                    .dashboard
-                    .widgets
-                    .iter()
-                    .position(|value| value == widget)
-                {
-                    config.dashboard.widgets.remove(position);
-                    println!("Disabled widget '{widget}'.");
-                } else {
-                    config.dashboard.widgets.push(widget.to_string());
-                    println!("Enabled widget '{widget}'.");
-                }
-                config.save()?;
+        render_widget_config_screen(&mut stdout, config, &definitions, selected)?;
+        let next = event::read().map_err(|err| format!("Failed to read widget input: {err}"))?;
+        let Event::Key(key) = next else {
+            continue;
+        };
+        if key.kind != KeyEventKind::Press {
+            continue;
+        }
+        match key.code {
+            KeyCode::Up => {
+                selected = selected.saturating_sub(1);
             }
-            Some(_) | None => break,
+            KeyCode::Down => {
+                selected = (selected + 1).min(definitions.len().saturating_sub(1));
+            }
+            KeyCode::Enter | KeyCode::Right => {
+                toggle_widget(config, &definitions, selected);
+            }
+            KeyCode::Char('q') | KeyCode::Esc => {
+                config.save()?;
+                write!(stdout, "\x1B[2J\x1B[H")
+                    .map_err(|err| format!("Failed to clear widgets screen: {err}"))?;
+                stdout
+                    .flush()
+                    .map_err(|err| format!("Failed to flush widget screen: {err}"))?;
+                println!("Enabled widgets: {}", config.dashboard.widgets.join(", "));
+                return Ok(());
+            }
+            _ => {}
+        }
+    }
+}
+
+fn render_widget_config_screen(
+    stdout: &mut io::Stdout,
+    config: &Config,
+    definitions: &[WidgetDefinition],
+    selected: usize,
+) -> Result<(), String> {
+    write!(stdout, "\x1B[2J\x1B[H")
+        .map_err(|err| format!("Failed to draw widgets screen: {err}"))?;
+    writeln!(stdout, "Widgets").map_err(|err| format!("Failed to draw widgets screen: {err}"))?;
+    writeln!(stdout).map_err(|err| format!("Failed to draw widgets screen: {err}"))?;
+    writeln!(stdout, "Advanced and unified widget configuration")
+        .map_err(|err| format!("Failed to draw widgets screen: {err}"))?;
+    writeln!(stdout).map_err(|err| format!("Failed to draw widgets screen: {err}"))?;
+
+    for (index, widget) in definitions.iter().enumerate() {
+        let enabled = config.dashboard.widgets.iter().any(|item| item == &widget.name);
+        let cursor = if index == selected { ">" } else { " " };
+        let check = if enabled { "✓" } else { " " };
+        writeln!(stdout, "{} [{}] {}", cursor, check, widget.display_name)
+            .map_err(|err| format!("Failed to draw widgets screen: {err}"))?;
+        if let Some(description) = &widget.description {
+            writeln!(stdout, "      {}", description)
+                .map_err(|err| format!("Failed to draw widgets screen: {err}"))?;
         }
     }
 
+    writeln!(stdout).map_err(|err| format!("Failed to draw widgets screen: {err}"))?;
+    writeln!(stdout, "↑ ↓ navigate   Enter toggle   q save and exit")
+        .map_err(|err| format!("Failed to draw widgets screen: {err}"))?;
+    stdout
+        .flush()
+        .map_err(|err| format!("Failed to flush widgets screen: {err}"))?;
     Ok(())
+}
+
+fn toggle_widget(config: &mut Config, definitions: &[WidgetDefinition], selected: usize) {
+    let Some(widget) = definitions.get(selected) else {
+        return;
+    };
+    if let Some(position) = config
+        .dashboard
+        .widgets
+        .iter()
+        .position(|value| value == &widget.name)
+    {
+        config.dashboard.widgets.remove(position);
+        return;
+    }
+
+    let insert_at = definitions
+        .iter()
+        .skip(selected + 1)
+        .find_map(|next_widget| {
+            config
+                .dashboard
+                .widgets
+                .iter()
+                .position(|value| value == &next_widget.name)
+        })
+        .unwrap_or(config.dashboard.widgets.len());
+    config
+        .dashboard
+        .widgets
+        .insert(insert_at, widget.name.clone());
+}
+
+struct RawModeGuard;
+
+impl RawModeGuard {
+    fn enter() -> Result<Self, String> {
+        enable_raw_mode().map_err(|err| format!("Failed to enable raw mode: {err}"))?;
+        Ok(Self)
+    }
+}
+
+impl Drop for RawModeGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+    }
 }
 
 fn configure_dashboard_preferences(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
@@ -559,6 +718,8 @@ fn configure_dashboard_preferences(config: &mut Config, theme: &ColorfulTheme) -
                 "time".to_string(),
                 "plugins".to_string(),
             ];
+            config.dashboard.layout = DashboardLayout::Vertical;
+            config.dashboard.columns = None;
             config.dashboard.refresh_interval = 2;
             config.dashboard.compact_mode = true;
         }
@@ -570,6 +731,8 @@ fn configure_dashboard_preferences(config: &mut Config, theme: &ColorfulTheme) -
                 "system".to_string(),
                 "plugins".to_string(),
             ];
+            config.dashboard.layout = DashboardLayout::Auto;
+            config.dashboard.columns = Some(2);
             config.dashboard.refresh_interval = 1;
             config.dashboard.compact_mode = false;
         }
