@@ -64,10 +64,10 @@
                 <div class="hero-install-label" data-en="Quick install" data-zh="快速安装">Quick install</div>
               </div>
               <div class="hero-install-expanded" id="hero-install-expanded">
-                <span id="hero-install-cmd" hidden data-copy="curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash"></span>
+                <span id="hero-install-cmd" hidden data-copy="curl -fsSL https://github.com/T-1234567890/terminal-info/releases/latest/download/install.sh | bash"></span>
                 <div class="hero-install-actions">
                   <button class="copy-btn" id="hero-copy-btn" title="Copy install command" data-en="Copy" data-zh="复制">Copy</button>
-                  <a href="https://github.com/T-1234567890/terminal-info/blob/main/install.sh" target="_blank" rel="noopener" data-en="Inspect" data-zh="查看">Inspect</a>
+                  <a href="https://github.com/T-1234567890/terminal-info/releases/latest/download/install.sh" target="_blank" rel="noopener" data-en="Inspect" data-zh="查看">Inspect</a>
                   <a href="#install" data-en="More install ways" data-zh="更多安装方式">More install ways</a>
                 </div>
               </div>
@@ -344,15 +344,24 @@
           <div class="install-grid" data-reveal style="--reveal-delay: 0.24s;">
             <div class="install-desc">
               <h3 data-en="One-command install" data-zh="一条命令完成安装">One-command install</h3>
-              <p data-en="The install script downloads the correct binary for your platform, verifies the SHA-256 checksum and Minisign signature, and places tinfo in your PATH." data-zh="安装脚本会为你的平台下载正确的二进制文件，验证 SHA-256 校验和与 Minisign 签名，并将 tinfo 放入 PATH。">The install script downloads the correct binary for your platform, verifies the SHA-256 checksum and Minisign signature, and places <code>tinfo</code> in your <code>PATH</code>.</p>
+              <p data-en="All releases are verified with SHA-256 and Minisign before installation." data-zh="所有发布内容都会在安装前通过 SHA-256 和 Minisign 进行验证。">All releases are verified with SHA-256 and Minisign before installation.</p>
             </div>
             <div>
               <div class="code-block">
                 <div class="code-block-header">
                   <span>bash</span>
-                  <button class="code-copy" data-copy="curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash" data-en="Copy" data-zh="复制">Copy</button>
+                  <button class="code-copy" data-copy="curl -fsSL https://github.com/T-1234567890/terminal-info/releases/latest/download/install.sh | bash" data-en="Copy" data-zh="复制">Copy</button>
                 </div>
-                <pre>curl -sSL https://raw.githubusercontent.com/T-1234567890/terminal-info/main/install.sh | bash</pre>
+                <pre>curl -fsSL https://github.com/T-1234567890/terminal-info/releases/latest/download/install.sh | bash</pre>
+              </div>
+              <div class="code-block">
+                <div class="code-block-header">
+                  <span data-en="Secure install" data-zh="安全安装">Secure install</span>
+                  <button class="code-copy" data-copy="curl -fsSL -o install.sh https://github.com/T-1234567890/terminal-info/releases/latest/download/install.sh
+bash install.sh" data-en="Copy" data-zh="复制">Copy</button>
+                </div>
+                <pre>curl -fsSL -o install.sh https://github.com/T-1234567890/terminal-info/releases/latest/download/install.sh
+bash install.sh</pre>
               </div>
               <div class="code-block">
                 <div class="code-block-header"><span data-en="Verify it works" data-zh="验证是否可用">Verify it works</span></div>

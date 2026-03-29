@@ -178,6 +178,9 @@ jobs:
           pattern: release-*
           merge-multiple: true
 
+      - name: Add installer asset
+        run: cp install.sh dist/install.sh
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
