@@ -73,8 +73,10 @@ use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, 
 #[command(
     name = "tinfo",
     version,
-    about = "Terminal Info CLI",
-    disable_version_flag = true
+    about = "A modern CLI toolbox for weather, system info, network diagnostics, and productivity tools",
+    long_about = None,
+    disable_version_flag = true,
+    subcommand_help_heading = "Commands:"
 )]
 struct Cli {
     #[arg(short = 'v', long = "version", action = clap::ArgAction::Version, global = true)]
@@ -109,11 +111,13 @@ enum Command {
         command: Option<WeatherCommand>,
     },
     /// Test network latency to a host
+    #[command(examples("tinfo ping", "tinfo ping github.com", "tinfo ping 8.8.8.8"))]
     Ping {
         /// Hostname to test
         host: Option<String>,
     },
     /// Test network latency using the same probes as ping
+    #[command(examples = ["tinfo latency", "tinfo latency full", "tinfo latency cloudflare.com"])]
     Latency {
         /// Hostname to test, or `full` for expanded probes
         host: Option<String>,
@@ -139,7 +143,7 @@ enum Command {
         command: Option<SystemCommand>,
     },
     /// Inspect running processes
-    #[command(visible_alias = "top")]
+    #[command(visible_alias = "top", examples = ["tinfo ps", "tinfo ps --limit 20", "tinfo ps --sort memory"])]
     Ps {
         /// Maximum number of processes to display
         #[arg(long, default_value_t = 10)]
@@ -245,6 +249,7 @@ enum Command {
 #[derive(Subcommand, Debug)]
 enum WeatherCommand {
     /// Show current weather for the configured location or a city
+    #[command(examples = ["tinfo weather", "tinfo weather Tokyo", "tinfo weather London"])]
     Now {
         /// City name, such as Tokyo or London
         city: Option<String>,
