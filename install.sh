@@ -82,6 +82,41 @@ print_minisign_instructions() {
   echo "Fedora:  sudo dnf install -y minisign" >&2
 }
 
+print_package_manager_instructions() {
+  local os="$1"
+  local distro="${2:-}"
+
+  case "$os" in
+    Darwin)
+      echo "Homebrew is required to install minisign automatically." >&2
+      echo "Install Homebrew, then run the installer again." >&2
+      echo >&2
+      echo "Install Homebrew with:" >&2
+      echo '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"' >&2
+      ;;
+    Linux)
+      case "$distro" in
+        ubuntu|debian)
+          echo "The apt package manager is not available on this system." >&2
+          echo "Use your distribution's package manager to install minisign, then run the installer again." >&2
+          ;;
+        fedora)
+          echo "The dnf package manager is not available on this system." >&2
+          echo "Use your distribution's package manager to install minisign, then run the installer again." >&2
+          ;;
+      esac
+      ;;
+  esac
+}
+
+install_homebrew() {
+  if ! /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
+    echo "Automatic Homebrew installation did not succeed." >&2
+    print_package_manager_instructions "Darwin"
+    exit 1
+  fi
+}
+
 fail_minisign_install() {
   echo "Automatic minisign installation did not succeed." >&2
   print_minisign_instructions
@@ -95,8 +130,15 @@ install_minisign() {
   case "$os" in
     Darwin)
       if ! command -v brew >/dev/null 2>&1; then
-        echo "Automatic minisign installation is only supported on macOS with Homebrew." >&2
-        fail_minisign_install
+        if is_interactive; then
+          echo "Homebrew is required to install minisign automatically."
+          echo "Press Enter to install Homebrew and Minisign automatically, or Ctrl+C to cancel."
+          read -r
+          install_homebrew
+        else
+          print_package_manager_instructions "$os"
+          fail_minisign_install
+        fi
       fi
       if ! brew install minisign; then
         fail_minisign_install
@@ -112,7 +154,12 @@ install_minisign() {
 
       case "$distro" in
         ubuntu|debian)
-          if ! command -v sudo >/dev/null 2>&1 || ! command -v apt >/dev/null 2>&1; then
+          if ! command -v sudo >/dev/null 2>&1; then
+            echo "sudo is required to install minisign automatically." >&2
+            fail_minisign_install
+          fi
+          if ! command -v apt >/dev/null 2>&1; then
+            print_package_manager_instructions "$os" "$distro"
             fail_minisign_install
           fi
           if ! sudo apt install -y minisign; then
@@ -121,7 +168,12 @@ install_minisign() {
           return 0
           ;;
         fedora)
-          if ! command -v sudo >/dev/null 2>&1 || ! command -v dnf >/dev/null 2>&1; then
+          if ! command -v sudo >/dev/null 2>&1; then
+            echo "sudo is required to install minisign automatically." >&2
+            fail_minisign_install
+          fi
+          if ! command -v dnf >/dev/null 2>&1; then
+            print_package_manager_instructions "$os" "$distro"
             fail_minisign_install
           fi
           if ! sudo dnf install -y minisign; then
@@ -259,9 +311,11 @@ main() {
 
   if ! command -v minisign >/dev/null 2>&1; then
     if is_interactive; then
-      echo "Minisign is required to verify the release."
-      echo "Press Enter to install minisign automatically, or Ctrl+C to cancel."
-      read -r
+      if [ "$(uname -s)" != "Darwin" ] || command -v brew >/dev/null 2>&1; then
+        echo "Minisign is required to verify the release."
+        echo "Press Enter to install minisign automatically, or Ctrl+C to cancel."
+        read -r
+      fi
       install_minisign
     else
       print_minisign_instructions
