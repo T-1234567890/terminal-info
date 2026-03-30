@@ -76,7 +76,7 @@ use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, 
     about = "A modern CLI toolbox for weather, system info, network diagnostics, and productivity tools",
     long_about = None,
     disable_version_flag = true,
-    subcommand_helpHeading = "Commands:"
+    subcommand_help_heading = "Commands:"
 )]
 struct Cli {
     #[arg(short = 'v', long = "version", action = clap::ArgAction::Version, global = true)]
