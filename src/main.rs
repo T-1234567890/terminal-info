@@ -111,7 +111,7 @@ enum Command {
         command: Option<WeatherCommand>,
     },
     /// Test network latency to a host
-    #[command(examples = ["tinfo ping", "tinfo ping github.com", "tinfo ping 8.8.8.8"])]
+    #[command(examples("tinfo ping", "tinfo ping github.com", "tinfo ping 8.8.8.8"))]
     Ping {
         /// Hostname to test
         host: Option<String>,
