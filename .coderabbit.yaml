@@ -1,0 +1,48 @@
+language: en-US
+
+reviews:
+  profile: chill
+  high_level_summary: false
+  high_level_summary_in_walkthrough: true
+  sequence_diagrams: false
+  changed_files_summary: true
+  review_status: true
+  review_details: false
+  commit_status: true
+  poem: false
+  in_progress_fortune: false
+  path_filters:
+    - "!target/**"
+    - "!.idea/**"
+    - "!**/.DS_Store"
+  path_instructions:
+    - path: "src/**/*.rs"
+      instructions: >
+        Focus on behavioral regressions, cross-platform correctness, terminal rendering
+        stability, CLI ergonomics, state persistence, and failure handling. Call out
+        missing tests when logic changes affect commands, dashboard behavior, storage,
+        update flows, or output formatting.
+    - path: ".github/workflows/**"
+      instructions: >
+        Focus on release safety, CI reliability, artifact integrity, version alignment,
+        and platform-specific failures. Flag brittle assumptions around tags, matrix
+        behavior, asset names, and environment variables.
+    - path: "install.sh"
+      instructions: >
+        Focus on security and trust boundaries. Verify checksum and signature handling,
+        failure behavior, shell portability, and interactive versus non-interactive
+        install flows.
+    - path: "website/**"
+      instructions: >
+        Focus on layout regressions, accessibility, responsive behavior, copy accuracy,
+        and unnecessary complexity. Prefer maintainable static-site changes over clever
+        client-side behavior.
+    - path: "docs/**"
+      instructions: >
+        Focus on whether commands, config fields, examples, and behavior descriptions
+        match the actual implementation. Flag inconsistencies, stale defaults, and
+        missing caveats.
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
