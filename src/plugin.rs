@@ -42,6 +42,7 @@ const REGISTRY_REPO: &str = "terminal-info";
 const REGISTRY_BRANCH: &str = "main";
 const INDEX_CACHE_TTL_SECS: u64 = 10 * 60;
 const PLUGIN_CACHE_TTL_SECS: u64 = 24 * 60 * 60;
+const CLI_PLUGIN_SEARCH_LIMIT: usize = 12;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PluginMetadata {
@@ -67,7 +68,15 @@ pub struct PluginMetadata {
     #[serde(default)]
     pub icon: String,
     #[serde(default)]
+    pub assets: PluginAssets,
+    #[serde(default)]
     pub screenshots: Vec<String>,
+    #[serde(default)]
+    pub stability: PluginStability,
+    #[serde(default)]
+    pub popularity: u64,
+    #[serde(default)]
+    pub install: PluginInstallMetadata,
     #[serde(default)]
     pub capabilities: Vec<String>,
     #[serde(default = "default_plugin_api")]
@@ -81,11 +90,16 @@ pub struct PluginSearchEntry {
     pub name: String,
     pub description: String,
     pub short_description: String,
+    pub author: String,
     pub repository: String,
     pub homepage: String,
     pub icon: String,
     pub screenshots: Vec<String>,
     pub version: String,
+    pub stability: PluginStability,
+    pub popularity: u64,
+    pub install_supported: bool,
+    pub install_command: String,
     pub trusted: bool,
     pub installed: bool,
 }
@@ -95,6 +109,11 @@ struct PluginSearchView {
     query: Option<String>,
     installed: Vec<PluginSearchEntry>,
     available: Vec<PluginSearchEntry>,
+    page: usize,
+    limit: usize,
+    total_available: usize,
+    include_beta: bool,
+    sort: String,
 }
 
 #[derive(Serialize)]
@@ -117,8 +136,16 @@ struct RegistryJsonOutput {
     short_description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     icon: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    assets: Option<PluginAssets>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     screenshots: Vec<String>,
+    #[serde(skip_serializing_if = "is_default_plugin_stability", default)]
+    stability: PluginStability,
+    #[serde(skip_serializing_if = "is_zero_u64", default)]
+    popularity: u64,
+    #[serde(skip_serializing_if = "plugin_install_metadata_is_default", default)]
+    install: PluginInstallMetadata,
     plugin_api: u32,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     capabilities: Vec<String>,
@@ -134,10 +161,50 @@ fn default_plugin_type() -> String {
     "local".to_string()
 }
 
+fn default_true() -> bool {
+    true
+}
+
+fn is_zero_u64(value: &u64) -> bool {
+    *value == 0
+}
+
+fn is_default_plugin_stability(value: &PluginStability) -> bool {
+    *value == PluginStability::Stable
+}
+
+fn plugin_install_metadata_is_default(value: &PluginInstallMetadata) -> bool {
+    value.supported && value.command.trim().is_empty()
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct PluginIndexEntry {
     name: String,
     registry: String,
+    #[serde(default)]
+    version: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    short_description: String,
+    #[serde(default)]
+    author: String,
+    #[serde(default)]
+    repository: String,
+    #[serde(default)]
+    homepage: String,
+    #[serde(default)]
+    icon: String,
+    #[serde(default)]
+    assets: PluginAssets,
+    #[serde(default)]
+    screenshots: Vec<String>,
+    #[serde(default)]
+    stability: PluginStability,
+    #[serde(default)]
+    popularity: u64,
+    #[serde(default)]
+    install: PluginInstallMetadata,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -156,6 +223,37 @@ struct PluginIndexCache {
 struct PluginMetadataCache {
     fetched_at: u64,
     plugin: PluginMetadata,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct PluginAssets {
+    #[serde(default)]
+    pub icon: String,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum PluginStability {
+    #[default]
+    Stable,
+    Beta,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PluginInstallMetadata {
+    #[serde(default = "default_true")]
+    pub supported: bool,
+    #[serde(default)]
+    pub command: String,
+}
+
+impl Default for PluginInstallMetadata {
+    fn default() -> Self {
+        Self {
+            supported: true,
+            command: String::new(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1015,12 +1113,39 @@ fn build_registry_json_output(
         homepage: manifest_string(manifest, &["release", "homepage"]),
         short_description: manifest_string(manifest, &["release", "short_description"]),
         icon: manifest_string(manifest, &["release", "icon"]),
+        assets: plugin_assets_from_manifest(manifest),
         screenshots: manifest_string_array(manifest, &["release", "screenshots"]),
+        stability: plugin_stability_from_manifest(manifest),
+        popularity: manifest_u64(manifest, &["release", "popularity"]).unwrap_or(0),
+        install: plugin_install_from_manifest(manifest),
         plugin_api,
         capabilities,
         pubkey,
         checksums,
     })
+}
+
+fn plugin_assets_from_manifest(manifest: &toml::Value) -> Option<PluginAssets> {
+    let icon = manifest_string(manifest, &["release", "assets", "icon"])?;
+    Some(PluginAssets { icon })
+}
+
+fn plugin_stability_from_manifest(manifest: &toml::Value) -> PluginStability {
+    match manifest_string(manifest, &["release", "stability"])
+        .unwrap_or_else(|| "stable".to_string())
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "beta" => PluginStability::Beta,
+        _ => PluginStability::Stable,
+    }
+}
+
+fn plugin_install_from_manifest(manifest: &toml::Value) -> PluginInstallMetadata {
+    PluginInstallMetadata {
+        supported: manifest_bool(manifest, &["release", "install", "supported"]).unwrap_or(true),
+        command: manifest_string(manifest, &["release", "install", "command"]).unwrap_or_default(),
+    }
 }
 
 fn platforms_from_checksums(
@@ -1113,6 +1238,22 @@ fn manifest_string_array(value: &toml::Value, path: &[&str]) -> Vec<String> {
         .filter(|item| !item.is_empty())
         .map(str::to_string)
         .collect()
+}
+
+fn manifest_bool(value: &toml::Value, path: &[&str]) -> Option<bool> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    current.as_bool()
+}
+
+fn manifest_u64(value: &toml::Value, path: &[&str]) -> Option<u64> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    current.as_integer().and_then(|item| u64::try_from(item).ok())
 }
 
 fn read_release_pubkey(project_dir: &Path, manifest: &toml::Value) -> Result<String, String> {
@@ -1318,7 +1459,7 @@ fn slugify_widget_name(value: &str) -> String {
 }
 
 pub fn search_plugins(query: Option<&str>) -> Result<(), String> {
-    let view = plugin_search_view(query)?;
+    let view = plugin_search_view(query, 1, CLI_PLUGIN_SEARCH_LIMIT, true, Some("popularity"))?;
     if crate::output::json_output() {
         println!(
             "{}",
@@ -1355,8 +1496,24 @@ pub fn search_plugins(query: Option<&str>) -> Result<(), String> {
         for plugin in &view.available {
             print_plugin_search_line(plugin);
         }
+        if view.total_available > view.available.len() {
+            println!();
+            println!(
+                "Showing {} of {} registry plugins. Use `tinfo plugin browse` for the full catalog.",
+                view.available.len(),
+                view.total_available
+            );
+        } else {
+            println!();
+            println!("Tip: use `tinfo plugin browse` for icons, paging, and details.");
+        }
     } else if has_query {
         println!("No registry matches.");
+        println!();
+        println!("Tip: use `tinfo plugin browse` to explore the full catalog.");
+    } else {
+        println!();
+        println!("Tip: use `tinfo plugin browse` to explore the full catalog.");
     }
 
     Ok(())
@@ -1365,21 +1522,7 @@ pub fn search_plugins(query: Option<&str>) -> Result<(), String> {
 pub fn registry_plugin_search_entries() -> Result<Vec<PluginSearchEntry>, String> {
     load_plugin_index()?
         .into_iter()
-        .map(|entry| {
-            let plugin = load_plugin_metadata(&entry)?;
-            Ok(PluginSearchEntry {
-                name: plugin.name,
-                description: plugin.description,
-                short_description: plugin.short_description,
-                repository: plugin.repository,
-                homepage: plugin.homepage,
-                icon: plugin.icon,
-                screenshots: plugin.screenshots,
-                version: plugin.version,
-                trusted: false,
-                installed: false,
-            })
-        })
+        .map(|entry| Ok(plugin_search_entry_from_index(&entry)))
         .collect()
 }
 
@@ -1406,11 +1549,16 @@ pub fn installed_plugin_search_entries() -> Result<Vec<PluginSearchEntry>, Strin
         entries.push(PluginSearchEntry {
             trusted: is_plugin_trusted(&name).unwrap_or(false),
             short_description: description.clone(),
+            author: String::new(),
             repository: String::new(),
             homepage: String::new(),
             icon: String::new(),
             screenshots: Vec::new(),
             version,
+            stability: PluginStability::Stable,
+            popularity: 0,
+            install_supported: true,
+            install_command: format!("tinfo plugin install {name}"),
             installed: true,
             name,
             description,
@@ -1458,7 +1606,13 @@ pub fn plugin_browse(no_open: bool) -> Result<(), String> {
     Ok(())
 }
 
-fn plugin_search_view(query: Option<&str>) -> Result<PluginSearchView, String> {
+fn plugin_search_view(
+    query: Option<&str>,
+    page: usize,
+    limit: usize,
+    include_beta: bool,
+    sort: Option<&str>,
+) -> Result<PluginSearchView, String> {
     let query = query.map(str::trim).filter(|value| !value.is_empty());
     let mut registry = registry_plugin_search_entries()?;
     let mut installed = installed_plugin_search_entries()?;
@@ -1492,6 +1646,10 @@ fn plugin_search_view(query: Option<&str>) -> Result<PluginSearchView, String> {
         }
     }
 
+    if !include_beta {
+        registry.retain(|plugin| plugin.stability == PluginStability::Stable);
+    }
+
     registry.retain(|plugin| !installed_names.contains(&plugin.name));
 
     if let Some(query) = query {
@@ -1499,13 +1657,31 @@ fn plugin_search_view(query: Option<&str>) -> Result<PluginSearchView, String> {
         registry = filter_and_rank_plugins(registry, query);
     } else {
         installed.sort_by(|a, b| a.name.cmp(&b.name));
-        registry.sort_by(|a, b| a.name.cmp(&b.name));
+        match sort.unwrap_or("popularity") {
+            "name" => registry.sort_by(|a, b| a.name.cmp(&b.name)),
+            _ => registry.sort_by(|a, b| {
+                b.popularity
+                    .cmp(&a.popularity)
+                    .then_with(|| a.name.cmp(&b.name))
+            }),
+        }
     }
+
+    let total_available = registry.len();
+    let limit = limit.clamp(1, 50);
+    let page = page.max(1);
+    let start = (page - 1) * limit;
+    let available = registry.into_iter().skip(start).take(limit).collect::<Vec<_>>();
 
     Ok(PluginSearchView {
         query: query.map(str::to_string),
         installed,
-        available: registry,
+        available,
+        page,
+        limit,
+        total_available,
+        include_beta,
+        sort: sort.unwrap_or("popularity").to_string(),
     })
 }
 
@@ -1580,6 +1756,67 @@ fn plugin_match_score(query: &str, plugin: &PluginSearchEntry) -> i32 {
     score
 }
 
+fn plugin_search_entry_from_index(entry: &PluginIndexEntry) -> PluginSearchEntry {
+    let icon = resolved_plugin_icon(
+        &entry.repository,
+        &entry.assets,
+        &entry.icon,
+        &entry.name,
+    );
+    let install_command = if !entry.install.command.trim().is_empty() {
+        entry.install.command.clone()
+    } else {
+        format!("tinfo plugin install {}", entry.name)
+    };
+    PluginSearchEntry {
+        name: entry.name.clone(),
+        description: entry.description.clone(),
+        short_description: entry.short_description.clone(),
+        author: entry.author.clone(),
+        repository: entry.repository.clone(),
+        homepage: entry.homepage.clone(),
+        icon,
+        screenshots: entry.screenshots.clone(),
+        version: entry.version.clone(),
+        stability: entry.stability,
+        popularity: entry.popularity,
+        install_supported: entry.install.supported,
+        install_command,
+        trusted: false,
+        installed: false,
+    }
+}
+
+fn resolved_plugin_icon(
+    repository: &str,
+    assets: &PluginAssets,
+    legacy_icon: &str,
+    name: &str,
+) -> String {
+    if !assets.icon.trim().is_empty() {
+        if assets.icon.starts_with("http://") || assets.icon.starts_with("https://") {
+            return assets.icon.clone();
+        }
+        if let Ok((owner, repo)) = parse_github_repo(repository) {
+            return format!(
+                "https://raw.githubusercontent.com/{owner}/{repo}/{REGISTRY_BRANCH}/{}",
+                assets.icon.trim_start_matches('/')
+            );
+        }
+    }
+    if !legacy_icon.trim().is_empty() {
+        return legacy_icon.to_string();
+    }
+    format!("data:image/svg+xml,{}", default_plugin_icon_data_uri(name))
+}
+
+fn default_plugin_icon_data_uri(name: &str) -> String {
+    let initial = name.chars().next().unwrap_or('P').to_ascii_uppercase();
+    url_encode(&format!(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='#eef2ee'/><text x='32' y='39' text-anchor='middle' font-family='Arial, sans-serif' font-size='28' fill='#185c37'>{initial}</text></svg>"
+    ))
+}
+
 fn print_plugin_search_line(plugin: &PluginSearchEntry) {
     let summary = if !plugin.short_description.trim().is_empty() {
         plugin.short_description.as_str()
@@ -1589,6 +1826,9 @@ fn print_plugin_search_line(plugin: &PluginSearchEntry) {
     let mut flags = Vec::new();
     if !plugin.version.trim().is_empty() {
         flags.push(format!("v{}", plugin.version));
+    }
+    if plugin.stability == PluginStability::Beta {
+        flags.push("beta".to_string());
     }
     if plugin.trusted {
         flags.push("trusted".to_string());
@@ -1632,13 +1872,45 @@ fn handle_plugin_browser_request(stream: &mut TcpStream) -> Result<(), String> {
     match path {
         "/" => {
             let search_query = http_query_value(query, "q");
-            let body = render_plugin_browser_page(search_query.as_deref())?;
+            let page = http_query_value(query, "page")
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(1);
+            let limit = http_query_value(query, "limit")
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(50);
+            let include_beta = http_query_value(query, "beta")
+                .map(|value| matches!(value.as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(false);
+            let sort = http_query_value(query, "sort");
+            let body = render_plugin_browser_page(
+                search_query.as_deref(),
+                page,
+                limit,
+                include_beta,
+                sort.as_deref(),
+            )?;
+            write_http_response(stream, "200 OK", "text/html; charset=utf-8", &body)
+        }
+        "/plugin" => {
+            let name = http_query_value(query, "name")
+                .ok_or_else(|| "Missing plugin name.".to_string())?;
+            let body = render_plugin_detail_page(&name)?;
             write_http_response(stream, "200 OK", "text/html; charset=utf-8", &body)
         }
         "/install" => {
             let name = http_query_value(query, "name")
                 .ok_or_else(|| "Missing plugin name.".to_string())?;
-            let body = match install_plugin(&name) {
+            let plugin = load_plugin_by_name(&name)?;
+            let install_supported = browser_install_supported(&plugin);
+            let body = match if install_supported {
+                install_plugin(&name)
+            } else {
+                Err(format!(
+                    "One-click install is not available for '{}'. Use `{}` instead.",
+                    name,
+                    browser_install_command(&plugin)
+                ))
+            } {
                 Ok(()) => render_message_page(
                     "Plugin installed",
                     &format!(
@@ -1659,13 +1931,19 @@ fn handle_plugin_browser_request(stream: &mut TcpStream) -> Result<(), String> {
     }
 }
 
-fn render_plugin_browser_page(query: Option<&str>) -> Result<String, String> {
-    let view = plugin_search_view(query)?;
+fn render_plugin_browser_page(
+    query: Option<&str>,
+    page: usize,
+    limit: usize,
+    include_beta: bool,
+    sort: Option<&str>,
+) -> Result<String, String> {
+    let view = plugin_search_view(query, page, limit, include_beta, sort)?;
     let mut html = String::from(
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>Terminal Info Plugins</title>\
 <style>body{font-family:ui-sans-serif,system-ui,sans-serif;background:#f6f4ee;color:#1d2a22;margin:0;padding:24px;}\
 .wrap{max-width:1040px;margin:0 auto;}h1{margin:0 0 8px;font-size:32px;}p{color:#4c5a52;}\
-form{margin:20px 0 24px;display:flex;gap:12px;}input{flex:1;padding:12px 14px;border:1px solid #b9c2ba;border-radius:10px;font-size:16px;}\
+form{margin:20px 0 24px;display:flex;gap:12px;flex-wrap:wrap;}input,select{padding:12px 14px;border:1px solid #b9c2ba;border-radius:10px;font-size:16px;background:#fff;}input{flex:1;min-width:220px;}\
 button,.button{display:inline-block;padding:10px 14px;border:none;border-radius:10px;background:#185c37;color:#fff;text-decoration:none;cursor:pointer;}\
 .button.secondary{background:#d9dfd8;color:#203026;}section{margin:28px 0;}\
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;}\
@@ -1673,16 +1951,44 @@ button,.button{display:inline-block;padding:10px 14px;border:none;border-radius:
 .meta{font-size:13px;color:#5b685f;margin-top:10px;}img.icon{width:48px;height:48px;border-radius:12px;object-fit:cover;background:#eef2ee;border:1px solid #d6ddd6;}\
 .hero{display:flex;gap:14px;align-items:center;} .links{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;}\
 .shots{display:flex;gap:8px;overflow:auto;margin-top:12px;} .shots img{height:110px;border-radius:10px;border:1px solid #d6ddd6;}\
-.empty{padding:16px;background:#fff;border:1px dashed #c5cec6;border-radius:12px;}</style></head><body><div class=\"wrap\">\
+.empty{padding:16px;background:#fff;border:1px dashed #c5cec6;border-radius:12px;}\
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;background:#e7ece7;color:#203026;margin-left:8px;}\
+.badge.beta{background:#f5e5d2;color:#8a4f12;} .pager{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:18px;}\
+.code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#eef2ee;padding:8px 10px;border-radius:10px;display:inline-block;}</style></head><body><div class=\"wrap\">\
 <h1>Terminal Info Plugins</h1><p>Local browser view for discovery and inspection. Installation here still follows the normal registry and trust model.</p>",
     );
 
     html.push_str("<form method=\"GET\" action=\"/\"><input name=\"q\" placeholder=\"Search plugins\" value=\"");
     html.push_str(&html_escape(query.unwrap_or("")));
-    html.push_str("\"><button type=\"submit\">Search</button><a class=\"button secondary\" href=\"/\">Clear</a></form>");
+    html.push_str("\">");
+    html.push_str("<select name=\"sort\"><option value=\"popularity\"");
+    if view.sort == "popularity" {
+        html.push_str(" selected");
+    }
+    html.push_str(">Sort by popularity</option><option value=\"name\"");
+    if view.sort == "name" {
+        html.push_str(" selected");
+    }
+    html.push_str(">Sort by name</option></select>");
+    html.push_str("<select name=\"limit\"><option value=\"25\"");
+    if view.limit == 25 {
+        html.push_str(" selected");
+    }
+    html.push_str(">25</option><option value=\"50\"");
+    if view.limit == 50 {
+        html.push_str(" selected");
+    }
+    html.push_str(">50</option></select>");
+    html.push_str("<label style=\"display:flex;align-items:center;gap:8px;color:#4c5a52;font-size:14px;\"><input type=\"checkbox\" name=\"beta\" value=\"1\"");
+    if view.include_beta {
+        html.push_str(" checked");
+    }
+    html.push_str("> Include beta</label>");
+    html.push_str("<button type=\"submit\">Search</button><a class=\"button secondary\" href=\"/\">Clear</a></form>");
 
     render_plugin_section(&mut html, "Installed", &view.installed, true);
     render_plugin_section(&mut html, "Available from registry", &view.available, false);
+    render_pagination(&mut html, &view);
     html.push_str("</div></body></html>");
     Ok(html)
 }
@@ -1712,7 +2018,13 @@ fn render_plugin_section(
         }
         html.push_str("<div><strong>");
         html.push_str(&html_escape(&plugin.name));
-        html.push_str("</strong><div class=\"meta\">");
+        html.push_str("</strong>");
+        if plugin.stability == PluginStability::Beta {
+            html.push_str("<span class=\"badge beta\">beta</span>");
+        } else {
+            html.push_str("<span class=\"badge\">stable</span>");
+        }
+        html.push_str("<div class=\"meta\">");
         if !plugin.version.trim().is_empty() {
             html.push_str("v");
             html.push_str(&html_escape(&plugin.version));
@@ -1736,11 +2048,29 @@ fn render_plugin_section(
             html.push_str(&html_escape(&plugin.description));
             html.push_str("</div>");
         }
+        html.push_str("<div class=\"meta\">");
+        if !plugin.author.trim().is_empty() {
+            html.push_str("by ");
+            html.push_str(&html_escape(&plugin.author));
+            html.push_str(" · ");
+        }
+        html.push_str("popularity ");
+        html.push_str(&plugin.popularity.to_string());
+        html.push_str("</div>");
         html.push_str("<div class=\"links\">");
-        if !installed {
+        if !installed && plugin.install_supported {
             html.push_str("<a class=\"button\" href=\"/install?name=");
             html.push_str(&url_encode(&plugin.name));
             html.push_str("\">Install</a>");
+        } else if !installed {
+            html.push_str("<span class=\"code\">");
+            html.push_str(&html_escape(&plugin.install_command));
+            html.push_str("</span>");
+        }
+        if !installed {
+            html.push_str("<a class=\"button secondary\" href=\"/plugin?name=");
+            html.push_str(&url_encode(&plugin.name));
+            html.push_str("\">Details</a>");
         }
         if !plugin.homepage.trim().is_empty() {
             html.push_str("<a class=\"button secondary\" href=\"");
@@ -1767,6 +2097,128 @@ fn render_plugin_section(
     html.push_str("</div></section>");
 }
 
+fn render_pagination(html: &mut String, view: &PluginSearchView) {
+    let total_pages = view.total_available.div_ceil(view.limit.max(1));
+    if total_pages <= 1 {
+        return;
+    }
+
+    html.push_str("<div class=\"pager\">");
+    if view.page > 1 {
+        html.push_str("<a class=\"button secondary\" href=\"");
+        html.push_str(&plugin_browser_page_link(
+            view.query.as_deref(),
+            view.page - 1,
+            view.limit,
+            view.include_beta,
+            &view.sort,
+        ));
+        html.push_str("\">Previous</a>");
+    }
+    html.push_str("<span class=\"meta\">Page ");
+    html.push_str(&view.page.to_string());
+    html.push_str(" of ");
+    html.push_str(&total_pages.to_string());
+    html.push_str("</span>");
+    if view.page < total_pages {
+        html.push_str("<a class=\"button secondary\" href=\"");
+        html.push_str(&plugin_browser_page_link(
+            view.query.as_deref(),
+            view.page + 1,
+            view.limit,
+            view.include_beta,
+            &view.sort,
+        ));
+        html.push_str("\">Next</a>");
+    }
+    html.push_str("</div>");
+}
+
+fn plugin_browser_page_link(
+    query: Option<&str>,
+    page: usize,
+    limit: usize,
+    include_beta: bool,
+    sort: &str,
+) -> String {
+    let mut params = vec![
+        format!("page={page}"),
+        format!("limit={limit}"),
+        format!("sort={}", url_encode(sort)),
+    ];
+    if let Some(query) = query.filter(|value| !value.trim().is_empty()) {
+        params.push(format!("q={}", url_encode(query)));
+    }
+    if include_beta {
+        params.push("beta=1".to_string());
+    }
+    format!("/?{}", params.join("&"))
+}
+
+fn render_plugin_detail_page(name: &str) -> Result<String, String> {
+    let plugin = load_plugin_by_name(name)?;
+    let icon = resolved_plugin_icon(&plugin.repository, &plugin.assets, &plugin.icon, &plugin.name);
+    let install_supported = browser_install_supported(&plugin);
+    let install_command = browser_install_command(&plugin);
+    let mut html = format!(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>{}</title>\
+<style>body{{font-family:ui-sans-serif,system-ui,sans-serif;background:#f6f4ee;color:#1d2a22;padding:32px;}}\
+.card{{max-width:820px;margin:0 auto;background:#fff;border:1px solid #d6ddd6;border-radius:16px;padding:24px;}}\
+.hero{{display:flex;gap:16px;align-items:center;}}img.icon{{width:64px;height:64px;border-radius:14px;border:1px solid #d6ddd6;background:#eef2ee;object-fit:cover;}}\
+.meta{{color:#5b685f;margin-top:8px;}}.badge{{display:inline-block;padding:3px 8px;border-radius:999px;background:#e7ece7;margin-left:10px;font-size:12px;font-weight:600;}}\
+.badge.beta{{background:#f5e5d2;color:#8a4f12;}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:20px;}}\
+.item{{padding:12px 0;border-top:1px solid #ecefe9;}}a{{color:#185c37;}}.code{{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#eef2ee;padding:8px 10px;border-radius:10px;display:inline-block;margin-top:12px;}}</style></head><body><div class=\"card\">",
+        html_escape(&plugin.name)
+    );
+    html.push_str("<div class=\"hero\"><img class=\"icon\" src=\"");
+    html.push_str(&html_escape(&icon));
+    html.push_str("\" alt=\"\"><div><h1>");
+    html.push_str(&html_escape(&plugin.name));
+    html.push_str("</h1>");
+    if plugin.stability == PluginStability::Beta {
+        html.push_str("<span class=\"badge beta\">beta</span>");
+    } else {
+        html.push_str("<span class=\"badge\">stable</span>");
+    }
+    html.push_str("<div class=\"meta\">v");
+    html.push_str(&html_escape(&plugin.version));
+    html.push_str(" · by ");
+    html.push_str(&html_escape(&plugin.author));
+    html.push_str(" · popularity ");
+    html.push_str(&plugin.popularity.to_string());
+    html.push_str("</div></div></div><p>");
+    html.push_str(&html_escape(&plugin.description));
+    html.push_str("</p><div class=\"grid\">");
+    html.push_str(&detail_item("Install method", if install_supported { "one-click + CLI" } else { "CLI only" }));
+    html.push_str(&detail_item("Command", &install_command));
+    html.push_str(&detail_item("Entry", &plugin.entry));
+    html.push_str(&detail_item("Platforms", &plugin.platform.join(", ")));
+    html.push_str("</div>");
+    if !plugin.homepage.trim().is_empty() {
+        html.push_str("<p><a href=\"");
+        html.push_str(&html_escape(&plugin.homepage));
+        html.push_str("\">Homepage</a></p>");
+    }
+    html.push_str("<p><a href=\"");
+    html.push_str(&html_escape(&plugin.repository));
+    html.push_str("\">Repository</a></p>");
+    if !install_supported {
+        html.push_str("<div class=\"code\">");
+        html.push_str(&html_escape(&install_command));
+        html.push_str("</div>");
+    }
+    html.push_str("<p><a href=\"/\">Back to plugin browser</a></p></div></body></html>");
+    Ok(html)
+}
+
+fn detail_item(label: &str, value: &str) -> String {
+    format!(
+        "<div class=\"item\"><strong>{}</strong><div class=\"meta\">{}</div></div>",
+        html_escape(label),
+        html_escape(value)
+    )
+}
+
 fn render_message_page(title: &str, body: &str) -> String {
     format!(
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>{}</title>\
@@ -1777,6 +2229,22 @@ a{{display:inline-block;margin-top:16px;color:#185c37;}}</style></head><body><di
         html_escape(title),
         html_escape(body)
     )
+}
+
+fn browser_install_supported(plugin: &PluginMetadata) -> bool {
+    plugin.install.supported
+        && plugin
+            .checksums
+            .get(target_triple())
+            .is_some()
+}
+
+fn browser_install_command(plugin: &PluginMetadata) -> String {
+    if !plugin.install.command.trim().is_empty() {
+        plugin.install.command.clone()
+    } else {
+        format!("tinfo plugin install {}", plugin.name)
+    }
 }
 
 fn write_http_response(
@@ -1886,11 +2354,13 @@ fn open_browser(url: &str) -> Result<(), String> {
 
 pub fn install_plugin(name: &str) -> Result<(), String> {
     let plugin = load_plugin_by_name(name)?;
+    ensure_plugin_install_supported(&plugin)?;
     install_or_update_plugin(&plugin, "Installed")
 }
 
 pub fn update_plugin(name: &str) -> Result<(), String> {
     let plugin = load_plugin_by_name(name)?;
+    ensure_plugin_install_supported(&plugin)?;
     install_or_update_plugin(&plugin, "Updated")
 }
 
@@ -1905,6 +2375,14 @@ pub fn upgrade_all_plugins() -> Result<(), String> {
     for name in installed {
         match load_plugin_by_name(&name) {
             Ok(plugin) => {
+                if !browser_install_supported(&plugin) {
+                    println!(
+                        "Skipping '{}': install is not supported on this platform. Use `{}`.",
+                        name,
+                        browser_install_command(&plugin)
+                    );
+                    continue;
+                }
                 install_or_update_plugin(&plugin, "Updated")?;
                 updated_any = true;
             }
@@ -2321,6 +2799,18 @@ fn install_or_update_plugin(plugin: &PluginMetadata, action: &str) -> Result<(),
     Ok(())
 }
 
+fn ensure_plugin_install_supported(plugin: &PluginMetadata) -> Result<(), String> {
+    if browser_install_supported(plugin) {
+        return Ok(());
+    }
+
+    Err(format!(
+        "Plugin '{}' cannot be installed automatically on this platform. Use `{}` instead.",
+        plugin.name,
+        browser_install_command(plugin)
+    ))
+}
+
 fn resolve_plugin_binary(binary_name: &str) -> Option<PathBuf> {
     find_in_plugin_dir(binary_name)
 }
@@ -2575,6 +3065,7 @@ fn validate_plugin_index(index: &PluginIndexFile) -> Result<(), String> {
                 plugin.name
             ));
         }
+        validate_plugin_assets(&plugin.assets, &plugin.name)?;
         if !seen.insert(plugin.name.clone()) {
             return Err(format!(
                 "Duplicate plugin name '{}' in plugin index.",
@@ -2688,14 +3179,15 @@ fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
         ));
     }
 
-    let checksum = plugin.checksums.get(target_triple()).ok_or_else(|| {
-        format!(
-            "Plugin '{}' is missing a checksum for '{}'.",
-            plugin.name,
-            target_triple()
-        )
-    })?;
-    validate_sha256_hex(checksum).map_err(|err| format!("Plugin '{}': {err}", plugin.name))?;
+    if plugin.checksums.is_empty() {
+        return Err(format!(
+            "Plugin '{}' must declare at least one checksum.",
+            plugin.name
+        ));
+    }
+    for checksum in plugin.checksums.values() {
+        validate_sha256_hex(checksum).map_err(|err| format!("Plugin '{}': {err}", plugin.name))?;
+    }
     if plugin.pubkey.trim().is_empty() {
         return Err(format!(
             "Plugin '{}' is missing a minisign public key.",
@@ -2706,6 +3198,44 @@ fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
     for capability in &plugin.capabilities {
         validate_capability(capability)
             .map_err(|err| format!("Plugin '{}': {err}", plugin.name))?;
+    }
+
+    validate_plugin_assets(&plugin.assets, &plugin.name)?;
+
+    Ok(())
+}
+
+fn validate_plugin_assets(assets: &PluginAssets, plugin_name: &str) -> Result<(), String> {
+    if assets.icon.trim().is_empty() {
+        return Ok(());
+    }
+
+    if assets.icon.starts_with("http://") || assets.icon.starts_with("https://") {
+        return Err(format!(
+            "Plugin '{}' assets.icon must be a relative path.",
+            plugin_name
+        ));
+    }
+    if Path::new(&assets.icon).is_absolute() || assets.icon.contains("..") {
+        return Err(format!(
+            "Plugin '{}' assets.icon must stay inside the assets directory.",
+            plugin_name
+        ));
+    }
+    if !assets.icon.starts_with("assets/") {
+        return Err(format!(
+            "Plugin '{}' assets.icon must live under assets/.",
+            plugin_name
+        ));
+    }
+    if !matches!(
+        Path::new(&assets.icon).extension().and_then(|ext| ext.to_str()),
+        Some("png") | Some("svg")
+    ) {
+        return Err(format!(
+            "Plugin '{}' assets.icon must be a png or svg asset.",
+            plugin_name
+        ));
     }
 
     Ok(())

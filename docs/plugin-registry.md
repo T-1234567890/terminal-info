@@ -7,17 +7,37 @@ The registry uses two layers:
 1. `plugins/index.json`
 2. one detailed JSON file per plugin
 
-This keeps the first fetch small and avoids GitHub API rate limits.
+This keeps the first fetch small, supports pagination in the browser, and avoids fetching every plugin definition just to render a list.
 
 ## Layer 1: index.json
 
-`index.json` is intentionally minimal. It is used only to list plugin names and find the URL of each detailed registry file.
+`index.json` is the summary layer for plugin discovery. It should stay lightweight even when the registry grows large.
 
-It contains only:
+Required fields:
 
 - `version`
 - `plugins[].name`
 - `plugins[].registry`
+
+Recommended summary fields for browser and search:
+
+- `plugins[].version`
+- `plugins[].description`
+- `plugins[].short_description`
+- `plugins[].author`
+- `plugins[].repository`
+- `plugins[].homepage`
+- `plugins[].assets.icon`
+- `plugins[].stability`
+- `plugins[].popularity`
+- `plugins[].install`
+
+The registry now supports:
+
+- stable and beta plugin classification
+- summary-first discovery for large registries
+- browser paging and sorting
+- install fallback commands when one-click install is not supported
 
 Example:
 
@@ -27,11 +47,27 @@ Example:
   "plugins": [
     {
       "name": "news",
-      "registry": "https://raw.githubusercontent.com/T-1234567890/terminal-info/main/plugins/news.json"
+      "registry": "https://raw.githubusercontent.com/T-1234567890/terminal-info/main/plugins/news.json",
+      "version": "0.2.1",
+      "description": "Fetches current news headlines from reviewed remote sources.",
+      "short_description": "Current news headlines in the terminal",
+      "author": "Example Plugin Author",
+      "repository": "https://github.com/example/tinfo-news",
+      "homepage": "https://github.com/example/tinfo-news",
+      "assets": {
+        "icon": "assets/icon.png"
+      },
+      "stability": "stable",
+      "popularity": 128,
+      "install": {
+        "supported": true
+      }
     }
   ]
 }
 ```
+
+Summary entries should contain enough metadata for `tinfo plugin search` and `tinfo plugin browse` to render a useful catalog without downloading every per-plugin file up front.
 
 ## Layer 2: per-plugin registry JSON
 
@@ -58,7 +94,15 @@ Example:
   "platform": ["linux", "macos", "windows"],
   "type": "cloud",
   "requires_network": true,
-  "icon": "https://example.com/assets/icon.png",
+  "assets": {
+    "icon": "assets/icon.png"
+  },
+  "stability": "stable",
+  "popularity": 128,
+  "install": {
+    "supported": true,
+    "command": "tinfo plugin install weather"
+  },
   "screenshots": [
     "https://example.com/assets/preview-1.png"
   ],
@@ -78,8 +122,37 @@ Optional discovery fields:
 
 - `short_description`: compact summary used in search and browser cards
 - `homepage`: preferred user-facing project URL
-- `icon`: square logo or icon URL
+- `assets.icon`: optional icon under `assets/`, usually `assets/icon.png`
 - `screenshots`: optional preview asset URLs for the local browser UI
+- `stability`: `stable` or `beta`, defaults to `stable`
+- `popularity`: numeric sort key used by the browser and search
+- `install`: optional install metadata:
+  - `supported`: whether one-click install is supported on the current registry path
+  - `command`: fallback CLI command shown when one-click install is disabled
+
+## Stability
+
+Plugins may include:
+
+```json
+"stability": "stable"
+```
+
+or:
+
+```json
+"stability": "beta"
+```
+
+Rules:
+
+- the default is `stable`
+- beta plugins should be used only when the registry explicitly marks them as `beta`
+- `tinfo plugin browse` shows a visible beta badge
+- `tinfo plugin search` shows `beta` inline in the result flags
+- the browser defaults to stable-only results and can include beta when requested
+
+If `stability` is omitted, Terminal Info treats the plugin as stable.
 
 Required plugin metadata fields:
 
@@ -99,16 +172,75 @@ Required plugin metadata fields:
 - `pubkey`: Minisign public key used for verification
 - `checksums`: per-target SHA-256 checksums
 
+## Asset Rules
+
+Plugin assets are optional but standardized:
+
+- store icons under `assets/`
+- preferred file name: `assets/icon.png`
+- optional SVG: `assets/icon.svg`
+- asset paths must be relative
+- browser UI falls back to a generated default icon when an icon is missing
+
+`assets.icon` must:
+
+- stay under `assets/`
+- not contain `..`
+- not be an absolute path
+- end in `.png` or `.svg`
+
 ## Fetch Flow
 
 Terminal Info:
 
-1. fetches `index.json` from `raw.githubusercontent.com`
+1. fetches `index.json`
 2. caches the index locally for a short time
-3. fetches a per-plugin registry JSON only when a plugin needs to be searched in detail, inspected, installed, updated, or rendered in the browser UI
+3. renders search and browser list views from the cached index summary data
+4. fetches a per-plugin registry JSON only when a plugin needs to be inspected, installed, updated, verified, or opened in the detail view
 4. caches each per-plugin registry JSON separately
 
 This keeps the list request small and avoids repeatedly downloading every plugin definition.
+
+## Pagination And Sorting
+
+The local browser and JSON search view support paging over registry plugins:
+
+- default limit: `50`
+- page parameter: `page=<n>`
+- sort modes:
+  - `popularity`
+  - `name`
+- beta filtering:
+  - stable only by default
+  - include beta with `beta=1`
+
+CLI search uses the same summary metadata but is intentionally shorter:
+
+- it shows a bounded first page of registry results instead of dumping the full registry
+- it still includes installed plugins separately
+- it recommends `tinfo plugin browse` when users need the full catalog
+
+This keeps `tinfo plugin search` readable even when the registry grows into hundreds or thousands of entries.
+
+## Search And Browse Behavior
+
+`tinfo plugin search`:
+
+- reads only the summary registry layer
+- ranks matches by name and description relevance
+- shows stability in the result flags
+- caps registry output by default
+- points users to `tinfo plugin browse` for the full catalog
+
+`tinfo plugin browse`:
+
+- reads the same summary metadata for the list view
+- supports pagination and sorting
+- marks beta plugins visually
+- shows icons when `assets.icon` exists
+- loads the full per-plugin JSON only for detail and install flows
+
+The browser currently applies paging in the frontend view using the cached summary index. If the registry grows further, the same summary structure can be split into multiple index files later without changing the per-plugin metadata schema.
 
 ## Why exact versions are pinned
 
@@ -140,6 +272,8 @@ Terminal Info:
 7. verifies the checksum for the active target
 8. installs the plugin into `~/.terminal-info/plugins/<plugin-name>/`
 
+If `install.supported` is `false`, the browser disables one-click install and shows the fallback command instead. The CLI also refuses misleading automatic installation and prints the configured install command.
+
 ## Developer workflow
 
 Before submitting a registry pull request:
@@ -166,6 +300,10 @@ Registry review should check:
 - built-in command conflicts
 - repository legitimacy
 - manifest and metadata shape
+- summary metadata consistency between `index.json` and per-plugin JSON
+- optional asset paths and naming
+- stability classification
+- install fallback metadata
 - plugin API version
 - signing key presence
 - release asset and checksum shape

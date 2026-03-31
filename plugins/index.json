@@ -3,7 +3,21 @@
   "plugins": [
     {
       "name": "news",
-      "registry": "https://raw.githubusercontent.com/T-1234567890/terminal-info/main/plugins/news.json"
+      "registry": "https://raw.githubusercontent.com/T-1234567890/terminal-info/main/plugins/news.json",
+      "version": "0.2.1",
+      "description": "Fetches current news headlines from reviewed remote sources.",
+      "short_description": "Current news headlines in the terminal",
+      "author": "Example Plugin Author",
+      "repository": "https://github.com/example/tinfo-news",
+      "homepage": "https://github.com/example/tinfo-news",
+      "assets": {
+        "icon": "assets/icon.png"
+      },
+      "stability": "stable",
+      "popularity": 128,
+      "install": {
+        "supported": true
+      }
     }
   ]
 }

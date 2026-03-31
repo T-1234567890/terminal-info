@@ -331,8 +331,8 @@ tinfo plugin upgrade-all
 tinfo plugin remove <name>
 ```
 
-`plugin search` reads the reviewed registry metadata, using the local cache when available, and groups results into installed and registry sections.
-`plugin browse` starts a localhost browser UI for plugin discovery and inspection.
+`plugin search` reads the reviewed registry summary index, using the local cache when available, and groups results into installed and registry sections. It marks beta plugins in the output, shows a bounded first page instead of dumping the entire registry, and points users to `tinfo plugin browse` for the full catalog.
+`plugin browse` starts a localhost browser UI for plugin discovery and inspection, with paging, popularity sorting, stable/beta filtering, optional icons, and plugin detail views.
 `plugin keygen` creates `minisign.key` and `minisign.pub` for plugin release signing.
 `plugin sign` signs a plugin artifact and writes a sibling `.minisig` file.
 `plugin inspect` shows local plugin metadata and compatibility information for the current project.
@@ -342,7 +342,7 @@ tinfo plugin remove <name>
 `plugin doctor` checks installed plugins for manifest, registry, path, checksum, and binary issues.
 `plugin lint` validates the current plugin project files.
 `plugin publish-check` validates plugin project files and release layout before publishing.
-`plugin install` downloads the plugin's pinned GitHub release asset and installs it into `~/.terminal-info/plugins/`.
+`plugin install` downloads the plugin's pinned GitHub release asset and installs it into `~/.terminal-info/plugins/`. If the registry marks automatic install as unsupported for that plugin, Terminal Info prints the fallback install command instead of starting a broken install flow.
 `plugin remove` deletes the installed plugin directory.
 
 ## External Plugins

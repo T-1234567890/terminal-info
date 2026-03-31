@@ -101,6 +101,14 @@ The generated `plugin.toml` includes a `[release]` section. Set the repository U
 repository = "https://github.com/OWNER/tinfo-weather"
 pubkey_path = "keys/minisign.pub"
 short_description = "Current weather and forecast"
+stability = "stable"
+popularity = 128
+
+[release.assets]
+icon = "assets/icon.png"
+
+[release.install]
+supported = true
 ```
 
 Local packing creates artifacts such as:
@@ -113,7 +121,7 @@ dist/registry/weather.json
 ```
 
 `dist/registry/<plugin-name>.json` is the ready-to-submit registry JSON for the current build output.
-That JSON already follows the reviewed registry schema, including `repository`, `binary`, `entry`, `platform`, `type`, and `requires_network`, so plugin authors should submit the generated file instead of hand-editing registry metadata.
+That JSON already follows the reviewed registry schema, including `repository`, `binary`, `entry`, `platform`, `type`, `requires_network`, optional `assets.icon`, `stability`, `popularity`, and install metadata, so plugin authors should submit the generated file instead of hand-editing registry metadata.
 
 If you want to sign a file manually:
 

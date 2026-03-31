@@ -71,9 +71,9 @@ tinfo plugin list
 Registry-managed installs always use the exact version pinned in the Terminal Info plugin registry.
 Plugin downloads verify a checksum from the registry and a Minisign signature from the plugin release.
 
-`plugin search` groups results into installed plugins and registry plugins. When a search term is provided, matches are ranked so exact and prefix name matches appear before looser description hits.
+`plugin search` groups results into installed plugins and registry plugins. Registry results come from the cached summary index, can be sorted by popularity or name, label beta plugins explicitly, and when a search term is provided, matches are ranked so exact and prefix name matches appear before looser description hits. The CLI search output is intentionally capped so large registries stay readable and points users to `tinfo plugin browse` for the full catalog.
 
-`plugin browse` starts an optional localhost browser UI for discovery and inspection. It uses the same reviewed registry data as the CLI, can show optional icons or screenshots from registry metadata, and does not bypass the trust model.
+`plugin browse` starts an optional localhost browser UI for discovery and inspection. It uses the same reviewed registry data as the CLI, supports pagination, can filter beta plugins, can show optional icons or screenshots from registry metadata, and does not bypass the trust model. If a plugin does not support one-click installation, the browser shows the fallback install command instead of a broken install button.
 
 ## Related Documentation
 

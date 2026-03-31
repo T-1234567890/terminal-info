@@ -510,8 +510,8 @@ tinfo plugin remove <name>
 Registry-managed plugins are installed from the exact reviewed version pinned in the reviewed registry JSON referenced by `plugins/index.json`. Terminal Info does not install the latest plugin release automatically.
 Plugins must also be trusted locally before Terminal Info will execute them.
 
-`tinfo plugin search` groups installed plugins and registry plugins separately, ranks matches by name and description relevance, and shows short summaries when the registry provides them.
-`tinfo plugin browse` starts a local browser view on `127.0.0.1` for optional visual plugin discovery without replacing the CLI workflow.
+`tinfo plugin search` groups installed plugins and registry plugins separately, ranks matches by name and description relevance, and uses the lightweight registry summary index so large registries stay responsive.
+`tinfo plugin browse` starts a local browser view on `127.0.0.1` for optional visual plugin discovery without replacing the CLI workflow. The browser supports pagination, popularity sorting, stable-only or include-beta filtering, detail pages, optional plugin icons, and clear install fallback when one-click install is not supported.
 
 Core installs and self-updates verify the official Terminal Info SHA-256 checksum and Minisign signature before replacing the binary. Plugin installs verify the plugin author's reviewed checksum and Minisign signature before installation.
 
@@ -526,7 +526,7 @@ tinfo plugin keygen --output-dir ./keys
 tinfo plugin pack
 ```
 
-`tinfo plugin pack` now also generates `dist/registry/<plugin-name>.json`, and the generated release workflow uploads the same registry JSON as a GitHub Actions artifact for registry PRs. The generated file already uses the standard registry fields such as `repository`, `binary`, `entry`, `platform`, `type`, and `requires_network`.
+`tinfo plugin pack` now also generates `dist/registry/<plugin-name>.json`, and the generated release workflow uploads the same registry JSON as a GitHub Actions artifact for registry PRs. The generated file already uses the standard registry fields such as `repository`, `binary`, `entry`, `platform`, `type`, `requires_network`, optional `assets.icon`, `stability`, `popularity`, and install metadata.
 
 See:
 
