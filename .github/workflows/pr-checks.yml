@@ -1,0 +1,246 @@
+name: PR Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  checks:
+    name: Rust Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        id: fmt
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo fmt --all -- --check 2>&1 | tee fmt_output.txt
+          exit_code=${PIPESTATUS[0]}
+          if [ "$exit_code" -eq 0 ]; then
+            echo "status=passed" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Run cargo check
+        id: check
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo check --workspace 2>&1 | tee check_output.txt
+          exit_code=${PIPESTATUS[0]}
+          if [ "$exit_code" -eq 0 ]; then
+            echo "status=passed" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Run Clippy
+        id: clippy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --workspace --all-targets 2>&1 | tee clippy_output.txt
+          exit_code=${PIPESTATUS[0]}
+          if [ "$exit_code" -ne 0 ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          elif grep -Eiq '(^warning:| warning: )' clippy_output.txt; then
+            echo "status=warnings" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=passed" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Run tests
+        id: test
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --workspace 2>&1 | tee test_output.txt
+          exit_code=${PIPESTATUS[0]}
+          if [ "$exit_code" -eq 0 ]; then
+            echo "status=passed" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Run build
+        id: build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo build 2>&1 | tee build_output.txt
+          exit_code=${PIPESTATUS[0]}
+          if [ "$exit_code" -eq 0 ]; then
+            echo "status=passed" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Comment PR with summary
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          FMT_STATUS: ${{ steps.fmt.outputs.status }}
+          CHECK_STATUS: ${{ steps.check.outputs.status }}
+          CLIPPY_STATUS: ${{ steps.clippy.outputs.status }}
+          TEST_STATUS: ${{ steps.test.outputs.status }}
+          BUILD_STATUS: ${{ steps.build.outputs.status }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            const marker = '<!-- tinfo-pr-checks-summary -->';
+            const checks = [
+              { name: 'Formatting', status: process.env.FMT_STATUS || 'failed', file: 'fmt_output.txt' },
+              { name: 'Compile', status: process.env.CHECK_STATUS || 'failed', file: 'check_output.txt' },
+              { name: 'Clippy', status: process.env.CLIPPY_STATUS || 'failed', file: 'clippy_output.txt' },
+              { name: 'Tests', status: process.env.TEST_STATUS || 'failed', file: 'test_output.txt' },
+              { name: 'Build', status: process.env.BUILD_STATUS || 'failed', file: 'build_output.txt' },
+            ];
+
+            const iconFor = (status) => {
+              if (status === 'passed') return '✅ Passed';
+              if (status === 'warnings') return '⚠️ Warnings';
+              return '❌ Failed';
+            };
+
+            const passed = checks.filter((check) => check.status === 'passed').length;
+            const warnings = checks.filter((check) => check.status === 'warnings').length;
+            const failed = checks.filter((check) => check.status === 'failed').length;
+            const total = checks.length;
+            const overview = failed > 0 ? '❌ Failed' : warnings > 0 ? '⚠️ Passed' : '✅ Passed';
+
+            const readSnippet = (file) => {
+              if (!fs.existsSync(file)) return '';
+              const contents = fs.readFileSync(file, 'utf8').trim();
+              if (!contents) return '';
+              const lines = contents.split('\n');
+              const tail = lines.slice(-20).join('\n');
+              return tail.length > 3500 ? tail.slice(tail.length - 3500) : tail;
+            };
+
+            const detailRows = checks
+              .map((check) => `| ${check.name} | ${iconFor(check.status)} |`)
+              .join('\n');
+
+            const snippets = checks
+              .filter((check) => check.status !== 'passed')
+              .map((check) => {
+                const snippet = readSnippet(check.file);
+                if (!snippet) return '';
+                return `#### ${check.name}\n\`\`\`text\n${snippet}\n\`\`\``;
+              })
+              .filter(Boolean)
+              .join('\n\n');
+
+            const now = new Date().toISOString().replace('T', ' ').replace('.000Z', ' UTC');
+            const body = `${marker}
+            ## 🧪 PR Checks Summary
+
+            ### 📈 Overview
+
+            **${overview}**
+
+            ✅ Passed: **${passed}**
+            ⚠️ Warnings: **${warnings}**
+            ❌ Failed: **${failed}**
+            ⭐️ Total ${total} Tests
+
+            ### 📊 Test Details
+
+            | Check        | Status |
+            |--------------|--------|
+            ${detailRows}
+
+            ---
+
+            ### 🔑 Key
+
+            - ✅ Passed — Check completed successfully
+            - ❌ Failed — Check failed and needs attention
+            - ⚠️ Warnings — Non-blocking issues detected
+            ${snippets ? `\n---\n\n### 📝 Output Snippets\n\n${snippets}\n` : ''}
+            ---
+
+            ### 📅 Metadata
+
+            - **Test Date:** ${now}
+            - **Pull Request:** #${context.issue.number}
+            - **Commit:** \`${context.sha.slice(0, 7)}\``;
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+
+            const existing = comments.find((comment) =>
+              comment.user?.type === 'Bot' && comment.body?.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
+
+      - name: Fail workflow if any checks failed
+        if: always()
+        shell: bash
+        env:
+          FMT_STATUS: ${{ steps.fmt.outputs.status }}
+          CHECK_STATUS: ${{ steps.check.outputs.status }}
+          CLIPPY_STATUS: ${{ steps.clippy.outputs.status }}
+          TEST_STATUS: ${{ steps.test.outputs.status }}
+          BUILD_STATUS: ${{ steps.build.outputs.status }}
+        run: |
+          for status in "$FMT_STATUS" "$CHECK_STATUS" "$CLIPPY_STATUS" "$TEST_STATUS" "$BUILD_STATUS"; do
+            if [ "$status" = "failed" ]; then
+              echo "One or more PR checks failed."
+              exit 1
+            fi
+          done
