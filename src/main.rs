@@ -34,6 +34,7 @@ use dialoguer::{Confirm, theme::ColorfulTheme};
 use flate2::read::GzDecoder;
 use minisign_verify::{PublicKey, Signature};
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use pulldown_cmark::{Options as MarkdownOptions, Parser as MarkdownParser, html};
 use reqwest::blocking::Client;
 use reqwest::header::ACCEPT_ENCODING;
 use semver::Version;
@@ -247,6 +248,11 @@ enum Command {
         /// Attach a configured connection by name
         #[arg(long)]
         conn: Option<String>,
+    },
+    /// Render content into other formats
+    Render {
+        #[command(subcommand)]
+        command: RenderCommand,
     },
     /// Ask the AI a single question
     Ask {
@@ -471,6 +477,18 @@ enum AiCommand {
         conn: Option<String>,
         /// Optional one-shot input
         input: Vec<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum RenderCommand {
+    /// Convert Markdown into GitHub-style HTML
+    Md {
+        /// Markdown file to render. If omitted, reads piped stdin.
+        input: Option<PathBuf>,
+        /// Open generated HTML in the default browser
+        #[arg(long)]
+        open: bool,
     },
 }
 
@@ -921,6 +939,7 @@ fn main() {
             system,
             conn,
         }) => handle_chat_command(ChatMode::Chat, provider, model, system, conn, None),
+        Some(Command::Render { command }) => handle_render_command(command),
         Some(Command::Ask {
             provider,
             model,
@@ -2093,6 +2112,213 @@ fn handle_ai_command(command: AiCommand) -> Result<(), String> {
     }
 }
 
+fn handle_render_command(command: RenderCommand) -> Result<(), String> {
+    match command {
+        RenderCommand::Md { input, open } => render_markdown_command(input, open),
+    }
+}
+
+fn render_markdown_command(input: Option<PathBuf>, open: bool) -> Result<(), String> {
+    let source = read_render_markdown_input(input)?;
+    let html_body = render_markdown(&source.markdown);
+    let html_page = wrap_markdown_html(&html_body);
+
+    match source.origin {
+        RenderInputOrigin::File(path) => {
+            let output_path = write_render_html_file(&path, &html_page)?;
+            println!("Rendered to: {}", output_path.display());
+            if open {
+                open_rendered_file(&output_path)?;
+            }
+        }
+        RenderInputOrigin::Stdin => {
+            print!("{html_page}");
+            io::stdout().flush().map_err(|err| err.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+fn read_render_markdown_input(input: Option<PathBuf>) -> Result<RenderInput, String> {
+    if let Some(path) = input {
+        let markdown = fs::read_to_string(&path)
+            .map_err(|err| format!("Failed to read {}: {err}", path.display()))?;
+        return Ok(RenderInput {
+            markdown,
+            origin: RenderInputOrigin::File(path),
+        });
+    }
+
+    if !io::stdin().is_terminal() {
+        let mut markdown = String::new();
+        io::stdin()
+            .read_to_string(&mut markdown)
+            .map_err(|err| format!("Failed to read stdin: {err}"))?;
+        return Ok(RenderInput {
+            markdown,
+            origin: RenderInputOrigin::Stdin,
+        });
+    }
+
+    Err("No markdown input provided. Pass a file or pipe markdown into `tinfo render md`.".into())
+}
+
+fn render_markdown(markdown: &str) -> String {
+    let mut options = MarkdownOptions::empty();
+    options.insert(MarkdownOptions::ENABLE_TABLES);
+    options.insert(MarkdownOptions::ENABLE_TASKLISTS);
+    options.insert(MarkdownOptions::ENABLE_STRIKETHROUGH);
+    let parser = MarkdownParser::new_ext(markdown, options);
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+    html_output
+}
+
+fn wrap_markdown_html(body: &str) -> String {
+    format!(
+        "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Rendered Markdown</title>\n<style>\n{css}\n</style>\n</head>\n<body class=\"markdown-body\">\n{body}\n</body>\n</html>\n",
+        css = github_markdown_css(),
+        body = body
+    )
+}
+
+fn write_render_html_file(input_path: &Path, html: &str) -> Result<PathBuf, String> {
+    let file_name = input_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("Invalid input file name: {}", input_path.display()))?;
+    let output_path = input_path.with_file_name(format!("{file_name}.html"));
+    fs::write(&output_path, html)
+        .map_err(|err| format!("Failed to write {}: {err}", output_path.display()))?;
+    Ok(output_path)
+}
+
+fn open_rendered_file(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let mut command = process::Command::new("open");
+    #[cfg(target_os = "linux")]
+    let mut command = process::Command::new("xdg-open");
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut cmd = process::Command::new("cmd");
+        cmd.arg("/C").arg("start");
+        cmd
+    };
+
+    command.arg(path);
+    command
+        .status()
+        .map_err(|err| format!("Failed to open {}: {err}", path.display()))?;
+    Ok(())
+}
+
+fn github_markdown_css() -> &'static str {
+    r#"body {
+  margin: 0;
+  background: #ffffff;
+}
+
+.markdown-body {
+  box-sizing: border-box;
+  min-width: 200px;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 45px;
+  color: #1f2328;
+  background: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  font-size: 16px;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.markdown-body h1, .markdown-body h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #d1d9e0;
+}
+
+.markdown-body p, .markdown-body ul, .markdown-body ol, .markdown-body table, .markdown-body pre, .markdown-body blockquote {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.markdown-body ul, .markdown-body ol {
+  padding-left: 2em;
+}
+
+.markdown-body code, .markdown-body pre {
+  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+.markdown-body code {
+  padding: 0.2em 0.4em;
+  background: rgba(175, 184, 193, 0.2);
+  border-radius: 6px;
+}
+
+.markdown-body pre {
+  padding: 16px;
+  overflow: auto;
+  background: #f6f8fa;
+  border-radius: 6px;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.markdown-body table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow: auto;
+  border-spacing: 0;
+  border-collapse: collapse;
+}
+
+.markdown-body table th, .markdown-body table td {
+  padding: 6px 13px;
+  border: 1px solid #d1d9e0;
+}
+
+.markdown-body table tr {
+  background: #ffffff;
+  border-top: 1px solid #d1d9e0;
+}
+
+.markdown-body table tr:nth-child(2n) {
+  background: #f6f8fa;
+}
+
+.markdown-body blockquote {
+  margin-left: 0;
+  padding: 0 1em;
+  color: #59636e;
+  border-left: 0.25em solid #d1d9e0;
+}
+
+.markdown-body img {
+  max-width: 100%;
+}
+
+.markdown-body hr {
+  height: 0.25em;
+  padding: 0;
+  margin: 24px 0;
+  background: #d1d9e0;
+  border: 0;
+}"#
+}
+
 fn join_optional_input(input: Vec<String>) -> Option<String> {
     if input.is_empty() {
         None
@@ -2130,6 +2356,16 @@ impl ChatProviderArg {
             Self::Openrouter => ProviderKind::OpenRouter,
         }
     }
+}
+
+struct RenderInput {
+    markdown: String,
+    origin: RenderInputOrigin,
+}
+
+enum RenderInputOrigin {
+    File(PathBuf),
+    Stdin,
 }
 
 fn handle_agent_discover() -> Result<(), String> {
