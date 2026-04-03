@@ -96,7 +96,8 @@ impl DashboardRenderer {
         let title = "Terminal Info";
         let snapshot = self.system_sampler.snapshot(&self.config);
         let effective_dashboard = self.config.effective_dashboard();
-        let compact = effective_dashboard.compact_mode || matches!(output_mode(), OutputMode::Compact);
+        let compact =
+            effective_dashboard.compact_mode || matches!(output_mode(), OutputMode::Compact);
         let plugin_widgets = self.plugin_widgets(compact);
         let widgets = normalized_widgets(&effective_dashboard.widgets, &plugin_widgets);
         let location = if self.config.uses_auto_location() {
@@ -140,7 +141,11 @@ impl DashboardRenderer {
                             "plugins={}",
                             plugin_widgets
                                 .iter()
-                                .map(|widget| format!("{}:{}", widget.title, compact_widget_summary(widget, true)))
+                                .map(|widget| format!(
+                                    "{}:{}",
+                                    widget.title,
+                                    compact_widget_summary(widget, true)
+                                ))
                                 .collect::<Vec<_>>()
                                 .join("|")
                         )),
@@ -201,10 +206,13 @@ impl DashboardRenderer {
             Ok(None) => (None, Duration::from_secs(5)),
             Err(_) => (None, Duration::from_secs(5)),
         };
-        self.built_in_cache.insert(id.to_string(), CachedNote {
-            widget: widget.clone(),
-            refresh_at: Instant::now() + refresh_after,
-        });
+        self.built_in_cache.insert(
+            id.to_string(),
+            CachedNote {
+                widget: widget.clone(),
+                refresh_at: Instant::now() + refresh_after,
+            },
+        );
         widget
     }
 
@@ -452,14 +460,14 @@ fn render_widget_rows(widget: &PluginWidget, compact: bool) -> Vec<(String, Stri
             let mut rendered = Vec::new();
             for (index, row) in rows.iter().enumerate() {
                 if row.len() >= 2 {
-                    rendered.push((
-                        row[0].clone(),
-                        row[1..].join(" | "),
-                    ));
+                    rendered.push((row[0].clone(), row[1..].join(" | ")));
                 } else if let Some(value) = row.first() {
                     rendered.push((
                         if index == 0 {
-                            headers.first().cloned().unwrap_or_else(|| "Value".to_string())
+                            headers
+                                .first()
+                                .cloned()
+                                .unwrap_or_else(|| "Value".to_string())
                         } else {
                             "-".to_string()
                         },
@@ -478,7 +486,12 @@ fn render_dashboard_sections(
     dashboard: &crate::config::DashboardConfig,
 ) -> String {
     let terminal_width = terminal::size().ok().map(|(width, _)| width as usize);
-    let columns = resolved_columns(dashboard.layout, dashboard.columns, terminal_width, sections.len());
+    let columns = resolved_columns(
+        dashboard.layout,
+        dashboard.columns,
+        terminal_width,
+        sections.len(),
+    );
     if columns <= 1 {
         let width = terminal_width.map(|width| width.saturating_sub(4));
         return sections
@@ -507,7 +520,8 @@ fn render_dashboard_sections(
             } else {
                 section.title
             };
-            let body = format_box_table_with_width(&section_title, &section.rows, Some(content_width));
+            let body =
+                format_box_table_with_width(&section_title, &section.rows, Some(content_width));
             RenderedSection {
                 lines: body.lines().map(|line| line.to_string()).collect(),
                 width: cell_width,
@@ -531,11 +545,13 @@ fn resolved_columns(
     let mut columns = match layout {
         DashboardLayout::Vertical => 1,
         DashboardLayout::Horizontal => configured_columns.unwrap_or(2),
-        DashboardLayout::Auto => configured_columns.unwrap_or_else(|| match terminal_width.unwrap_or(0) {
-            0..=100 => 1,
-            101..=150 => 2,
-            _ => 3,
-        }),
+        DashboardLayout::Auto => {
+            configured_columns.unwrap_or_else(|| match terminal_width.unwrap_or(0) {
+                0..=100 => 1,
+                101..=150 => 2,
+                _ => 3,
+            })
+        }
     }
     .max(1)
     .min(section_count);
@@ -543,9 +559,7 @@ fn resolved_columns(
     if columns > 1 {
         let gap = 3;
         let terminal_width = terminal_width.unwrap_or(120);
-        while columns > 1
-            && (terminal_width.saturating_sub(gap * (columns - 1))) / columns < 28
-        {
+        while columns > 1 && (terminal_width.saturating_sub(gap * (columns - 1))) / columns < 28 {
             columns -= 1;
         }
     }
@@ -556,7 +570,11 @@ fn resolved_columns(
 fn render_section_grid(sections: &[RenderedSection], columns: usize, gap: usize) -> String {
     let mut lines = Vec::new();
     for row in sections.chunks(columns) {
-        let height = row.iter().map(|section| section.lines.len()).max().unwrap_or(0);
+        let height = row
+            .iter()
+            .map(|section| section.lines.len())
+            .max()
+            .unwrap_or(0);
         for line_idx in 0..height {
             let parts = row
                 .iter()
@@ -605,7 +623,9 @@ fn parse_text_widget_line(line: &str, index: usize) -> (String, String) {
 fn compact_widget_summary(widget: &PluginWidget, compact: bool) -> String {
     match widget.body(compact) {
         PluginWidgetBody::Text { content } => content.clone(),
-        PluginWidgetBody::List { items } => items.iter().take(3).cloned().collect::<Vec<_>>().join(", "),
+        PluginWidgetBody::List { items } => {
+            items.iter().take(3).cloned().collect::<Vec<_>>().join(", ")
+        }
         PluginWidgetBody::Table { rows, .. } => rows
             .iter()
             .take(2)

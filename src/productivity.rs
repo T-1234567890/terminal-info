@@ -10,8 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{
     Config, RemindersConfig, TaskSortOrder, TasksConfig, TimerConfig, TimerWidgetMode,
-    data_dir_path,
-    home_dir_path,
+    data_dir_path, home_dir_path,
 };
 use crate::output::{OutputMode, json_output, output_mode};
 use crate::plugin::{PluginWidget, PluginWidgetBody};
@@ -167,7 +166,10 @@ pub fn start_timer(duration: Option<&str>, settings: &TimerConfig) -> Result<(),
         duration_secs: Some(duration_secs),
     });
     save_timer_store(&store)?;
-    println!("Started countdown timer for {}.", format_duration(duration_secs));
+    println!(
+        "Started countdown timer for {}.",
+        format_duration(duration_secs)
+    );
     Ok(())
 }
 
@@ -214,10 +216,7 @@ pub fn has_active_timer_state() -> Result<bool, String> {
 pub fn timer_live_active(target: TimerLiveTarget) -> Result<bool, String> {
     let store = load_timer_store()?;
     Ok(match target {
-        TimerLiveTarget::Countdown => store
-            .countdown
-            .as_ref()
-            .is_some_and(countdown_is_running),
+        TimerLiveTarget::Countdown => store.countdown.as_ref().is_some_and(countdown_is_running),
         TimerLiveTarget::Stopwatch => store.stopwatch.is_some(),
     })
 }
@@ -326,7 +325,8 @@ struct DeletedTaskDisplay {
 
 fn deleted_display_tasks(tasks: &[DeletedTaskItem]) -> Vec<DeletedTaskDisplay> {
     let now = now_unix();
-    tasks.iter()
+    tasks
+        .iter()
         .map(|task| DeletedTaskDisplay {
             text: task.text.clone(),
             seconds_left: task
@@ -340,15 +340,16 @@ fn deleted_display_tasks(tasks: &[DeletedTaskItem]) -> Vec<DeletedTaskDisplay> {
 fn purge_expired_deleted_tasks(store: &mut TaskStore) -> bool {
     let now = now_unix();
     let original_len = store.deleted_tasks.len();
-    store.deleted_tasks.retain(|task| {
-        now < task
-            .deleted_at
-            .saturating_add(DELETED_TASK_RETENTION_SECS)
-    });
+    store
+        .deleted_tasks
+        .retain(|task| now < task.deleted_at.saturating_add(DELETED_TASK_RETENTION_SECS));
     original_len != store.deleted_tasks.len()
 }
 
-fn choose_deleted_task_to_recover(theme: &ColorfulTheme, tasks: &[DeletedTaskItem]) -> Result<(), String> {
+fn choose_deleted_task_to_recover(
+    theme: &ColorfulTheme,
+    tasks: &[DeletedTaskItem],
+) -> Result<(), String> {
     if tasks.is_empty() {
         println!("No deleted tasks.");
         return Ok(());
@@ -356,7 +357,13 @@ fn choose_deleted_task_to_recover(theme: &ColorfulTheme, tasks: &[DeletedTaskIte
 
     let items = deleted_display_tasks(tasks)
         .into_iter()
-        .map(|task| format!("{} (recover, {} left)", task.text, format_duration(task.seconds_left)))
+        .map(|task| {
+            format!(
+                "{} (recover, {} left)",
+                task.text,
+                format_duration(task.seconds_left)
+            )
+        })
         .chain(std::iter::once("Exit".to_string()))
         .collect::<Vec<_>>();
 
@@ -373,7 +380,11 @@ fn choose_deleted_task_to_recover(theme: &ColorfulTheme, tasks: &[DeletedTaskIte
     }
 }
 
-fn choose_task_to_toggle(theme: &ColorfulTheme, tasks: &[TaskItem], settings: &TasksConfig) -> Result<(), String> {
+fn choose_task_to_toggle(
+    theme: &ColorfulTheme,
+    tasks: &[TaskItem],
+    settings: &TasksConfig,
+) -> Result<(), String> {
     if tasks.is_empty() {
         println!("No tasks.");
         return Ok(());
@@ -461,13 +472,7 @@ pub fn interactive_task_menu(config: &Config) -> Result<(), String> {
         let tasks = display_tasks(&store.tasks, &config.tasks, None);
         let mut items = tasks
             .iter()
-            .map(|task| {
-                format!(
-                    "{} {}",
-                    if task.done { "[x]" } else { "[ ]" },
-                    task.text
-                )
-            })
+            .map(|task| format!("{} {}", if task.done { "[x]" } else { "[ ]" }, task.text))
             .collect::<Vec<_>>();
         items.push("List all tasks".to_string());
         items.push("Deleted tasks".to_string());
@@ -577,7 +582,9 @@ impl DashboardDataWidget for TimerWidget {
             enabled_by_default: true,
             title: "Timers".to_string(),
             refresh_interval_secs: Some(1),
-            full: PluginWidgetBody::Text { content: full_content },
+            full: PluginWidgetBody::Text {
+                content: full_content,
+            },
             compact: Some(PluginWidgetBody::Text { content: summary }),
         }))
     }
@@ -601,13 +608,7 @@ impl DashboardDataWidget for TaskWidget {
 
         let items = tasks
             .iter()
-            .map(|task| {
-                format!(
-                    "{} {}",
-                    if task.done { "[x]" } else { "[ ]" },
-                    task.text
-                )
-            })
+            .map(|task| format!("{} {}", if task.done { "[x]" } else { "[ ]" }, task.text))
             .collect::<Vec<_>>();
 
         Ok(Some(PluginWidget {
@@ -744,7 +745,11 @@ impl ProductivityWidgetManager {
         }
     }
 
-    pub fn render(&self, id: &str, compact: bool) -> Result<Option<(PluginWidget, Duration)>, String> {
+    pub fn render(
+        &self,
+        id: &str,
+        compact: bool,
+    ) -> Result<Option<(PluginWidget, Duration)>, String> {
         let widget: &dyn DashboardDataWidget = match id {
             "timer" => &self.timer,
             "tasks" => &self.tasks,
@@ -763,7 +768,11 @@ fn runtime_config() -> Config {
     Config::load_or_create().unwrap_or_default()
 }
 
-fn display_tasks(tasks: &[TaskItem], settings: &TasksConfig, limit: Option<usize>) -> Vec<TaskItem> {
+fn display_tasks(
+    tasks: &[TaskItem],
+    settings: &TasksConfig,
+    limit: Option<usize>,
+) -> Vec<TaskItem> {
     let mut items = tasks
         .iter()
         .filter(|task| settings.show_completed || !task.done)
@@ -824,13 +833,7 @@ fn choose_task_to_delete(theme: &ColorfulTheme, tasks: &[TaskItem]) -> Result<()
 
     let items = tasks
         .iter()
-        .map(|task| {
-            format!(
-                "{} {}",
-                if task.done { "[x]" } else { "[ ]" },
-                task.text
-            )
-        })
+        .map(|task| format!("{} {}", if task.done { "[x]" } else { "[ ]" }, task.text))
         .chain(std::iter::once("Exit".to_string()))
         .collect::<Vec<_>>();
 
@@ -999,7 +1002,10 @@ fn notify_user(message: &str, settings: &RemindersConfig) -> io::Result<()> {
     #[cfg(target_os = "macos")]
     {
         if settings.visual_alert {
-            let script = format!("display notification {:?} with title \"Terminal Info\"", message);
+            let script = format!(
+                "display notification {:?} with title \"Terminal Info\"",
+                message
+            );
             let _ = Command::new("osascript").arg("-e").arg(script).status();
         }
     }
@@ -1103,8 +1109,8 @@ fn load_reminders() -> Result<ReminderStore, String> {
         return Ok(ReminderStore::default());
     }
 
-    let contents =
-        fs::read_to_string(&path).map_err(|err| format!("Failed to read {REMINDERS_FILE}: {err}"))?;
+    let contents = fs::read_to_string(&path)
+        .map_err(|err| format!("Failed to read {REMINDERS_FILE}: {err}"))?;
     if contents.trim().is_empty() {
         return Ok(ReminderStore::default());
     }
@@ -1155,7 +1161,8 @@ where
     if !path.exists() {
         return Ok(T::default());
     }
-    let contents = fs::read_to_string(path).map_err(|err| format!("Failed to read {name}: {err}"))?;
+    let contents =
+        fs::read_to_string(path).map_err(|err| format!("Failed to read {name}: {err}"))?;
     serde_json::from_str(&contents).map_err(|err| format!("Failed to parse {name}: {err}"))
 }
 
@@ -1229,8 +1236,12 @@ fn parse_duration(input: &str) -> Result<u64, String> {
 fn parse_reminder_target(input: &str) -> Result<(u64, String), String> {
     let trimmed = input.trim();
     if trimmed.contains(':') {
-        let clock =
-            NaiveTime::parse_from_str(trimmed, "%H:%M").map_err(|_| format!("Invalid time '{}'. Use HH:MM or a duration like 15m.", input))?;
+        let clock = NaiveTime::parse_from_str(trimmed, "%H:%M").map_err(|_| {
+            format!(
+                "Invalid time '{}'. Use HH:MM or a duration like 15m.",
+                input
+            )
+        })?;
         let now = Local::now();
         let today = now.date_naive();
         let mut target = match Local.from_local_datetime(&today.and_time(clock)) {
@@ -1298,7 +1309,10 @@ mod tests {
 
     #[test]
     fn parses_zsh_history_lines() {
-        assert_eq!(parse_history_line(": 1710000000:0;git status"), "git status");
+        assert_eq!(
+            parse_history_line(": 1710000000:0;git status"),
+            "git status"
+        );
         assert_eq!(parse_history_line("cargo test"), "cargo test");
     }
 

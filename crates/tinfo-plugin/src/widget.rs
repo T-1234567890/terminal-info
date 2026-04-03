@@ -46,9 +46,16 @@ impl Widget {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum WidgetBody {
-    Text { content: String },
-    List { items: Vec<String> },
-    Table { headers: Vec<String>, rows: Vec<Vec<String>> },
+    Text {
+        content: String,
+    },
+    List {
+        items: Vec<String>,
+    },
+    Table {
+        headers: Vec<String>,
+        rows: Vec<Vec<String>>,
+    },
 }
 
 impl WidgetBody {

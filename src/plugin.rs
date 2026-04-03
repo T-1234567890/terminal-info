@@ -9,9 +9,9 @@ use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use dialoguer::{Input, theme::ColorfulTheme};
+use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
 use minisign_verify::{PublicKey, Signature};
 use reqwest::blocking::Client;
 use reqwest::header::ACCEPT_ENCODING;
@@ -348,8 +348,12 @@ pub struct PluginWidget {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum PluginWidgetBody {
-    Text { content: String },
-    List { items: Vec<String> },
+    Text {
+        content: String,
+    },
+    List {
+        items: Vec<String>,
+    },
     Table {
         headers: Vec<String>,
         rows: Vec<Vec<String>>,
@@ -769,7 +773,11 @@ pub fn plugin_inspect() -> Result<(), String> {
     let binary = manifest
         .as_ref()
         .and_then(plugin_name_from_manifest)
-        .map(|name| cwd.join("target").join("debug").join(binary_filename(&format!("tinfo-{name}"))))
+        .map(|name| {
+            cwd.join("target")
+                .join("debug")
+                .join(binary_filename(&format!("tinfo-{name}")))
+        })
         .filter(|path| path.exists());
     let metadata = if cwd.join("Cargo.toml").exists() {
         run_local_plugin_metadata(&cwd).ok()
@@ -799,15 +807,27 @@ pub fn plugin_inspect() -> Result<(), String> {
     println!();
     println!(
         "Manifest: {}",
-        if view.manifest.is_some() { "found" } else { "missing" }
+        if view.manifest.is_some() {
+            "found"
+        } else {
+            "missing"
+        }
     );
     println!(
         "Metadata command: {}",
-        if view.metadata.is_some() { "available" } else { "unavailable" }
+        if view.metadata.is_some() {
+            "available"
+        } else {
+            "unavailable"
+        }
     );
     println!(
         "Plugin API compatibility: {}",
-        if view.compatibility_ok { "ok" } else { "needs review" }
+        if view.compatibility_ok {
+            "ok"
+        } else {
+            "needs review"
+        }
     );
     if let Some(binary) = view.binary {
         println!("Debug binary: {binary}");
@@ -874,7 +894,10 @@ pub fn plugin_pack(from_dist: bool) -> Result<(), String> {
             "Failed to build plugin release binary",
         )?;
 
-        let release_binary = cwd.join("target").join("release").join(binary_filename(&binary_name));
+        let release_binary = cwd
+            .join("target")
+            .join("release")
+            .join(binary_filename(&binary_name));
         if !release_binary.exists() {
             return Err(format!(
                 "Expected release binary '{}' was not found.",
@@ -1035,7 +1058,8 @@ fn read_project_manifest(project_dir: &Path) -> Result<toml::Value, String> {
     let manifest_path = project_dir.join("plugin.toml");
     let contents = fs::read_to_string(&manifest_path)
         .map_err(|err| format!("Failed to read {}: {err}", manifest_path.display()))?;
-    toml::from_str(&contents).map_err(|err| format!("Failed to parse {}: {err}", manifest_path.display()))
+    toml::from_str(&contents)
+        .map_err(|err| format!("Failed to parse {}: {err}", manifest_path.display()))
 }
 
 fn plugin_name_from_manifest(manifest: &toml::Value) -> Option<String> {
@@ -1080,12 +1104,12 @@ fn build_registry_json_output(
         .and_then(|value| value.as_integer())
         .unwrap_or(default_plugin_api() as i64) as u32;
     let capabilities = manifest_string_array(manifest, &["requirements", "capabilities"]);
-    let license = manifest_string(manifest, &["plugin", "license"])
-        .unwrap_or_else(|| "MIT".to_string());
+    let license =
+        manifest_string(manifest, &["plugin", "license"]).unwrap_or_else(|| "MIT".to_string());
     let binary = manifest_string(manifest, &["release", "binary"])
         .unwrap_or_else(|| format!("tinfo-{plugin_name}"));
-    let entry = manifest_string(manifest, &["command", "name"])
-        .unwrap_or_else(|| plugin_name.to_string());
+    let entry =
+        manifest_string(manifest, &["command", "name"]).unwrap_or_else(|| plugin_name.to_string());
     let platform = platforms_from_checksums(&checksums);
     let requires_network = capabilities.iter().any(|item| item == "network");
     let type_name = manifest_string(manifest, &["release", "type"]).unwrap_or_else(|| {
@@ -1148,9 +1172,7 @@ fn plugin_install_from_manifest(manifest: &toml::Value) -> PluginInstallMetadata
     }
 }
 
-fn platforms_from_checksums(
-    checksums: &std::collections::BTreeMap<String, String>,
-) -> Vec<String> {
+fn platforms_from_checksums(checksums: &std::collections::BTreeMap<String, String>) -> Vec<String> {
     let mut values = Vec::new();
     for target in checksums.keys() {
         let platform = if target.contains("linux") {
@@ -1191,7 +1213,11 @@ fn release_checksums_from_dist(
         let asset_name = file_name.trim_end_matches(".sha256");
         let target = asset_name
             .strip_prefix(&prefix)
-            .and_then(|value| value.strip_suffix(".tar.gz").or_else(|| value.strip_suffix(".zip")))
+            .and_then(|value| {
+                value
+                    .strip_suffix(".tar.gz")
+                    .or_else(|| value.strip_suffix(".zip"))
+            })
             .ok_or_else(|| format!("Unable to determine target triple from '{}'.", asset_name))?;
         let contents = fs::read_to_string(entry.path())
             .map_err(|err| format!("Failed to read {}: {err}", entry.path().display()))?;
@@ -1218,7 +1244,11 @@ fn manifest_string(value: &toml::Value, path: &[&str]) -> Option<String> {
     for key in path {
         current = current.get(*key)?;
     }
-    current.as_str().map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
+    current
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 fn manifest_string_array(value: &toml::Value, path: &[&str]) -> Vec<String> {
@@ -1253,7 +1283,9 @@ fn manifest_u64(value: &toml::Value, path: &[&str]) -> Option<u64> {
     for key in path {
         current = current.get(*key)?;
     }
-    current.as_integer().and_then(|item| u64::try_from(item).ok())
+    current
+        .as_integer()
+        .and_then(|item| u64::try_from(item).ok())
 }
 
 fn read_release_pubkey(project_dir: &Path, manifest: &toml::Value) -> Result<String, String> {
@@ -1314,7 +1346,10 @@ fn run_local_plugin_preview(project_dir: &Path) -> Result<String, String> {
 
 fn simulated_host_env() -> Vec<(String, String)> {
     let mut items = vec![
-        ("TINFO_HOST_VERSION".to_string(), env!("CARGO_PKG_VERSION").to_string()),
+        (
+            "TINFO_HOST_VERSION".to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+        ),
         (
             "TINFO_PLUGIN_DIR".to_string(),
             plugin_dir_path()
@@ -1671,7 +1706,11 @@ fn plugin_search_view(
     let limit = limit.clamp(1, 50);
     let page = page.max(1);
     let start = (page - 1) * limit;
-    let available = registry.into_iter().skip(start).take(limit).collect::<Vec<_>>();
+    let available = registry
+        .into_iter()
+        .skip(start)
+        .take(limit)
+        .collect::<Vec<_>>();
 
     Ok(PluginSearchView {
         query: query.map(str::to_string),
@@ -1685,10 +1724,7 @@ fn plugin_search_view(
     })
 }
 
-fn filter_and_rank_plugins(
-    plugins: Vec<PluginSearchEntry>,
-    query: &str,
-) -> Vec<PluginSearchEntry> {
+fn filter_and_rank_plugins(plugins: Vec<PluginSearchEntry>, query: &str) -> Vec<PluginSearchEntry> {
     let mut scored = plugins
         .into_iter()
         .filter_map(|plugin| {
@@ -1757,12 +1793,7 @@ fn plugin_match_score(query: &str, plugin: &PluginSearchEntry) -> i32 {
 }
 
 fn plugin_search_entry_from_index(entry: &PluginIndexEntry) -> PluginSearchEntry {
-    let icon = resolved_plugin_icon(
-        &entry.repository,
-        &entry.assets,
-        &entry.icon,
-        &entry.name,
-    );
+    let icon = resolved_plugin_icon(&entry.repository, &entry.assets, &entry.icon, &entry.name);
     let install_command = if !entry.install.command.trim().is_empty() {
         entry.install.command.clone()
     } else {
@@ -2035,11 +2066,13 @@ fn render_plugin_section(
             html.push_str(" · trusted");
         }
         html.push_str("</div></div></div><p>");
-        html.push_str(&html_escape(if !plugin.short_description.trim().is_empty() {
-            &plugin.short_description
-        } else {
-            &plugin.description
-        }));
+        html.push_str(&html_escape(
+            if !plugin.short_description.trim().is_empty() {
+                &plugin.short_description
+            } else {
+                &plugin.description
+            },
+        ));
         html.push_str("</p>");
         if !plugin.description.trim().is_empty()
             && plugin.short_description.trim() != plugin.description.trim()
@@ -2157,7 +2190,12 @@ fn plugin_browser_page_link(
 
 fn render_plugin_detail_page(name: &str) -> Result<String, String> {
     let plugin = load_plugin_by_name(name)?;
-    let icon = resolved_plugin_icon(&plugin.repository, &plugin.assets, &plugin.icon, &plugin.name);
+    let icon = resolved_plugin_icon(
+        &plugin.repository,
+        &plugin.assets,
+        &plugin.icon,
+        &plugin.name,
+    );
     let install_supported = browser_install_supported(&plugin);
     let install_command = browser_install_command(&plugin);
     let mut html = format!(
@@ -2189,7 +2227,14 @@ fn render_plugin_detail_page(name: &str) -> Result<String, String> {
     html.push_str("</div></div></div><p>");
     html.push_str(&html_escape(&plugin.description));
     html.push_str("</p><div class=\"grid\">");
-    html.push_str(&detail_item("Install method", if install_supported { "one-click + CLI" } else { "CLI only" }));
+    html.push_str(&detail_item(
+        "Install method",
+        if install_supported {
+            "one-click + CLI"
+        } else {
+            "CLI only"
+        },
+    ));
     html.push_str(&detail_item("Command", &install_command));
     html.push_str(&detail_item("Entry", &plugin.entry));
     html.push_str(&detail_item("Platforms", &plugin.platform.join(", ")));
@@ -2232,11 +2277,7 @@ a{{display:inline-block;margin-top:16px;color:#185c37;}}</style></head><body><di
 }
 
 fn browser_install_supported(plugin: &PluginMetadata) -> bool {
-    plugin.install.supported
-        && plugin
-            .checksums
-            .get(target_triple())
-            .is_some()
+    plugin.install.supported && plugin.checksums.get(target_triple()).is_some()
 }
 
 fn browser_install_command(plugin: &PluginMetadata) -> String {
@@ -2486,7 +2527,7 @@ pub fn init_plugin_template(name: Option<String>) -> Result<(), String> {
         directory.join("src").join("main.rs"),
         main_template(&plugin_name, &description),
     )
-        .map_err(|err| format!("Failed to write src/main.rs: {err}"))?;
+    .map_err(|err| format!("Failed to write src/main.rs: {err}"))?;
     fs::write(
         directory.join("README.md"),
         readme_template(&plugin_name, &description),
@@ -2856,7 +2897,9 @@ fn plugin_index_cache_path() -> Result<PathBuf, String> {
 }
 
 fn plugin_registry_cache_path(name: &str) -> Result<PathBuf, String> {
-    Ok(plugin_cache_root()?.join("plugins").join(format!("{name}.json")))
+    Ok(plugin_cache_root()?
+        .join("plugins")
+        .join(format!("{name}.json")))
 }
 
 fn plugin_index_dir() -> Result<PathBuf, String> {
@@ -2886,9 +2929,7 @@ fn load_plugin_index_from_local_dir(dir: &Path) -> Result<Vec<PluginIndexEntry>,
         .plugins
         .into_iter()
         .map(|mut plugin| {
-            if !plugin.registry.starts_with("http://")
-                && !plugin.registry.starts_with("https://")
-            {
+            if !plugin.registry.starts_with("http://") && !plugin.registry.starts_with("https://") {
                 plugin.registry = dir.join(&plugin.registry).display().to_string();
             }
             plugin
@@ -2974,20 +3015,20 @@ fn load_plugin_metadata(entry: &PluginIndexEntry) -> Result<PluginMetadata, Stri
 }
 
 fn fetch_plugin_metadata(entry: &PluginIndexEntry) -> Result<PluginMetadata, String> {
-    let contents = if entry.registry.starts_with("http://") || entry.registry.starts_with("https://")
-    {
-        github_client()?
-            .get(&entry.registry)
-            .send()
-            .map_err(|err| format!("Failed to fetch plugin metadata '{}': {err}", entry.name))?
-            .error_for_status()
-            .map_err(|err| format!("Failed to fetch plugin metadata '{}': {err}", entry.name))?
-            .text()
-            .map_err(|err| format!("Failed to read plugin metadata '{}': {err}", entry.name))?
-    } else {
-        fs::read_to_string(&entry.registry)
-            .map_err(|err| format!("Failed to read plugin metadata '{}': {err}", entry.name))?
-    };
+    let contents =
+        if entry.registry.starts_with("http://") || entry.registry.starts_with("https://") {
+            github_client()?
+                .get(&entry.registry)
+                .send()
+                .map_err(|err| format!("Failed to fetch plugin metadata '{}': {err}", entry.name))?
+                .error_for_status()
+                .map_err(|err| format!("Failed to fetch plugin metadata '{}': {err}", entry.name))?
+                .text()
+                .map_err(|err| format!("Failed to read plugin metadata '{}': {err}", entry.name))?
+        } else {
+            fs::read_to_string(&entry.registry)
+                .map_err(|err| format!("Failed to read plugin metadata '{}': {err}", entry.name))?
+        };
 
     let plugin: PluginMetadata = serde_json::from_str(&contents)
         .map_err(|err| format!("Failed to parse plugin metadata '{}': {err}", entry.name))?;
@@ -3002,8 +3043,8 @@ fn fetch_plugin_metadata(entry: &PluginIndexEntry) -> Result<PluginMetadata, Str
 }
 
 fn read_plugin_index_cache(path: &Path) -> Result<PluginIndexCache, String> {
-    let contents =
-        fs::read_to_string(path).map_err(|err| format!("Failed to read plugin index cache: {err}"))?;
+    let contents = fs::read_to_string(path)
+        .map_err(|err| format!("Failed to read plugin index cache: {err}"))?;
     serde_json::from_str(&contents)
         .map_err(|err| format!("Failed to parse plugin index cache: {err}"))
 }
@@ -3229,7 +3270,9 @@ fn validate_plugin_assets(assets: &PluginAssets, plugin_name: &str) -> Result<()
         ));
     }
     if !matches!(
-        Path::new(&assets.icon).extension().and_then(|ext| ext.to_str()),
+        Path::new(&assets.icon)
+            .extension()
+            .and_then(|ext| ext.to_str()),
         Some("png") | Some("svg")
     ) {
         return Err(format!(

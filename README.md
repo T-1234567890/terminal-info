@@ -70,6 +70,27 @@ Downloads and verifies the release archive with SHA-256 and Minisign before inst
 curl -fsSL -o install.sh https://github.com/T-1234567890/terminal-info/releases/latest/download/install.sh && bash install.sh
 ```
 
+The installer sets up the main `tinfo` CLI, including the built-in AI managers.
+
+Interactive setup:
+
+```bash
+tinfo install
+```
+
+This prompts:
+
+```text
+Install AI module? (Y/n)
+```
+
+Pressing `Enter` installs the AI module for the smoother default path. Direct module commands are still available:
+
+```bash
+tinfo agent
+tinfo chat
+```
+
 Supported release assets include:
 
 - macOS Intel `x86_64`

@@ -5,11 +5,12 @@ mod config_menu;
 mod dashboard;
 mod disk;
 mod hardware;
+mod live;
 mod migration;
 mod output;
 mod plugin;
-mod productivity;
 mod process_inspect;
+mod productivity;
 mod search;
 mod speedtest;
 mod storage;
@@ -18,22 +19,21 @@ mod weather;
 
 use std::fs;
 use std::fs::File;
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process;
-use std::{env, ffi::OsString};
+use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{env, ffi::OsString};
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{Shell, generate};
-use crossterm::cursor::{Hide, Show};
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use crossterm::execute;
-use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{self, disable_raw_mode, enable_raw_mode};
 use dialoguer::{Confirm, theme::ColorfulTheme};
 use flate2::read::GzDecoder;
 use minisign_verify::{PublicKey, Signature};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use reqwest::blocking::Client;
 use reqwest::header::ACCEPT_ENCODING;
 use semver::Version;
@@ -42,6 +42,14 @@ use sha2::{Digest, Sha256};
 use tar::Archive;
 #[cfg(target_os = "windows")]
 use zip::ZipArchive;
+use terminal_info::ai::app::{EntryMode as AiEntryMode, run_entry as run_ai_entry};
+use terminal_info::ai::chat::ProviderKind;
+use terminal_info::ai::cli_chat::{ChatOptions as AiChatOptions, run as run_simple_chat};
+use terminal_info::ai::hook::{
+    HookEventPayload, claude_settings_path, codex_hooks_path, hooks_enabled, install_hooks,
+    read_hook_event_from_stdin, uninstall_hooks,
+};
+use terminal_info::ai::ipc::{append_hook_event, take_agent_decision};
 
 use crate::builtins::{
     run_config_doctor, run_diagnostic_all, run_diagnostic_full, run_diagnostic_leaks,
@@ -49,22 +57,25 @@ use crate::builtins::{
     run_diagnostic_system, run_ping, show_network_info, show_system_info,
 };
 use crate::cache::{read_cache, write_cache};
-use crate::config::{ApiProvider, Config, DefaultOutput, Units, config_path, home_dir_path};
+use crate::config::{
+    ApiProvider, Config, DefaultOutput, Units, config_path, home_dir_path,
+};
 use crate::config_menu::show_config_menu;
 use crate::dashboard::{available_widget_definitions, default_enabled_widget_names};
+use crate::live::run_live_loop;
 use crate::output::{OutputMode, set_json_output, set_output_mode};
 use crate::plugin::{
     info_plugin, init_plugin_template, install_plugin, list_plugins, list_trusted_plugins,
-    plugin_browse,
-    plugin_doctor, plugin_inspect, plugin_keygen, plugin_lint, plugin_pack, plugin_publish_check,
-    plugin_sign, plugin_test, remove_plugin, run_diagnostic_plugins, run_plugin, search_plugins,
-    set_plugin_trust, update_plugin, upgrade_all_plugins, verify_plugins,
+    plugin_browse, plugin_doctor, plugin_inspect, plugin_keygen, plugin_lint, plugin_pack,
+    plugin_publish_check, plugin_sign, plugin_test, remove_plugin, run_diagnostic_plugins,
+    run_plugin, search_plugins, set_plugin_trust, update_plugin, upgrade_all_plugins,
+    verify_plugins,
 };
 use crate::productivity::{
-    add_note, add_reminder, add_task, clear_notes, complete_task, delete_task,
+    TimerLiveTarget, add_note, add_reminder, add_task, clear_notes, complete_task, delete_task,
     has_active_timer_state, interactive_task_menu, list_notes, list_tasks,
-    replace_notes_with_single_entry, show_history, start_stopwatch, start_timer,
-    stop_stopwatch, stop_timer, timer_dashboard_output, timer_live_active, TimerLiveTarget,
+    replace_notes_with_single_entry, show_history, start_stopwatch, start_timer, stop_stopwatch,
+    stop_timer, timer_dashboard_output, timer_live_active,
 };
 use crate::theme::{AccentColor, BorderStyle, format_box_table, set_theme};
 use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, WeatherReport};
@@ -74,7 +85,8 @@ use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, 
     name = "tinfo",
     version,
     about = "Terminal Info CLI",
-    disable_version_flag = true
+    disable_version_flag = true,
+    propagate_version = true
 )]
 struct Cli {
     #[arg(short = 'v', long = "version", action = clap::ArgAction::Version, global = true)]
@@ -192,6 +204,44 @@ enum Command {
         #[arg(required = true)]
         query: Vec<String>,
     },
+    /// Open the AI agent manager
+    Agent {
+        #[command(subcommand)]
+        command: Option<AgentCommand>,
+    },
+    #[command(hide = true, name = "hook-handler")]
+    HookHandler {
+        adapter: Option<String>,
+        event_type: Option<String>,
+    },
+    /// Launch an agent CLI through tinfo
+    Wrapper {
+        #[command(subcommand)]
+        command: WrapperCommand,
+    },
+    /// Launch Codex through the tinfo wrapper
+    Codex {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Launch Claude Code through the tinfo wrapper
+    #[command(name = "claude-code", visible_alias = "claude")]
+    ClaudeCode {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Start an interactive AI chat session
+    Chat {
+        /// AI provider to use
+        #[arg(long, value_enum)]
+        provider: Option<ChatProviderArg>,
+        /// Model override
+        #[arg(long)]
+        model: Option<String>,
+        /// System prompt override
+        #[arg(long)]
+        system: Option<String>,
+    },
     /// Run diagnostics
     Diagnostic {
         /// Export the diagnostic result as Markdown to the given path
@@ -271,6 +321,63 @@ enum WeatherCommand {
     },
     #[command(external_subcommand)]
     External(Vec<String>),
+}
+
+#[derive(Subcommand, Debug)]
+enum AgentCommand {
+    /// Open the live agent dashboard
+    Dashboard,
+    /// Legacy process discovery is deprecated in favor of hooks
+    Discover,
+    /// Legacy process attach is deprecated in favor of hooks
+    Attach {
+        /// Process id to import
+        pid: u32,
+    },
+    /// Install or remove PATH hooks for Codex, Claude, and Gemini
+    Hook {
+        #[command(subcommand)]
+        command: AgentHookCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum AgentHookCommand {
+    /// Enable Codex and Claude Code hooks in the local agent configuration
+    Install,
+    /// Remove tinfo-managed Codex and Claude Code hook entries
+    Uninstall,
+    /// Show the Codex and Claude Code hook config paths
+    Path,
+    #[command(hide = true)]
+    Event {
+        adapter: String,
+        event_type: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum WrapperCommand {
+    Codex {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    Claude {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    Gemini {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ChatProviderArg {
+    Openai,
+    #[value(alias = "anthropic")]
+    Claude,
+    Openrouter,
 }
 
 #[derive(Subcommand, Debug)]
@@ -669,16 +776,16 @@ fn main() {
     let update_notice = maybe_get_update_notice(&cli);
 
     let result = match cli.command {
-        Some(Command::Weather { command }) => handle_weather(&mut config, command, live_view_freeze),
+        Some(Command::Weather { command }) => {
+            handle_weather(&mut config, command, live_view_freeze)
+        }
         Some(Command::Ping { host }) => handle_ping(&config, host),
         Some(Command::Latency { host }) => handle_latency(&config, host),
         Some(Command::Network { command }) => handle_network(command),
         Some(Command::Disk { command }) => handle_disk(command),
         Some(Command::Storage { command }) => handle_storage(command),
         Some(Command::System { command }) => handle_system(command),
-        Some(Command::Ps { limit, sort }) => {
-            process_inspect::show_processes(limit, sort.into())
-        }
+        Some(Command::Ps { limit, sort }) => process_inspect::show_processes(limit, sort.into()),
         Some(Command::Time { city }) => live_time(city, live_view_freeze),
         Some(Command::Timer { command }) => handle_timer(command, live_view_freeze, &config),
         Some(Command::Stopwatch { command }) => handle_stopwatch(command, live_view_freeze),
@@ -694,6 +801,23 @@ fn main() {
             handle_remind(&config, time.as_deref(), joined.as_deref())
         }
         Some(Command::Search { query }) => search::run_search(&query),
+        Some(Command::Agent { command }) => handle_agent_command(command),
+        Some(Command::HookHandler {
+            adapter,
+            event_type,
+        }) => handle_agent_hook_event(adapter, event_type),
+        Some(Command::Wrapper { command }) => handle_wrapper_command(command),
+        Some(Command::Codex { args }) => {
+            handle_wrapper_command(WrapperCommand::Codex { args })
+        }
+        Some(Command::ClaudeCode { args }) => {
+            handle_wrapper_command(WrapperCommand::Claude { args })
+        }
+        Some(Command::Chat {
+            provider,
+            model,
+            system,
+        }) => handle_chat_command(provider, model, system),
         Some(Command::Diagnostic {
             command,
             markdown_out,
@@ -704,9 +828,11 @@ fn main() {
             handle_completion(shell);
             Ok(())
         }
-        Some(Command::Dashboard { command }) => handle_dashboard(&mut config, command, dashboard_freeze),
+        Some(Command::Dashboard { command }) => {
+            handle_dashboard(&mut config, command, dashboard_freeze)
+        }
         Some(Command::Plugin { command }) => handle_plugin(command),
-        Some(Command::Update) => handle_update(),
+        Some(Command::Update) => handle_core_update(),
         Some(Command::SelfRepair) => handle_self_repair(),
         Some(Command::Reinstall) => handle_reinstall(),
         Some(Command::Uninstall { keep_data }) => handle_uninstall(keep_data),
@@ -747,7 +873,10 @@ fn resolve_dashboard_freeze(cli: &Cli, config: &Config) -> bool {
 }
 
 fn should_run_first_run_setup(cli: &Cli, config: &Config) -> bool {
-    if config.setup_complete || cli.json || !io::stdin().is_terminal() || !io::stdout().is_terminal()
+    if config.setup_complete
+        || cli.json
+        || !io::stdin().is_terminal()
+        || !io::stdout().is_terminal()
     {
         return false;
     }
@@ -920,97 +1049,17 @@ fn live_weather(config: &Config, view: WeatherView, freeze: bool) -> Result<(), 
     })
 }
 
-fn run_live_loop<F>(interval: Duration, freeze: bool, render: F) -> Result<(), String>
-where
-    F: FnMut() -> Result<String, String>,
-{
-    run_live_loop_until(interval, freeze, render, || Ok(true))
-}
-
 fn run_live_loop_until<F, C>(
     interval: Duration,
     freeze: bool,
-    mut render: F,
-    mut should_continue: C,
+    render: F,
+    should_continue: C,
 ) -> Result<(), String>
 where
     F: FnMut() -> Result<String, String>,
     C: FnMut() -> Result<bool, String>,
 {
-    if freeze {
-        print!("{}", render()?);
-        io::stdout()
-            .flush()
-            .map_err(|err| format!("Failed to flush output: {err}"))?;
-        return Ok(());
-    }
-
-    let mut stdout = io::stdout();
-    let _terminal = LiveTerminalGuard::enter(&mut stdout)?;
-
-    loop {
-        clear_screen(&mut stdout)?;
-        write_live_frame(&mut stdout, &render()?)?;
-        write!(stdout, "\r\nPress q or Ctrl+C to exit\r\n")
-            .map_err(|err| format!("Failed to write exit hint: {err}"))?;
-        stdout
-            .flush()
-            .map_err(|err| format!("Failed to flush output: {err}"))?;
-
-        let deadline = Instant::now() + interval;
-        while Instant::now() < deadline {
-            if !should_continue()? {
-                return Ok(());
-            }
-            if event::poll(Duration::from_millis(100))
-                .map_err(|err| format!("Failed to read terminal input: {err}"))?
-            {
-                let next =
-                    event::read().map_err(|err| format!("Failed to read terminal input: {err}"))?;
-                if should_exit_live_view(&next) {
-                    return Ok(());
-                }
-            }
-            thread::sleep(Duration::from_millis(20));
-        }
-    }
-}
-
-fn clear_screen(stdout: &mut io::Stdout) -> Result<(), String> {
-    write!(stdout, "\x1B[2J\x1B[H").map_err(|err| format!("Failed to clear terminal screen: {err}"))
-}
-
-fn should_exit_live_view(event: &Event) -> bool {
-    matches!(
-        event,
-        Event::Key(key)
-            if key.kind != KeyEventKind::Release
-                && matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q'))
-    )
-}
-
-fn write_live_frame(stdout: &mut io::Stdout, frame: &str) -> Result<(), String> {
-    let normalized = frame.trim_end_matches('\n').replace('\n', "\r\n");
-    write!(stdout, "{normalized}").map_err(|err| format!("Failed to write live frame: {err}"))
-}
-
-struct LiveTerminalGuard;
-
-impl LiveTerminalGuard {
-    fn enter(stdout: &mut io::Stdout) -> Result<Self, String> {
-        terminal::enable_raw_mode().map_err(|err| format!("Failed to enable raw mode: {err}"))?;
-        execute!(stdout, EnterAlternateScreen, Hide)
-            .map_err(|err| format!("Failed to initialize terminal UI: {err}"))?;
-        Ok(Self)
-    }
-}
-
-impl Drop for LiveTerminalGuard {
-    fn drop(&mut self) {
-        let mut stdout = io::stdout();
-        let _ = execute!(stdout, Show, LeaveAlternateScreen);
-        let _ = terminal::disable_raw_mode();
-    }
+    live::run_live_loop_until(interval, freeze, render, should_continue)
 }
 
 fn handle_config(config: &mut Config, command: Option<ConfigCommand>) -> Result<(), String> {
@@ -1197,7 +1246,10 @@ fn handle_theme_config(config: &mut Config, command: Option<ThemeCommand>) -> Re
                 config.theme.border_style = style.into();
                 config.save()?;
                 set_theme(config.theme);
-                println!("Theme border style set to {}.", config.theme.border_style.label());
+                println!(
+                    "Theme border style set to {}.",
+                    config.theme.border_style.label()
+                );
                 Ok(())
             }
             None => {
@@ -1210,7 +1262,10 @@ fn handle_theme_config(config: &mut Config, command: Option<ThemeCommand>) -> Re
                 config.theme.accent_color = color.into();
                 config.save()?;
                 set_theme(config.theme);
-                println!("Theme accent color set to {}.", config.theme.accent_color.label());
+                println!(
+                    "Theme accent color set to {}.",
+                    config.theme.accent_color.label()
+                );
                 Ok(())
             }
             None => {
@@ -1303,7 +1358,12 @@ pub(crate) fn handle_config_edit(config: &Config) -> Result<(), String> {
     let status = process::Command::new(&editor)
         .arg(&path)
         .status()
-        .map_err(|err| format!("Failed to launch editor '{}': {err}", editor.to_string_lossy()))?;
+        .map_err(|err| {
+            format!(
+                "Failed to launch editor '{}': {err}",
+                editor.to_string_lossy()
+            )
+        })?;
 
     if status.success() {
         Ok(())
@@ -1506,13 +1566,20 @@ fn handle_task(config: &Config, command: Option<TaskCommand>) -> Result<(), Stri
     }
 }
 
-fn handle_timer(command: Option<TimerCommand>, freeze: bool, config: &Config) -> Result<(), String> {
+fn handle_timer(
+    command: Option<TimerCommand>,
+    freeze: bool,
+    config: &Config,
+) -> Result<(), String> {
     match command {
         Some(TimerCommand::Start { duration }) => {
             start_timer(duration.as_deref(), &config.timer)?;
-            run_live_loop_until(Duration::from_secs(1), freeze, timer_dashboard_output, || {
-                timer_live_active(TimerLiveTarget::Countdown)
-            })
+            run_live_loop_until(
+                Duration::from_secs(1),
+                freeze,
+                timer_dashboard_output,
+                || timer_live_active(TimerLiveTarget::Countdown),
+            )
         }
         Some(TimerCommand::Stop) => stop_timer(),
         None => {
@@ -1528,9 +1595,12 @@ fn handle_stopwatch(command: StopwatchCommand, freeze: bool) -> Result<(), Strin
     match command {
         StopwatchCommand::Start => {
             start_stopwatch()?;
-            run_live_loop_until(Duration::from_secs(1), freeze, timer_dashboard_output, || {
-                timer_live_active(TimerLiveTarget::Stopwatch)
-            })
+            run_live_loop_until(
+                Duration::from_secs(1),
+                freeze,
+                timer_dashboard_output,
+                || timer_live_active(TimerLiveTarget::Stopwatch),
+            )
         }
         StopwatchCommand::Stop => stop_stopwatch(),
     }
@@ -1579,9 +1649,7 @@ fn handle_dashboard(
 
 fn handle_dashboard_notes(command: DashboardNotesCommand) -> Result<(), String> {
     match command {
-        DashboardNotesCommand::Show => {
-            list_notes()
-        }
+        DashboardNotesCommand::Show => list_notes(),
         DashboardNotesCommand::Set { text } => {
             let body = text.join(" ").trim().to_string();
             if body.is_empty() {
@@ -1686,10 +1754,7 @@ fn completion_install_target() -> Result<(CompletionCommand, PathBuf), String> {
     let shell = std::env::var("SHELL").unwrap_or_default();
     let home = home_dir_path();
     if shell.ends_with("zsh") {
-        Ok((
-            CompletionCommand::Zsh,
-            home.join(".zsh/completions/_tinfo"),
-        ))
+        Ok((CompletionCommand::Zsh, home.join(".zsh/completions/_tinfo")))
     } else if shell.ends_with("fish") {
         Ok((
             CompletionCommand::Fish,
@@ -1821,7 +1886,369 @@ fn handle_location(config: &mut Config, city: Option<String>) -> Result<(), Stri
     Ok(())
 }
 
-fn handle_update() -> Result<(), String> {
+fn handle_agent_command(command: Option<AgentCommand>) -> Result<(), String> {
+    match command {
+        None | Some(AgentCommand::Dashboard) => run_ai_entry(AiEntryMode::Agent),
+        Some(AgentCommand::Discover) => handle_agent_discover(),
+        Some(AgentCommand::Attach { pid }) => handle_agent_attach(pid),
+        Some(AgentCommand::Hook { command }) => handle_agent_hook(command),
+    }
+}
+
+fn handle_chat_command(
+    provider: Option<ChatProviderArg>,
+    model: Option<String>,
+    system: Option<String>,
+) -> Result<(), String> {
+    run_simple_chat(AiChatOptions {
+        provider: provider.map(ChatProviderArg::into_provider_kind),
+        model,
+        system,
+    })
+}
+
+impl ChatProviderArg {
+    fn into_provider_kind(self) -> ProviderKind {
+        match self {
+            Self::Openai => ProviderKind::OpenAi,
+            Self::Claude => ProviderKind::Anthropic,
+            Self::Openrouter => ProviderKind::OpenRouter,
+        }
+    }
+}
+
+fn handle_agent_discover() -> Result<(), String> {
+    println!("Process discovery is deprecated.");
+    println!("Use `tinfo agent hook install` and run `tinfo codex` or `tinfo claude-code`.");
+    Ok(())
+}
+
+fn handle_agent_attach(pid: u32) -> Result<(), String> {
+    let _ = pid;
+    println!("Process attach is deprecated.");
+    println!("Use agent hooks instead: `tinfo agent hook install` and launch through `tinfo codex` or `tinfo claude-code`.");
+    Ok(())
+}
+
+fn handle_agent_hook(command: AgentHookCommand) -> Result<(), String> {
+    let ai_config = terminal_info::ai::config::AiConfig::load_default();
+    match command {
+        AgentHookCommand::Install => {
+            if cfg!(target_os = "windows") {
+                println!("Agent hooks are not supported on Windows yet.");
+                return Ok(());
+            }
+            let current_exe = std::env::current_exe()
+                .map_err(|err| format!("Failed to locate current executable: {err}"))?;
+            let paths = install_hooks(ai_config.api_bind(), &current_exe)?;
+            println!("Enabled Codex and Claude Code hooks.");
+            for path in paths {
+                println!("Updated {}", path.display());
+            }
+            println!("Run `tinfo codex` or `tinfo claude-code` while `tinfo agent` is open.");
+            Ok(())
+        }
+        AgentHookCommand::Uninstall => {
+            let paths = uninstall_hooks()?;
+            println!("Removed tinfo-managed hook entries.");
+            for path in paths {
+                println!("Updated {}", path.display());
+            }
+            Ok(())
+        }
+        AgentHookCommand::Path => {
+            println!("{}", codex_hooks_path()?.display());
+            println!("{}", claude_settings_path()?.display());
+            Ok(())
+        }
+        AgentHookCommand::Event {
+            adapter,
+            event_type,
+        } => handle_agent_hook_event(Some(adapter), Some(event_type)),
+    }
+}
+
+fn handle_agent_hook_event(
+    adapter: Option<String>,
+    event_type: Option<String>,
+) -> Result<(), String> {
+    let payload = read_hook_event_from_stdin(adapter.as_deref(), event_type.as_deref())?;
+    eprintln!("HOOK EVENT RECEIVED: {}", payload.event_type);
+    append_hook_event(&payload)
+}
+
+fn handle_wrapper_command(command: WrapperCommand) -> Result<(), String> {
+    let (program, adapter, args) = match command {
+        WrapperCommand::Codex { args } => ("codex", "codex", args),
+        WrapperCommand::Claude { args } => ("claude", "claude_code", args),
+        WrapperCommand::Gemini { args } => ("gemini", "gemini", args),
+    };
+
+    if !cfg!(target_os = "windows") && !hooks_enabled()? {
+        println!("Hooks are not enabled or are outdated. Run `tinfo agent hook install` first.");
+        return Ok(());
+    }
+
+    if cfg!(target_os = "windows") {
+        let status = process::Command::new(program)
+            .args(args)
+            .status()
+            .map_err(|err| format!("Failed to launch {program}: {err}"))?;
+        if !status.success() {
+            if let Some(code) = status.code() {
+                process::exit(code);
+            }
+            process::exit(1);
+        }
+        return Ok(());
+    }
+
+    run_wrapped_agent(program, adapter, args)
+}
+
+fn run_wrapped_agent(program: &str, adapter: &str, args: Vec<String>) -> Result<(), String> {
+    let pty_system = native_pty_system();
+    let (cols, rows) = terminal::size().unwrap_or((120, 30));
+    let pair = pty_system
+        .openpty(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|err| format!("Failed to open PTY for {program}: {err}"))?;
+
+    let mut command = CommandBuilder::new(program);
+    for arg in &args {
+        command.arg(arg);
+    }
+    if let Ok(cwd) = env::current_dir() {
+        command.cwd(cwd);
+    }
+
+    let mut child = pair
+        .slave
+        .spawn_command(command)
+        .map_err(|err| format!("Failed to spawn {program}: {err}"))?;
+    drop(pair.slave);
+
+    let agent_id = format!("wrapper-{}-{}", adapter, now_unix());
+    let start_payload = HookEventPayload {
+        adapter: adapter.to_string(),
+        event_type: "session_start".to_string(),
+        agent_id: agent_id.clone(),
+        command: None,
+        output: None,
+        details: None,
+    };
+    let _ = append_hook_event(&start_payload);
+    let start_command = HookEventPayload {
+        adapter: adapter.to_string(),
+        event_type: "command_start".to_string(),
+        agent_id: agent_id.clone(),
+        command: Some(if args.is_empty() {
+            program.to_string()
+        } else {
+            format!("{program} {}", args.join(" "))
+        }),
+        output: None,
+        details: None,
+    };
+    let _ = append_hook_event(&start_command);
+
+    let mut reader = pair
+        .master
+        .try_clone_reader()
+        .map_err(|err| format!("Failed to clone PTY reader: {err}"))?;
+    let writer = pair
+        .master
+        .take_writer()
+        .map_err(|err| format!("Failed to acquire PTY writer: {err}"))?;
+
+    let writer = Arc::new(Mutex::new(writer));
+    let stdin_writer = writer.clone();
+    let input_handle = thread::spawn(move || {
+        let mut stdin = io::stdin();
+        let mut buffer = [0_u8; 1024];
+        loop {
+            match stdin.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if let Ok(mut writer) = stdin_writer.lock() {
+                        if writer.write_all(&buffer[..n]).is_err() || writer.flush().is_err() {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    let decision_writer = writer.clone();
+    let decision_agent_id = agent_id.clone();
+    let _decision_handle = thread::spawn(move || loop {
+        match take_agent_decision(&decision_agent_id) {
+            Ok(Some(decision)) => {
+                let bytes: &[u8] = match decision.decision.as_str() {
+                    "approve" => b"\n",
+                    "deny" => b"\x1b",
+                    _ => &[],
+                };
+                if bytes.is_empty() {
+                    thread::sleep(Duration::from_millis(150));
+                    continue;
+                }
+                if let Ok(mut writer) = decision_writer.lock() {
+                    if writer.write_all(bytes).is_err() || writer.flush().is_err() {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            Ok(None) => {
+                thread::sleep(Duration::from_millis(150));
+            }
+            Err(_) => {
+                thread::sleep(Duration::from_millis(300));
+            }
+        }
+    });
+
+    let output_adapter = adapter.to_string();
+    let output_agent_id = agent_id.clone();
+    let output_handle = thread::spawn(move || {
+        let mut stdout = io::stdout();
+        let mut buffer = [0_u8; 4096];
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let _ = stdout.write_all(&buffer[..n]);
+                    let _ = stdout.flush();
+                    let text = String::from_utf8_lossy(&buffer[..n]).to_string();
+                    let sanitized = sanitize_agent_output_chunk(&text);
+                    if let Some(relevant) = extract_dashboard_relevant_output(&sanitized) {
+                        let payload = HookEventPayload {
+                            adapter: output_adapter.clone(),
+                            event_type: "output".to_string(),
+                            agent_id: output_agent_id.clone(),
+                            command: None,
+                            output: Some(relevant),
+                            details: None,
+                        };
+                        let _ = append_hook_event(&payload);
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    let raw_mode = io::stdin().is_terminal() && io::stdout().is_terminal();
+    if raw_mode {
+        enable_raw_mode().map_err(|err| format!("Failed to enable raw mode: {err}"))?;
+    }
+
+    let status = child
+        .wait()
+        .map_err(|err| format!("Failed to wait for {program}: {err}"))?;
+
+    if raw_mode {
+        let _ = disable_raw_mode();
+    }
+
+    drop(writer);
+    let _ = input_handle.join();
+    let _ = output_handle.join();
+
+    let stop_payload = HookEventPayload {
+        adapter: adapter.to_string(),
+        event_type: "stop".to_string(),
+        agent_id,
+        command: None,
+        output: None,
+        details: None,
+    };
+    let _ = append_hook_event(&stop_payload);
+
+    if !status.success() {
+        process::exit(status.exit_code() as i32);
+    }
+    Ok(())
+}
+
+fn sanitize_agent_output_chunk(input: &str) -> String {
+    let mut output = String::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' {
+            if matches!(chars.peek(), Some('[')) {
+                chars.next();
+                while let Some(next) = chars.next() {
+                    if ('@'..='~').contains(&next) {
+                        break;
+                    }
+                }
+            } else if matches!(chars.peek(), Some(']')) {
+                chars.next();
+                while let Some(next) = chars.next() {
+                    if next == '\u{7}' {
+                        break;
+                    }
+                    if next == '\u{1b}' && matches!(chars.peek(), Some('\\')) {
+                        chars.next();
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+
+        match ch {
+            '\r' => output.push('\n'),
+            '\n' | '\t' => output.push(ch),
+            c if c.is_control() => {}
+            _ => output.push(ch),
+        }
+    }
+
+    output
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn extract_dashboard_relevant_output(input: &str) -> Option<String> {
+    let lower = input.to_ascii_lowercase();
+    if lower.contains("would you like to run")
+        || lower.contains("reason:")
+        || lower.contains("yes, proceed")
+        || lower.contains("don't ask again")
+        || lower.contains("no, and tell codex")
+    {
+        return Some(input.to_string());
+    }
+
+    let command_lines = input
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with('$'))
+        .collect::<Vec<_>>();
+    if !command_lines.is_empty() {
+        return Some(command_lines.join("\n"));
+    }
+
+    None
+}
+
+fn handle_core_update() -> Result<(), String> {
     handle_update_inner(false)
 }
 
@@ -1886,7 +2313,8 @@ fn handle_update_inner(force: bool) -> Result<(), String> {
         let signature = download_text(&signature_asset.browser_download_url, "update signature")?;
         let checksum_asset = select_update_checksum_asset(&release.assets, &asset.name)
             .ok_or_else(|| format!("No SHA-256 checksum found for '{}'.", asset.name))?;
-        let expected_checksum = download_checksum(&checksum_asset.browser_download_url, &asset.name)?;
+        let expected_checksum =
+            download_checksum(&checksum_asset.browser_download_url, &asset.name)?;
         verify_download_checksum(&archive_path, &expected_checksum)?;
         verify_download_signature(&archive_path, &signature)?;
 
@@ -2147,7 +2575,10 @@ fn update_cache_path() -> PathBuf {
     if let Some(dir) = dirs::config_dir() {
         return dir.join("tinfo").join("update.json");
     }
-    home_dir_path().join(".config").join("tinfo").join("update.json")
+    home_dir_path()
+        .join(".config")
+        .join("tinfo")
+        .join("update.json")
 }
 
 fn read_update_cache() -> Option<UpdateCheckCache> {
@@ -2180,7 +2611,9 @@ fn build_update_notice(cache: &UpdateCheckCache) -> Option<UpdateNotice> {
 
 fn update_notice_rate_limited(cache: &UpdateCheckCache) -> bool {
     match cache.last_notified {
-        Some(last_notified) => now_unix().saturating_sub(last_notified) < UPDATE_NOTIFY_INTERVAL_SECS,
+        Some(last_notified) => {
+            now_unix().saturating_sub(last_notified) < UPDATE_NOTIFY_INTERVAL_SECS
+        }
         None => false,
     }
 }
@@ -2197,7 +2630,9 @@ fn refresh_update_cache() -> Result<(), String> {
     write_update_cache(&UpdateCheckCache {
         last_checked: now_unix(),
         latest_version: release.tag_name,
-        dismissed_version: existing.as_ref().and_then(|cache| cache.dismissed_version.clone()),
+        dismissed_version: existing
+            .as_ref()
+            .and_then(|cache| cache.dismissed_version.clone()),
         last_notified: existing.as_ref().and_then(|cache| cache.last_notified),
     })
 }
@@ -2233,11 +2668,13 @@ fn handle_update_notice(notice: UpdateNotice) {
                         || reply.eq_ignore_ascii_case("yes")
                     {
                         mark_update_notice_shown(None);
-                        if let Err(err) = handle_update() {
+                        if let Err(err) = handle_core_update() {
                             eprintln!("{err}");
                         }
                     } else {
-                        mark_update_notice_shown(read_update_cache().map(|cache| cache.latest_version));
+                        mark_update_notice_shown(
+                            read_update_cache().map(|cache| cache.latest_version),
+                        );
                     }
                 }
                 Err(_) => {
@@ -2268,11 +2705,7 @@ fn stdin_stdout_interactive() -> bool {
 fn newer_version(latest: &str) -> Option<Version> {
     let latest = normalize_version(latest)?;
     let current = normalize_version(env!("CARGO_PKG_VERSION"))?;
-    if latest > current {
-        Some(latest)
-    } else {
-        None
-    }
+    if latest > current { Some(latest) } else { None }
 }
 
 fn normalize_version(value: &str) -> Option<Version> {

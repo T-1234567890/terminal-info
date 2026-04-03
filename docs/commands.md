@@ -370,3 +370,15 @@ tinfo reinstall
 ```
 
 `self-repair` and `reinstall` force a fresh download of the latest release instead of skipping when the current version already matches.
+
+## AI
+
+```bash
+tinfo agent
+tinfo chat
+```
+
+`agent` opens the built-in AI agent manager.
+`chat` opens the built-in AI chat manager.
+
+See also: `docs/chat.md`

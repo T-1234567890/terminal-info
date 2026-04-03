@@ -133,7 +133,8 @@ impl PluginMetadata {
             issues.push("metadata.description must not be empty".to_string());
         }
         if self.commands.is_empty() {
-            issues.push("metadata.commands must include at least one top-level command".to_string());
+            issues
+                .push("metadata.commands must include at least one top-level command".to_string());
         }
         if self.plugin_api != SUPPORTED_PLUGIN_API || self.api_version != SUPPORTED_PLUGIN_API {
             issues.push(format!(
@@ -181,7 +182,11 @@ impl PluginManifest {
                 None
             } else {
                 Some(RequirementsSection {
-                    capabilities: metadata.capabilities.iter().map(ToString::to_string).collect(),
+                    capabilities: metadata
+                        .capabilities
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
                 })
             },
         }

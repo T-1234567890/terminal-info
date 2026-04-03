@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use reqwest::blocking::Client;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use crate::{ConfigContext, Log, Output, PluginError, PluginResult, ResultExt};
 
@@ -71,14 +71,18 @@ impl RuntimeState {
     pub(crate) fn stdout_contents(&self) -> Option<String> {
         match &self.io {
             IoMode::Terminal => None,
-            IoMode::Buffered { stdout, .. } => Some(stdout.lock().expect("stdout buffer poisoned").clone()),
+            IoMode::Buffered { stdout, .. } => {
+                Some(stdout.lock().expect("stdout buffer poisoned").clone())
+            }
         }
     }
 
     pub(crate) fn stderr_contents(&self) -> Option<String> {
         match &self.io {
             IoMode::Terminal => None,
-            IoMode::Buffered { stderr, .. } => Some(stderr.lock().expect("stderr buffer poisoned").clone()),
+            IoMode::Buffered { stderr, .. } => {
+                Some(stderr.lock().expect("stderr buffer poisoned").clone())
+            }
         }
     }
 }
@@ -259,7 +263,9 @@ impl CacheContext {
         if !path.exists() {
             return Ok(None);
         }
-        fs::read_to_string(path).map(Some).map_err(PluginError::from)
+        fs::read_to_string(path)
+            .map(Some)
+            .map_err(PluginError::from)
     }
 
     pub fn write_string(&self, key: &str, value: impl AsRef<str>) -> PluginResult<()> {
@@ -275,7 +281,9 @@ impl CacheContext {
         T: DeserializeOwned,
     {
         match self.read_string(key)? {
-            Some(value) => serde_json::from_str::<T>(&value).map(Some).map_err(PluginError::from),
+            Some(value) => serde_json::from_str::<T>(&value)
+                .map(Some)
+                .map_err(PluginError::from),
             None => Ok(None),
         }
     }
@@ -304,7 +312,8 @@ impl FsContext {
     }
 
     pub fn plugin_home(&self) -> PathBuf {
-        self.plugin_dir().join(self.state.host().plugin_name.as_str())
+        self.plugin_dir()
+            .join(self.state.host().plugin_name.as_str())
     }
 
     pub fn plugin_data_dir(&self) -> PluginResult<PathBuf> {

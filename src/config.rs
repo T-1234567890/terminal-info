@@ -290,6 +290,218 @@ impl Default for CacheConfig {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AiProviderConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    #[serde(default = "default_ai_model")]
+    pub default_model: String,
+}
+
+impl Default for AiProviderConfig {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            endpoint: None,
+            default_model: default_ai_model(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AiProvidersConfig {
+    #[serde(default)]
+    pub openai: AiProviderConfig,
+    #[serde(default)]
+    pub anthropic: AiProviderConfig,
+    #[serde(default)]
+    pub openrouter: AiProviderConfig,
+}
+
+impl Default for AiProvidersConfig {
+    fn default() -> Self {
+        Self {
+            openai: AiProviderConfig::default(),
+            anthropic: AiProviderConfig::default(),
+            openrouter: AiProviderConfig::default(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Default, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum AiApprovalMode {
+    #[default]
+    Manual,
+    Auto,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AiAgentSettings {
+    #[serde(default)]
+    pub approval_mode: AiApprovalMode,
+    #[serde(default = "default_true")]
+    pub audit_log: bool,
+}
+
+impl Default for AiAgentSettings {
+    fn default() -> Self {
+        Self {
+            approval_mode: AiApprovalMode::default(),
+            audit_log: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AiRuntimeSettings {
+    #[serde(default = "default_ai_event_buffer_size")]
+    pub event_buffer_size: usize,
+    #[serde(default = "default_ai_log_buffer_size")]
+    pub log_buffer_size: usize,
+    #[serde(default)]
+    pub auto_reject_timeout_secs: Option<u64>,
+    #[serde(default = "default_true")]
+    pub chat_history: bool,
+    #[serde(default = "default_true")]
+    pub chat_context: bool,
+    #[serde(default)]
+    pub persist_chat_transcripts: bool,
+}
+
+impl Default for AiRuntimeSettings {
+    fn default() -> Self {
+        Self {
+            event_buffer_size: default_ai_event_buffer_size(),
+            log_buffer_size: default_ai_log_buffer_size(),
+            auto_reject_timeout_secs: None,
+            chat_history: true,
+            chat_context: true,
+            persist_chat_transcripts: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AiApiSettings {
+    #[serde(default = "default_ai_api_bind")]
+    pub bind: String,
+}
+
+impl Default for AiApiSettings {
+    fn default() -> Self {
+        Self {
+            bind: default_ai_api_bind(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AiUiSettings {
+    #[serde(default = "default_true")]
+    pub web_enabled: bool,
+    #[serde(default = "default_ai_ui_refresh_ms")]
+    pub refresh_ms: u64,
+}
+
+impl Default for AiUiSettings {
+    fn default() -> Self {
+        Self {
+            web_enabled: true,
+            refresh_ms: default_ai_ui_refresh_ms(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AiAgentCliConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub auto_start: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub adapter: Option<String>,
+    #[serde(default)]
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+}
+
+impl Default for AiAgentCliConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            auto_start: false,
+            adapter: None,
+            command: String::new(),
+            args: Vec::new(),
+            cwd: None,
+            env: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AiAdaptersConfig {
+    #[serde(default = "default_codex_adapter")]
+    pub codex: AiAgentCliConfig,
+    #[serde(default = "default_claude_adapter")]
+    pub claude_code: AiAgentCliConfig,
+    #[serde(default = "default_gemini_adapter")]
+    pub gemini: AiAgentCliConfig,
+}
+
+impl Default for AiAdaptersConfig {
+    fn default() -> Self {
+        Self {
+            codex: default_codex_adapter(),
+            claude_code: default_claude_adapter(),
+            gemini: default_gemini_adapter(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AiSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_provider: Option<String>,
+    #[serde(default)]
+    pub providers: AiProvidersConfig,
+    #[serde(default)]
+    pub agent: AiAgentSettings,
+    #[serde(default)]
+    pub runtime: AiRuntimeSettings,
+    #[serde(default)]
+    pub api: AiApiSettings,
+    #[serde(default)]
+    pub ui: AiUiSettings,
+    #[serde(default)]
+    pub adapters: AiAdaptersConfig,
+    #[serde(default)]
+    pub agents: BTreeMap<String, AiAgentCliConfig>,
+}
+
+impl Default for AiSettings {
+    fn default() -> Self {
+        Self {
+            default_provider: None,
+            providers: AiProvidersConfig::default(),
+            agent: AiAgentSettings::default(),
+            runtime: AiRuntimeSettings::default(),
+            api: AiApiSettings::default(),
+            ui: AiUiSettings::default(),
+            adapters: AiAdaptersConfig::default(),
+            agents: BTreeMap::new(),
+        }
+    }
+}
+
 fn default_weather_cache_ttl() -> u64 {
     60
 }
@@ -300,6 +512,50 @@ fn default_network_cache_ttl() -> u64 {
 
 fn default_time_cache_ttl() -> u64 {
     10
+}
+
+fn default_ai_model() -> String {
+    "default".to_string()
+}
+
+fn default_ai_event_buffer_size() -> usize {
+    256
+}
+
+fn default_ai_log_buffer_size() -> usize {
+    200
+}
+
+fn default_ai_api_bind() -> String {
+    "127.0.0.1:7878".to_string()
+}
+
+fn default_ai_ui_refresh_ms() -> u64 {
+    1000
+}
+
+fn default_disabled_ai_adapter(command: &str, adapter: &str) -> AiAgentCliConfig {
+    AiAgentCliConfig {
+        enabled: false,
+        auto_start: false,
+        adapter: Some(adapter.to_string()),
+        command: command.to_string(),
+        args: Vec::new(),
+        cwd: None,
+        env: BTreeMap::new(),
+    }
+}
+
+fn default_codex_adapter() -> AiAgentCliConfig {
+    default_disabled_ai_adapter("codex", "codex")
+}
+
+fn default_claude_adapter() -> AiAgentCliConfig {
+    default_disabled_ai_adapter("claude", "claude_code")
+}
+
+fn default_gemini_adapter() -> AiAgentCliConfig {
+    default_disabled_ai_adapter("gemini", "gemini")
 }
 
 impl Units {
@@ -360,6 +616,8 @@ pub struct Config {
     #[serde(default)]
     pub cache: CacheConfig,
     #[serde(default)]
+    pub ai: AiSettings,
+    #[serde(default)]
     pub locations: BTreeMap<String, String>,
     #[serde(
         skip_serializing_if = "Option::is_none",
@@ -396,6 +654,7 @@ impl Default for Config {
             timer: TimerConfig::default(),
             reminders: RemindersConfig::default(),
             cache: CacheConfig::default(),
+            ai: AiSettings::default(),
             locations: BTreeMap::new(),
             default_city: None,
         }
@@ -470,6 +729,27 @@ impl Config {
         }
         if self.cache.time_ttl_secs == 0 {
             self.cache.time_ttl_secs = default_time_cache_ttl();
+        }
+        if self.ai.runtime.event_buffer_size == 0 {
+            self.ai.runtime.event_buffer_size = default_ai_event_buffer_size();
+        }
+        if self.ai.runtime.log_buffer_size == 0 {
+            self.ai.runtime.log_buffer_size = default_ai_log_buffer_size();
+        }
+        if self.ai.api.bind.trim().is_empty() {
+            self.ai.api.bind = default_ai_api_bind();
+        }
+        if self.ai.ui.refresh_ms == 0 {
+            self.ai.ui.refresh_ms = default_ai_ui_refresh_ms();
+        }
+        if self.ai.adapters.codex.command.trim().is_empty() {
+            self.ai.adapters.codex = default_codex_adapter();
+        }
+        if self.ai.adapters.claude_code.command.trim().is_empty() {
+            self.ai.adapters.claude_code = default_claude_adapter();
+        }
+        if self.ai.adapters.gemini.command.trim().is_empty() {
+            self.ai.adapters.gemini = default_gemini_adapter();
         }
         if self.tasks.max_display == 0 {
             self.tasks.max_display = default_tasks_max_display();

@@ -1,0 +1,15 @@
+pub mod app;
+pub mod adapters;
+pub mod agent;
+pub mod api;
+pub mod chat;
+pub mod cli_chat;
+pub mod config;
+pub mod discovery;
+pub mod hook;
+pub mod ipc;
+pub mod runtime;
+pub mod secret;
+pub mod storage;
+pub mod ui;
+pub mod web;

@@ -45,8 +45,8 @@ mod context;
 mod error;
 mod manifest;
 mod output;
-mod widget;
 pub mod testing;
+mod widget;
 
 use std::collections::BTreeMap;
 use std::env;
@@ -54,7 +54,9 @@ use std::sync::Arc;
 
 pub use command::{CommandHandler, CommandInput, PluginCommand};
 pub use config::ConfigContext;
-pub use context::{CacheContext, Context, FsContext, HostContext, NetworkContext, NetworkRequest, SystemContext};
+pub use context::{
+    CacheContext, Context, FsContext, HostContext, NetworkContext, NetworkRequest, SystemContext,
+};
 pub use error::{PluginError, PluginResult, ResultExt};
 pub use manifest::{
     Capability, CompatibilityPolicy, ManifestValidation, PluginCompatibility, PluginManifest,
@@ -194,7 +196,9 @@ impl Plugin {
     }
 
     fn execute_from_env(self) -> PluginResult<()> {
-        let state = Arc::new(RuntimeState::terminal(RuntimeHost::from_env(&self.metadata.name)));
+        let state = Arc::new(RuntimeState::terminal(RuntimeHost::from_env(
+            &self.metadata.name,
+        )));
         let args = env::args().skip(1).collect::<Vec<_>>();
         self.execute_with_state(state, ConfigContext::load_from_env(), args)
     }
@@ -211,9 +215,9 @@ impl Plugin {
             } else {
                 WidgetMode::Full
             };
-            let handler = self.widget_handler.ok_or_else(|| {
-                PluginError::new("plugin does not provide a dashboard widget")
-            })?;
+            let handler = self
+                .widget_handler
+                .ok_or_else(|| PluginError::new("plugin does not provide a dashboard widget"))?;
             let widget = handler(Context::new(state.clone(), config), mode)?;
             state.write_stdout(&serde_json::to_string_pretty(&widget)?);
             return Ok(());
@@ -229,14 +233,21 @@ impl Plugin {
             return Ok(());
         }
 
-        if matches!(args.first().map(String::as_str), Some("--help") | Some("help")) {
+        if matches!(
+            args.first().map(String::as_str),
+            Some("--help") | Some("help")
+        ) {
             state.write_stdout(&self.help_text());
             return Ok(());
         }
 
         let ctx = Context::new(state.clone(), config);
         if let Some(first) = args.first() {
-            if let Some(command) = self.commands.iter().find(|candidate| candidate.name() == first) {
+            if let Some(command) = self
+                .commands
+                .iter()
+                .find(|candidate| candidate.name() == first)
+            {
                 return command.execute(ctx, CommandInput::new(args[1..].to_vec()));
             }
         }
@@ -255,7 +266,10 @@ impl Plugin {
     }
 
     fn help_text(&self) -> String {
-        let mut lines = vec![format!("{} - {}", self.metadata.name, self.metadata.description)];
+        let mut lines = vec![format!(
+            "{} - {}",
+            self.metadata.name, self.metadata.description
+        )];
         if !self.commands.is_empty() {
             lines.push(String::new());
             lines.push("Commands:".to_string());

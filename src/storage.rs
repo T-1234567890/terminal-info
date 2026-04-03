@@ -94,7 +94,12 @@ pub fn show_storage_largest() -> Result<(), String> {
     println!("Root: {}", root.display());
     println!("Top entries:");
     for entry in entries {
-        println!("{} {:<4} {}", pad_size(entry.size_bytes), entry.kind, entry.path);
+        println!(
+            "{} {:<4} {}",
+            pad_size(entry.size_bytes),
+            entry.kind,
+            entry.path
+        );
     }
     Ok(())
 }
@@ -299,7 +304,10 @@ fn dedupe_filesystems(filesystems: Vec<FilesystemUsage>) -> Vec<FilesystemUsage>
         if should_skip_mount(&fs.mount) {
             continue;
         }
-        let key = format!("{}:{}:{}", fs.filesystem, fs.total_bytes, fs.filesystem_type);
+        let key = format!(
+            "{}:{}:{}",
+            fs.filesystem, fs.total_bytes, fs.filesystem_type
+        );
         if seen.insert(key) {
             deduped.push(fs);
         }
@@ -400,15 +408,38 @@ fn storage_suggestions(
 
     let common = [
         (
-            root.join("Library").join("Developer").join("Xcode").join("DerivedData"),
+            root.join("Library")
+                .join("Developer")
+                .join("Xcode")
+                .join("DerivedData"),
             "Large Xcode DerivedData folder detected",
             gib(1),
         ),
-        (root.join("Library").join("Caches"), "Large cache directory detected", gib(1)),
-        (root.join(".cache"), "Large cache directory detected", gib(1)),
-        (root.join("target"), "Large Rust build artifacts detected", gib(1)),
-        (root.join("node_modules"), "Large node_modules directory detected", gib(1)),
-        (root.join(".npm"), "npm cache is using significant storage", mib(512)),
+        (
+            root.join("Library").join("Caches"),
+            "Large cache directory detected",
+            gib(1),
+        ),
+        (
+            root.join(".cache"),
+            "Large cache directory detected",
+            gib(1),
+        ),
+        (
+            root.join("target"),
+            "Large Rust build artifacts detected",
+            gib(1),
+        ),
+        (
+            root.join("node_modules"),
+            "Large node_modules directory detected",
+            gib(1),
+        ),
+        (
+            root.join(".npm"),
+            "npm cache is using significant storage",
+            mib(512),
+        ),
     ];
     for (path, summary, threshold) in common {
         if path.exists() {
@@ -466,7 +497,11 @@ mod tests {
             kind: "dir".to_string(),
         }];
         let suggestions = storage_suggestions(Path::new("/Users/test"), &entries, &[]);
-        assert!(suggestions.iter().any(|item| item.summary.contains("cache")));
+        assert!(
+            suggestions
+                .iter()
+                .any(|item| item.summary.contains("cache"))
+        );
     }
 
     #[test]
@@ -478,6 +513,10 @@ mod tests {
             kind: "file".to_string(),
         }];
         let suggestions = storage_suggestions(Path::new("/Users/test"), &directories, &files);
-        assert!(suggestions.iter().any(|item| item.summary.contains("temporary")));
+        assert!(
+            suggestions
+                .iter()
+                .any(|item| item.summary.contains("temporary"))
+        );
     }
 }

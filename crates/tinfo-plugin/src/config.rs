@@ -102,7 +102,9 @@ impl ConfigContext {
     {
         match self.lookup(key) {
             None | Some(Value::Null) => Ok(None),
-            Some(value) => serde_json::from_value(value.clone()).map(Some).map_err(PluginError::from),
+            Some(value) => serde_json::from_value(value.clone())
+                .map(Some)
+                .map_err(PluginError::from),
         }
     }
 

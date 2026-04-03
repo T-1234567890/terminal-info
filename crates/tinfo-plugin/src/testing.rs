@@ -104,7 +104,8 @@ impl TestRunner {
         };
         let state = Arc::new(RuntimeState::buffered(host));
         let config = ConfigContext::from_value(self.host.config);
-        self.plugin.execute_with_state(state.clone(), config, self.args)?;
+        self.plugin
+            .execute_with_state(state.clone(), config, self.args)?;
         Ok(TestRun {
             stdout: state.stdout_contents().unwrap_or_default(),
             stderr: state.stderr_contents().unwrap_or_default(),

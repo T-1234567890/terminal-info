@@ -88,7 +88,10 @@ pub fn show_disk_smart() -> Result<(), String> {
     for report in reports {
         println!("Disk: {}", report.disk);
         println!("Model: {}", report.model);
-        println!("Type: {}", format_disk_identity(&report.disk_type, &report.interface));
+        println!(
+            "Type: {}",
+            format_disk_identity(&report.disk_type, &report.interface)
+        );
         println!("Capacity: {}", format_bytes(report.total_bytes));
         println!("Mount: {}", report.mount);
         println!("SMART status: {}", report.smart_status);
@@ -166,7 +169,10 @@ pub fn show_disk_reliability() -> Result<(), String> {
     for report in reports {
         println!("Disk: {}", report.disk);
         println!("Model: {}", report.model);
-        println!("Type: {}", format_disk_identity(&report.disk_type, &report.interface));
+        println!(
+            "Type: {}",
+            format_disk_identity(&report.disk_type, &report.interface)
+        );
         println!("Capacity: {}", format_bytes(report.total_bytes));
         println!("Health score: {}%", report.health_score);
         println!("Health: {}", report.health_label);
@@ -226,10 +232,7 @@ fn collect_disk_reports() -> Vec<DiskHealthReport> {
             DiskHealthReport {
                 disk: disk_name,
                 mount,
-                model: smart
-                    .model
-                    .clone()
-                    .unwrap_or_else(|| "unknown".to_string()),
+                model: smart.model.clone().unwrap_or_else(|| "unknown".to_string()),
                 disk_type: smart
                     .disk_type
                     .clone()
@@ -273,7 +276,10 @@ fn should_skip_mount(mount: &Path) -> bool {
 fn print_summary(report: &DiskHealthReport) {
     println!("Disk: {}", report.disk);
     println!("Model: {}", report.model);
-    println!("Type: {}", format_disk_identity(&report.disk_type, &report.interface));
+    println!(
+        "Type: {}",
+        format_disk_identity(&report.disk_type, &report.interface)
+    );
     println!("Capacity: {}", format_bytes(report.total_bytes));
     println!(
         "Temperature: {}",
@@ -354,14 +360,22 @@ fn smart_details_macos(mount: &Path) -> SmartDetails {
     let text = String::from_utf8_lossy(&output.stdout);
     details.model = text
         .lines()
-        .find_map(|line| line.split_once("Device / Media Name:").map(|(_, value)| value.trim().to_string()))
+        .find_map(|line| {
+            line.split_once("Device / Media Name:")
+                .map(|(_, value)| value.trim().to_string())
+        })
         .or_else(|| {
-            text.lines()
-                .find_map(|line| line.split_once("Volume Name:").map(|(_, value)| value.trim().to_string()))
+            text.lines().find_map(|line| {
+                line.split_once("Volume Name:")
+                    .map(|(_, value)| value.trim().to_string())
+            })
         });
     details.disk_type = text
         .lines()
-        .find_map(|line| line.split_once("Solid State:").map(|(_, value)| value.trim().to_string()))
+        .find_map(|line| {
+            line.split_once("Solid State:")
+                .map(|(_, value)| value.trim().to_string())
+        })
         .map(|value| {
             if value.eq_ignore_ascii_case("yes") {
                 "SSD".to_string()
@@ -371,19 +385,24 @@ fn smart_details_macos(mount: &Path) -> SmartDetails {
         });
     details.interface = text
         .lines()
-        .find_map(|line| line.split_once("Protocol:").map(|(_, value)| value.trim().to_string()))
+        .find_map(|line| {
+            line.split_once("Protocol:")
+                .map(|(_, value)| value.trim().to_string())
+        })
         .or_else(|| {
             text.lines().find_map(|line| {
                 line.split_once("Bus Protocol:")
                     .map(|(_, value)| value.trim().to_string())
             })
         });
-    let device = text
-        .lines()
-        .find_map(|line| line.split_once("Device Node:").map(|(_, value)| value.trim().to_string()));
-    details.smart_status = text
-        .lines()
-        .find_map(|line| line.split_once("SMART Status:").map(|(_, value)| value.trim().to_string()));
+    let device = text.lines().find_map(|line| {
+        line.split_once("Device Node:")
+            .map(|(_, value)| value.trim().to_string())
+    });
+    details.smart_status = text.lines().find_map(|line| {
+        line.split_once("SMART Status:")
+            .map(|(_, value)| value.trim().to_string())
+    });
 
     if let Some(device) = device.as_deref().and_then(base_device_name) {
         let smart = smartctl_details(device);
@@ -463,9 +482,7 @@ fn merge_smart_details(target: &mut SmartDetails, from: SmartDetails) {
 }
 
 fn smartctl_details(device: &str) -> SmartDetails {
-    let output = Command::new("smartctl")
-        .args(["-H", "-A", device])
-        .output();
+    let output = Command::new("smartctl").args(["-H", "-A", device]).output();
     let Ok(output) = output else {
         return SmartDetails::default();
     };
@@ -485,7 +502,9 @@ fn smartctl_details(device: &str) -> SmartDetails {
     });
     details.interface = text.lines().find_map(|line| {
         line.split_once(':')
-            .filter(|(label, _)| label.contains("Transport protocol") || label.contains("SATA Version"))
+            .filter(|(label, _)| {
+                label.contains("Transport protocol") || label.contains("SATA Version")
+            })
             .map(|(_, value)| value.trim().to_string())
     });
     details.smart_status = text
@@ -509,7 +528,11 @@ fn smartctl_details(device: &str) -> SmartDetails {
     details.wear_level = text.lines().find_map(|line| {
         parse_named_u64(
             line,
-            &["Percentage Used", "Wear_Leveling_Count", "Percent_Lifetime_Remain"],
+            &[
+                "Percentage Used",
+                "Wear_Leveling_Count",
+                "Percent_Lifetime_Remain",
+            ],
         )
     });
     details.power_on_hours = text
@@ -518,7 +541,11 @@ fn smartctl_details(device: &str) -> SmartDetails {
     details.disk_errors = text.lines().find_map(|line| {
         parse_named_u64(
             line,
-            &["Error Information Log Entries", "ATA Error Count", "CRC_Error_Count"],
+            &[
+                "Error Information Log Entries",
+                "ATA Error Count",
+                "CRC_Error_Count",
+            ],
         )
     });
     details.disk_type = Some(infer_disk_type(&text, device).to_string());
@@ -539,9 +566,11 @@ fn parse_temperature(line: &str) -> Option<f64> {
     if !line.contains("Temperature") && !line.contains("Airflow_Temperature_Cel") {
         return None;
     }
-    line.split_whitespace()
-        .rev()
-        .find_map(|part| part.trim_matches(|ch: char| !ch.is_ascii_digit()).parse::<f64>().ok())
+    line.split_whitespace().rev().find_map(|part| {
+        part.trim_matches(|ch: char| !ch.is_ascii_digit())
+            .parse::<f64>()
+            .ok()
+    })
 }
 
 fn parse_named_u64(line: &str, labels: &[&str]) -> Option<u64> {
@@ -574,7 +603,9 @@ fn base_device_name(value: &str) -> Option<&str> {
             if rest.starts_with("nvme") {
                 let bytes = trimmed.as_bytes();
                 for index in (0..bytes.len()).rev() {
-                    if bytes[index] == b'p' && trimmed[index + 1..].chars().all(|ch| ch.is_ascii_digit()) {
+                    if bytes[index] == b'p'
+                        && trimmed[index + 1..].chars().all(|ch| ch.is_ascii_digit())
+                    {
                         return Some(&trimmed[..index]);
                     }
                 }

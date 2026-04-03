@@ -145,7 +145,12 @@ where
             repeat(border.horizontal, width + 2),
             border.top_right
         )),
-        format!("{} {} {}", vertical, accentize(&center_line(&title, width)), vertical),
+        format!(
+            "{} {} {}",
+            vertical,
+            accentize(&center_line(&title, width)),
+            vertical
+        ),
         accentize(&format!(
             "{}{}{}",
             border.junction_left,
@@ -221,7 +226,10 @@ fn accentize(value: &str) -> String {
         return value.to_string();
     }
 
-    format!("{}", value.with(theme_config().accent_color.terminal_color()))
+    format!(
+        "{}",
+        value.with(theme_config().accent_color.terminal_color())
+    )
 }
 
 fn repeat(character: char, count: usize) -> String {

@@ -8,13 +8,15 @@ use crate::config::{
     ApiProvider, Config, DashboardConfig, DashboardLayout, DefaultOutput, TaskSortOrder,
     TimerWidgetMode, Units, config_path,
 };
-use crate::dashboard::{WidgetDefinition, available_widget_definitions, default_enabled_widget_names};
+use crate::dashboard::{
+    WidgetDefinition, available_widget_definitions, default_enabled_widget_names,
+};
 use crate::theme::{AccentColor, BorderStyle};
+use crate::weather::WeatherClient;
 use crate::{
     completion_status_for_current_shell, handle_config_edit, handle_config_open,
     install_completion_for_current_shell, uninstall_completion_for_current_shell,
 };
-use crate::weather::WeatherClient;
 
 pub fn show_config_menu(config: &mut Config) -> Result<(), String> {
     let theme = ColorfulTheme::default();
@@ -462,7 +464,10 @@ fn show_dashboard_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(),
                     .map_err(|err| format!("Failed to read refresh interval: {err}"))?;
                 config.dashboard.refresh_interval = refresh.max(1);
                 config.save()?;
-                println!("Dashboard refresh interval set to {}s.", config.dashboard.refresh_interval);
+                println!(
+                    "Dashboard refresh interval set to {}s.",
+                    config.dashboard.refresh_interval
+                );
             }
             Some(2) => {
                 let items = ["vertical", "horizontal", "auto", "Keep current"];
@@ -633,7 +638,11 @@ fn render_widget_config_screen(
     writeln!(stdout).map_err(|err| format!("Failed to draw widgets screen: {err}"))?;
 
     for (index, widget) in definitions.iter().enumerate() {
-        let enabled = config.dashboard.widgets.iter().any(|item| item == &widget.name);
+        let enabled = config
+            .dashboard
+            .widgets
+            .iter()
+            .any(|item| item == &widget.name);
         let cursor = if index == selected { ">" } else { " " };
         let check = if enabled { "✓" } else { " " };
         writeln!(stdout, "{} [{}] {}", cursor, check, widget.display_name)
@@ -699,7 +708,10 @@ impl Drop for RawModeGuard {
     }
 }
 
-fn configure_dashboard_preferences(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
+fn configure_dashboard_preferences(
+    config: &mut Config,
+    theme: &ColorfulTheme,
+) -> Result<(), String> {
     let items = ["Standard", "Minimal", "Developer", "Keep current"];
     let selection = Select::with_theme(theme)
         .with_prompt("Choose a dashboard layout")
@@ -839,7 +851,11 @@ fn configure_accent_color(config: &mut Config, theme: &ColorfulTheme) -> Result<
 }
 
 fn configure_unicode_preference(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
-    let items = ["Enable Unicode borders", "Use ASCII-only borders", "Keep current"];
+    let items = [
+        "Enable Unicode borders",
+        "Use ASCII-only borders",
+        "Keep current",
+    ];
     let default = if config.theme.unicode_enabled() { 0 } else { 1 };
     let selection = Select::with_theme(theme)
         .with_prompt("Choose border character set")
@@ -1047,7 +1063,12 @@ fn show_server_mode_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(
 
 fn show_advanced_config_menu(config: &Config, theme: &ColorfulTheme) -> Result<(), String> {
     loop {
-        let items = ["Edit config file", "Open config file", "Show config path", "Back"];
+        let items = [
+            "Edit config file",
+            "Open config file",
+            "Show config path",
+            "Back",
+        ];
         let selection = Select::with_theme(theme)
             .with_prompt("Advanced and More Config")
             .items(&items)

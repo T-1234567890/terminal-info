@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
-use crate::context::RuntimeState;
 use crate::PluginResult;
+use crate::context::RuntimeState;
 
 /// Structured output status levels shared by the SDK.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

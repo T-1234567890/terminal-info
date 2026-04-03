@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::plugin::{PluginSearchEntry, installed_plugin_search_entries, registry_plugin_search_entries};
+use crate::plugin::{
+    PluginSearchEntry, installed_plugin_search_entries, registry_plugin_search_entries,
+};
 
 #[derive(Clone)]
 struct BuiltinEntry {
@@ -38,34 +40,156 @@ struct SearchOutput {
 }
 
 const BUILTIN_COMMANDS: &[BuiltinEntry] = &[
-    BuiltinEntry { command: "weather", description: "Weather tools and location-aware forecasts", category: "weather" },
-    BuiltinEntry { command: "weather now", description: "Show current weather for the configured location or a city", category: "weather" },
-    BuiltinEntry { command: "weather forecast", description: "Show a short forecast", category: "weather" },
-    BuiltinEntry { command: "weather hourly", description: "Show hourly weather", category: "weather" },
-    BuiltinEntry { command: "weather alerts", description: "Show active weather alerts", category: "weather" },
-    BuiltinEntry { command: "weather location", description: "Show or set the default weather location", category: "weather" },
-    BuiltinEntry { command: "ping", description: "Test network latency to a host", category: "network" },
-    BuiltinEntry { command: "latency", description: "Run the latency probes used by ping", category: "network" },
-    BuiltinEntry { command: "network", description: "Show local network information", category: "network" },
-    BuiltinEntry { command: "network speed", description: "Measure network download speed", category: "network" },
-    BuiltinEntry { command: "system", description: "Show system information", category: "system" },
-    BuiltinEntry { command: "system hardware", description: "Show detailed hardware inventory", category: "system" },
-    BuiltinEntry { command: "disk", description: "Inspect disk health and reliability", category: "storage" },
-    BuiltinEntry { command: "storage", description: "Analyze filesystem usage and cleanup opportunities", category: "storage" },
-    BuiltinEntry { command: "ps", description: "Inspect running processes", category: "process" },
-    BuiltinEntry { command: "top", description: "Alias for ps sorted process inspection", category: "process" },
-    BuiltinEntry { command: "time", description: "Show local or global times", category: "time" },
-    BuiltinEntry { command: "diagnostic", description: "Run system, network, and plugin diagnostics", category: "diagnostic" },
-    BuiltinEntry { command: "config", description: "Manage configuration and first-run setup", category: "config" },
-    BuiltinEntry { command: "profile", description: "Manage configuration profiles", category: "config" },
-    BuiltinEntry { command: "completion", description: "Generate or install shell completions", category: "shell" },
-    BuiltinEntry { command: "dashboard", description: "Inspect or reset dashboard settings", category: "dashboard" },
-    BuiltinEntry { command: "plugin", description: "Manage plugins and plugin development workflows", category: "plugin" },
-    BuiltinEntry { command: "search", description: "Search built-ins and plugins", category: "search" },
-    BuiltinEntry { command: "update", description: "Install the latest released version of tinfo", category: "maintenance" },
-    BuiltinEntry { command: "self-repair", description: "Repair the current installation", category: "maintenance" },
-    BuiltinEntry { command: "reinstall", description: "Reinstall the latest release", category: "maintenance" },
-    BuiltinEntry { command: "uninstall", description: "Remove the tinfo binary and optionally local data", category: "maintenance" },
+    BuiltinEntry {
+        command: "weather",
+        description: "Weather tools and location-aware forecasts",
+        category: "weather",
+    },
+    BuiltinEntry {
+        command: "weather now",
+        description: "Show current weather for the configured location or a city",
+        category: "weather",
+    },
+    BuiltinEntry {
+        command: "weather forecast",
+        description: "Show a short forecast",
+        category: "weather",
+    },
+    BuiltinEntry {
+        command: "weather hourly",
+        description: "Show hourly weather",
+        category: "weather",
+    },
+    BuiltinEntry {
+        command: "weather alerts",
+        description: "Show active weather alerts",
+        category: "weather",
+    },
+    BuiltinEntry {
+        command: "weather location",
+        description: "Show or set the default weather location",
+        category: "weather",
+    },
+    BuiltinEntry {
+        command: "ping",
+        description: "Test network latency to a host",
+        category: "network",
+    },
+    BuiltinEntry {
+        command: "latency",
+        description: "Run the latency probes used by ping",
+        category: "network",
+    },
+    BuiltinEntry {
+        command: "network",
+        description: "Show local network information",
+        category: "network",
+    },
+    BuiltinEntry {
+        command: "network speed",
+        description: "Measure network download speed",
+        category: "network",
+    },
+    BuiltinEntry {
+        command: "system",
+        description: "Show system information",
+        category: "system",
+    },
+    BuiltinEntry {
+        command: "system hardware",
+        description: "Show detailed hardware inventory",
+        category: "system",
+    },
+    BuiltinEntry {
+        command: "disk",
+        description: "Inspect disk health and reliability",
+        category: "storage",
+    },
+    BuiltinEntry {
+        command: "storage",
+        description: "Analyze filesystem usage and cleanup opportunities",
+        category: "storage",
+    },
+    BuiltinEntry {
+        command: "ps",
+        description: "Inspect running processes",
+        category: "process",
+    },
+    BuiltinEntry {
+        command: "top",
+        description: "Alias for ps sorted process inspection",
+        category: "process",
+    },
+    BuiltinEntry {
+        command: "time",
+        description: "Show local or global times",
+        category: "time",
+    },
+    BuiltinEntry {
+        command: "diagnostic",
+        description: "Run system, network, and plugin diagnostics",
+        category: "diagnostic",
+    },
+    BuiltinEntry {
+        command: "config",
+        description: "Manage configuration and first-run setup",
+        category: "config",
+    },
+    BuiltinEntry {
+        command: "profile",
+        description: "Manage configuration profiles",
+        category: "config",
+    },
+    BuiltinEntry {
+        command: "completion",
+        description: "Generate or install shell completions",
+        category: "shell",
+    },
+    BuiltinEntry {
+        command: "dashboard",
+        description: "Inspect or reset dashboard settings",
+        category: "dashboard",
+    },
+    BuiltinEntry {
+        command: "plugin",
+        description: "Manage plugins and plugin development workflows",
+        category: "plugin",
+    },
+    BuiltinEntry {
+        command: "search",
+        description: "Search built-ins and plugins",
+        category: "search",
+    },
+    BuiltinEntry {
+        command: "install",
+        description: "Install optional modules such as the AI dashboard",
+        category: "maintenance",
+    },
+    BuiltinEntry {
+        command: "list",
+        description: "List optional modules",
+        category: "maintenance",
+    },
+    BuiltinEntry {
+        command: "update",
+        description: "Update the core CLI or an optional module",
+        category: "maintenance",
+    },
+    BuiltinEntry {
+        command: "self-repair",
+        description: "Repair the current installation",
+        category: "maintenance",
+    },
+    BuiltinEntry {
+        command: "reinstall",
+        description: "Reinstall the latest release",
+        category: "maintenance",
+    },
+    BuiltinEntry {
+        command: "uninstall",
+        description: "Remove the core CLI or an optional module",
+        category: "maintenance",
+    },
 ];
 
 pub fn run_search(query_parts: &[String]) -> Result<(), String> {

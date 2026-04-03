@@ -387,6 +387,30 @@
       ],
     },
 
+    chat: {
+      title: "AI Chat",
+      liveSession: true,
+      info: {
+        heading: "Simple terminal AI chat",
+        headingZh: "简单的终端 AI 聊天",
+        desc: "The demo below highlights basic markdown rendering inside the terminal chat view.",
+        descZh: "下面的演示会展示终端聊天中的基础 Markdown 渲染效果。",
+        bullets: [
+          "Interactive AI chat in the terminal",
+          "The prompt always shows provider and model",
+          "OpenRouter is recommended for broad model access"
+        ],
+        bulletsZh: [
+          "直接在终端中进行交互式 AI 聊天",
+          "提示符会始终显示提供商和模型",
+          "推荐使用 OpenRouter 来访问更多模型"
+        ]
+      },
+      lines: [
+        { type: "dynamic-chat" }
+      ]
+    },
+
     weather: {
       title: "Weather",
       command: "tinfo weather now",
@@ -518,8 +542,9 @@
     var heading = currentLanguage === "zh" && info.headingZh ? info.headingZh : info.heading;
     var bullets = currentLanguage === "zh" && info.bulletsZh ? info.bulletsZh : info.bullets;
     var html = '<h3>' + heading + '</h3>';
-    if (info.desc) {
-      html += '<p>' + info.desc + '</p>';
+    var desc = currentLanguage === "zh" && info.descZh ? info.descZh : info.desc;
+    if (desc) {
+      html += '<p>' + desc + '</p>';
     }
     if (bullets && bullets.length) {
       html += '<ul>';
@@ -539,14 +564,17 @@
     var d = demos[key];
     if (!d) return "";
     var html = "";
-    // Command line
-    html += '<div class="term-line"><span class="term-ps">$</span><span class="term-cmd" id="demo-cmd-text"></span><span class="term-cursor" id="demo-cursor"></span></div>';
+    if (!d.liveSession) {
+      html += '<div class="term-line"><span class="term-ps">$</span><span class="term-cmd" id="demo-cmd-text"></span><span class="term-cursor" id="demo-cursor"></span></div>';
+    }
     // Output wrapper (hidden initially)
     html += '<div id="demo-output" style="opacity:0;transition:opacity 0.3s">';
     for (var i = 0; i < d.lines.length; i++) {
       var l = d.lines[i];
       if (l.type === "blank") {
         html += '<div class="term-line" style="height:0.6rem"></div>';
+      } else if (l.type === "dynamic-chat") {
+        html += '<div data-dynamic-box="chat"></div>';
       } else if (l.type === "box") {
         if (
           l.rows &&
@@ -575,6 +603,8 @@
         }
       } else if (l.type === "out") {
         html += '<div class="term-line"><span class="term-out ' + (l.cls || "") + '">' + escHtml(l.text) + '</span></div>';
+      } else if (l.type === "chat-prompt") {
+        html += '<div class="term-line"><span class="term-cmd">' + escHtml(l.text) + '</span></div>';
       } else if (l.type === "kv") {
         html += '<div class="term-line"><span class="term-key">' + escHtml(l.key) + '</span><span class="term-val">' + escHtml(l.val) + '</span></div>';
       } else if (l.type === "check") {
@@ -584,7 +614,9 @@
     }
     html += '</div>';
     // Prompt after output
-    html += '<div id="demo-end-prompt" style="display:none;margin-top:0.5rem"><div class="term-line"><span class="term-ps">$</span><span class="term-cursor"></span></div></div>';
+    if (!d.liveSession) {
+      html += '<div id="demo-end-prompt" style="display:none;margin-top:0.5rem"><div class="term-line"><span class="term-ps">$</span><span class="term-cursor"></span></div></div>';
+    }
     return html;
   }
 
@@ -749,6 +781,92 @@
     }, 1000);
   }
 
+  function renderChatLine(text, cls) {
+    return '<div class="term-line"><span class="' + (cls || "term-out") + '">' + escHtml(text) + '</span></div>';
+  }
+
+  function renderChatPrompt(text) {
+    return '<div class="term-line"><span class="term-cmd">' + escHtml(text) + '</span></div>';
+  }
+
+  function renderMarkdownHeading(text) {
+    return '<div class="term-line"><span class="term-md-heading">' + escHtml(text) + '</span></div>';
+  }
+
+  function renderMarkdownBullet(text) {
+    return '<div class="term-line"><span class="term-md-bullet">' + escHtml(text) + '</span></div>';
+  }
+
+  function renderMarkdownCodeLine(prefix, codeText, suffix) {
+    var html = '<div class="term-line">';
+    if (prefix) {
+      html += '<span class="term-out">' + escHtml(prefix) + '</span>';
+    }
+    html += '<span class="term-md-code">' + escHtml(codeText) + '</span>';
+    if (suffix) {
+      html += '<span class="term-out">' + escHtml(suffix) + '</span>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function startChatDemo() {
+    var output = document.getElementById("demo-output");
+    if (!output) return;
+
+    var modelOptions = [
+      "openai/gpt-5.4-pro",
+      "anthropic/claude-4.6-sonnet",
+      "google/gemini-3.1-pro-preview",
+      "Custom model..."
+    ];
+    var modelIndex = 0;
+    var phase = 0;
+
+    function render() {
+      var html = "";
+      html += renderChatLine("Using provider: OpenRouter", "term-out");
+      html += renderChatLine("Type 'exit' or 'quit' to leave.", "term-out");
+      html += renderChatLine("Tip: /provider switch provider · /model switch model", "term-out");
+      html += '<div class="term-line" style="height:0.6rem"></div>';
+      html += renderChatPrompt("[OpenRouter · openai/gpt-5.4-pro] > Give me a short release note in markdown.");
+      html += '<div class="term-line" style="height:0.6rem"></div>';
+      html += renderChatLine("AI:", "term-cmd");
+      html += renderMarkdownHeading("Release note");
+      html += renderMarkdownBullet("Added live agent approvals");
+      html += renderMarkdownBullet("Simplified the chat prompt");
+      html += renderMarkdownCodeLine("Use ", "cargo check --workspace", " before shipping");
+      html += '<div class="term-line" style="height:0.6rem"></div>';
+      html += renderChatPrompt("[OpenRouter · openai/gpt-5.4-pro] > /model");
+      html += renderChatLine("Select a model with t/t.", "term-out");
+
+      for (var i = 0; i < modelOptions.length; i++) {
+        var prefix = i === modelIndex ? "› " : "  ";
+        html += renderChatLine(prefix + modelOptions[i], "term-out");
+      }
+
+      output.querySelectorAll('[data-dynamic-box="chat"]').forEach(function (node) {
+        node.remove();
+      });
+
+      var wrapper = document.createElement("div");
+      wrapper.setAttribute("data-dynamic-box", "chat");
+      wrapper.innerHTML = html;
+      output.appendChild(wrapper);
+    }
+
+    render();
+    demoValueTimer = window.setInterval(function () {
+      if (phase < 4) {
+        modelIndex = (modelIndex + 1) % modelOptions.length;
+        phase += 1;
+      } else {
+        modelIndex = 0;
+      }
+      render();
+    }, 1100);
+  }
+
   function typeCommand(text, el, cursor, callback) {
     var i = 0;
     el.textContent = "";
@@ -779,6 +897,16 @@
     var cursor   = document.getElementById("demo-cursor");
     var output   = document.getElementById("demo-output");
     var endPrompt = document.getElementById("demo-end-prompt");
+
+    if (d.liveSession) {
+      if (output) {
+        output.style.opacity = "1";
+      }
+      if (key === "chat") {
+        startChatDemo();
+      }
+      return;
+    }
 
     if (!cmdEl) return;
 

@@ -410,8 +410,12 @@ pub fn write_diagnostic_markdown(path: &Path, config: &Config, full: bool) -> Re
         }
     }
 
-    fs::write(path, markdown)
-        .map_err(|err| format!("Failed to write diagnostic markdown {}: {err}", path.display()))?;
+    fs::write(path, markdown).map_err(|err| {
+        format!(
+            "Failed to write diagnostic markdown {}: {err}",
+            path.display()
+        )
+    })?;
     println!("Diagnostic markdown written to {}", path.display());
     Ok(())
 }
@@ -620,8 +624,16 @@ pub fn run_diagnostic_network(server_mode: bool) -> Result<(), String> {
             ),
             doctor_status(
                 "External ping",
-                if google_ping.is_some() { "PASS" } else { "FAIL" },
-                if google_ping.is_some() { "info" } else { "error" },
+                if google_ping.is_some() {
+                    "PASS"
+                } else {
+                    "FAIL"
+                },
+                if google_ping.is_some() {
+                    "info"
+                } else {
+                    "error"
+                },
                 &google_ping
                     .map(|ms| format!("google.com {ms:.0}ms"))
                     .unwrap_or_else(|| "failed".to_string()),
@@ -665,7 +677,11 @@ pub fn run_diagnostic_network(server_mode: bool) -> Result<(), String> {
             ),
             doctor_status(
                 "Public IP",
-                if network.public_ip.is_some() { "PASS" } else { "WARN" },
+                if network.public_ip.is_some() {
+                    "PASS"
+                } else {
+                    "WARN"
+                },
                 if network.public_ip.is_some() {
                     "info"
                 } else {
@@ -676,7 +692,11 @@ pub fn run_diagnostic_network(server_mode: bool) -> Result<(), String> {
             ),
             doctor_status(
                 "Local IP",
-                if network.local_ip.is_some() { "PASS" } else { "WARN" },
+                if network.local_ip.is_some() {
+                    "PASS"
+                } else {
+                    "WARN"
+                },
                 if network.local_ip.is_some() {
                     "info"
                 } else {
@@ -687,7 +707,11 @@ pub fn run_diagnostic_network(server_mode: bool) -> Result<(), String> {
             ),
             doctor_status(
                 "ISP",
-                if network.isp.is_some() { "PASS" } else { "WARN" },
+                if network.isp.is_some() {
+                    "PASS"
+                } else {
+                    "WARN"
+                },
                 if network.isp.is_some() {
                     "info"
                 } else {
@@ -708,7 +732,9 @@ pub fn run_diagnostic_network(server_mode: bool) -> Result<(), String> {
                 ));
             }
             match dns_server() {
-                Ok(server) => checks.push(doctor_status("DNS server", "PASS", "info", &server, "none")),
+                Ok(server) => {
+                    checks.push(doctor_status("DNS server", "PASS", "info", &server, "none"))
+                }
                 Err(_) => checks.push(doctor_status(
                     "DNS server",
                     "WARN",
@@ -856,16 +882,14 @@ pub fn run_diagnostic_system(server_mode: bool) -> Result<(), String> {
             &System::long_os_version().unwrap_or_else(|| "unknown".to_string()),
             "none",
         ),
-        doctor_status(
-            "Architecture",
-            "PASS",
-            "info",
-            env::consts::ARCH,
-            "none",
-        ),
+        doctor_status("Architecture", "PASS", "info", env::consts::ARCH, "none"),
         doctor_status(
             "Shell",
-            if current_shell().is_empty() { "WARN" } else { "PASS" },
+            if current_shell().is_empty() {
+                "WARN"
+            } else {
+                "PASS"
+            },
             if current_shell().is_empty() {
                 "warning"
             } else {
@@ -891,7 +915,11 @@ pub fn run_diagnostic_system(server_mode: bool) -> Result<(), String> {
         ),
         doctor_status(
             "Disk usage",
-            if disk_usage_ratio < 0.9 { "PASS" } else { "WARN" },
+            if disk_usage_ratio < 0.9 {
+                "PASS"
+            } else {
+                "WARN"
+            },
             if disk_usage_ratio < 0.9 {
                 "info"
             } else {
@@ -1589,16 +1617,14 @@ fn collect_diagnostic_checks() -> Vec<DoctorCheck> {
             &System::long_os_version().unwrap_or_else(|| "unknown".to_string()),
             "none",
         ),
-        doctor_status(
-            "Architecture",
-            "PASS",
-            "info",
-            env::consts::ARCH,
-            "none",
-        ),
+        doctor_status("Architecture", "PASS", "info", env::consts::ARCH, "none"),
         doctor_status(
             "Shell",
-            if current_shell().is_empty() { "WARN" } else { "PASS" },
+            if current_shell().is_empty() {
+                "WARN"
+            } else {
+                "PASS"
+            },
             if current_shell().is_empty() {
                 "warning"
             } else {
@@ -2040,7 +2066,12 @@ fn detected_proxies() -> Vec<String> {
         "all_proxy",
     ]
     .into_iter()
-    .filter(|name| env::var(name).ok().filter(|value| !value.is_empty()).is_some())
+    .filter(|name| {
+        env::var(name)
+            .ok()
+            .filter(|value| !value.is_empty())
+            .is_some()
+    })
     .map(str::to_string)
     .collect()
 }
@@ -2115,7 +2146,10 @@ fn smart_info() -> Option<(String, Option<u64>)> {
         let text = String::from_utf8_lossy(&output.stdout);
         let status = text
             .lines()
-            .find_map(|line| line.split_once("SMART Status:").map(|(_, value)| value.trim()))
+            .find_map(|line| {
+                line.split_once("SMART Status:")
+                    .map(|(_, value)| value.trim())
+            })
             .map(str::to_string)?;
         return Some((status, None));
     }

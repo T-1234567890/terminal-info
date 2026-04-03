@@ -64,7 +64,11 @@ pub fn show_network_speed() -> Result<(), String> {
     }
 
     println!("{} Target: {}", success_prefix(), view.target);
-    println!("{} Downloaded: {}", success_prefix(), format_bytes(view.bytes_downloaded));
+    println!(
+        "{} Downloaded: {}",
+        success_prefix(),
+        format_bytes(view.bytes_downloaded)
+    );
     println!(
         "{} Time to first byte: {:.1} ms",
         success_prefix(),
