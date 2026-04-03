@@ -21,10 +21,70 @@ const ANSI_YELLOW: &str = "\x1b[33m";
 const ANSI_RESET: &str = "\x1b[0m";
 
 pub struct ChatOptions {
+    pub mode: ChatMode,
     pub provider: Option<ProviderKind>,
     pub model: Option<String>,
     pub system: Option<String>,
     pub connection: Option<String>,
+    pub input: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChatMode {
+    Chat,
+    Ask,
+    Fix,
+    Summarize,
+    Plan,
+    Doc,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OutputFormat {
+    Plain,
+    Markdown,
+}
+
+impl ChatMode {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Chat => "chat",
+            Self::Ask => "ask",
+            Self::Fix => "fix",
+            Self::Summarize => "summarize",
+            Self::Plan => "plan",
+            Self::Doc => "doc",
+        }
+    }
+
+    fn system_instruction(self) -> Option<&'static str> {
+        match self {
+            Self::Chat => None,
+            Self::Ask => Some(
+                "You are a fast CLI assistant.\n\nAnswer the user's question directly and concisely.\n\nRules:\n- Be short and precise\n- Do not include unnecessary explanation\n- Do not use markdown unless needed\n- Prefer clear, actionable answers",
+            ),
+            Self::Fix => Some(
+                "You are a debugging assistant in a CLI environment.\n\nYour task is to identify problems and suggest fixes.\n\nOutput format:\n1. Problem\n2. Cause\n3. Fix\n\nRules:\n- Be direct and practical\n- Focus on actionable solutions\n- Avoid vague explanations\n- If input is logs or errors, prioritize root cause\n- Keep output structured and easy to scan",
+            ),
+            Self::Summarize => Some(
+                "You are a summarization assistant for terminal users.\n\nYour task is to condense information clearly.\n\nOutput format:\n- Use bullet points\n- Group related ideas\n- Keep it concise\n\nRules:\n- Do not include unnecessary detail\n- Preserve key meaning\n- Prefer structured output over paragraphs",
+            ),
+            Self::Plan => Some(
+                "You are a planning assistant.\n\nYour task is to break down tasks into clear, actionable steps.\n\nOutput format:\n- Use numbered steps\n- Each step should be specific and executable\n\nRules:\n- Avoid vague advice\n- Prefer concrete actions\n- Keep steps logically ordered\n- Use markdown structure (headings and lists)",
+            ),
+            Self::Doc => Some(
+                "You are a documentation generator.\n\nYour task is to produce clean, structured documentation.\n\nOutput format (Markdown):\n- Title\n- Description\n- Usage\n- Examples (if applicable)\n\nRules:\n- Use clear headings\n- Keep explanations concise\n- Avoid marketing language\n- Focus on clarity and usability",
+            ),
+        }
+    }
+
+    fn is_stateless(self) -> bool {
+        self != Self::Chat
+    }
+
+    fn supports_output_format_prompt(self) -> bool {
+        matches!(self, Self::Plan | Self::Doc)
+    }
 }
 
 pub fn run(options: ChatOptions) -> Result<(), String> {
@@ -33,19 +93,37 @@ pub fn run(options: ChatOptions) -> Result<(), String> {
     config = ensure_api_key(config, provider)?;
     let model = resolve_model(&config, provider, options.model)?;
     let connection = resolve_connection(options.connection.as_deref())?;
+    let output_format = resolve_output_format(options.mode)?;
     let system_prompt = build_system_prompt(
         options.system.or_else(|| config.system_prompt().map(str::to_string)),
         connection.as_ref(),
+        options.mode,
+        output_format,
     );
 
     if let Some(stdin_input) = read_piped_stdin()? {
         return run_stdin_analysis(
             &config,
+            options.mode,
+            output_format,
             provider,
             model,
             system_prompt,
             connection.as_ref(),
             &stdin_input,
+        );
+    }
+
+    if options.mode.is_stateless() {
+        return run_single_shot_mode(
+            &config,
+            options.mode,
+            output_format,
+            provider,
+            model,
+            system_prompt,
+            connection.as_ref(),
+            options.input.as_deref(),
         );
     }
 
@@ -271,10 +349,15 @@ fn should_suggest_retry(err: &str) -> bool {
 fn build_system_prompt(
     base: Option<String>,
     connection: Option<&(String, ConnectionConfig)>,
+    mode: ChatMode,
+    _format: OutputFormat,
 ) -> Option<String> {
     let mut parts = Vec::new();
     if let Some(base) = base.filter(|value| !value.trim().is_empty()) {
         parts.push(base);
+    }
+    if let Some(instruction) = mode.system_instruction() {
+        parts.push(instruction.to_string());
     }
     if let Some((name, connection)) = connection {
         let mut block = format!(
@@ -301,14 +384,95 @@ fn build_system_prompt(
     }
 }
 
+fn resolve_output_format(mode: ChatMode) -> Result<OutputFormat, String> {
+    if !mode.supports_output_format_prompt() {
+        return Ok(OutputFormat::Plain);
+    }
+
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Ok(OutputFormat::Markdown);
+    }
+
+    let answer = Input::<String>::new()
+        .with_prompt("Output as Markdown? (Y/n)")
+        .allow_empty(true)
+        .interact_text()
+        .map_err(|err| format!("Failed to read output format: {err}"))?;
+    let normalized = answer.trim().to_ascii_lowercase();
+    if normalized.is_empty() || normalized == "y" || normalized == "yes" {
+        Ok(OutputFormat::Markdown)
+    } else if normalized == "n" || normalized == "no" {
+        Ok(OutputFormat::Plain)
+    } else {
+        Err("Invalid output format selection. Use Y, Enter, n, or no.".to_string())
+    }
+}
+
+fn run_single_shot_mode(
+    config: &AiConfig,
+    mode: ChatMode,
+    output_format: OutputFormat,
+    provider: ProviderKind,
+    model: String,
+    system_prompt: Option<String>,
+    connection: Option<&(String, ConnectionConfig)>,
+    input: Option<&str>,
+) -> Result<(), String> {
+    let input = if let Some(input) = input.filter(|value| !value.trim().is_empty()) {
+        input.to_string()
+    } else if io::stdin().is_terminal() && io::stdout().is_terminal() {
+        read_user_input(
+            provider,
+            &model,
+            connection.map(|(name, _)| name.as_str()),
+        )?
+    } else {
+        return Err(format!("Mode '{}' needs text input or piped stdin.", mode.label()));
+    };
+
+    println!("Mode: {}", mode.label());
+    let processed = process_chat_input(
+        input.trim(),
+        connection.map(|(name, _)| name.as_str()),
+        connection.map(|(_, connection)| connection),
+    )?;
+    for message in &processed.display_messages {
+        println!("{message}");
+    }
+    println!();
+
+    let provider_client = build_provider(config, provider, model, system_prompt)?;
+    let mut renderer = MarkdownStreamRenderer::default();
+    let mut reply = String::new();
+    let outcome = stream_response(
+        provider_client,
+        vec![Message {
+            role: "user".to_string(),
+            content: processed.prompt,
+        }],
+        true,
+        &mut renderer,
+        Some(&mut reply),
+    )?;
+    renderer.finish();
+    println!();
+    if outcome == StreamOutcome::Completed {
+        maybe_save_output(mode, output_format, &reply)?;
+    }
+    Ok(())
+}
+
 fn run_stdin_analysis(
     config: &AiConfig,
+    mode: ChatMode,
+    output_format: OutputFormat,
     provider: ProviderKind,
     model: String,
     system_prompt: Option<String>,
     connection: Option<&(String, ConnectionConfig)>,
     stdin_input: &str,
 ) -> Result<(), String> {
+    println!("Mode: {}", mode.label());
     let processed = build_stdin_analysis_prompt(stdin_input, connection.map(|(_, config)| config));
     for message in &processed.display_messages {
         println!("{message}");
@@ -316,7 +480,8 @@ fn run_stdin_analysis(
     println!();
     let provider_client = build_provider(config, provider, model, system_prompt)?;
     let mut renderer = MarkdownStreamRenderer::default();
-    let _ = stream_response(
+    let mut reply = String::new();
+    let outcome = stream_response(
         provider_client,
         vec![Message {
             role: "user".to_string(),
@@ -324,11 +489,77 @@ fn run_stdin_analysis(
         }],
         false,
         &mut renderer,
-        None,
+        Some(&mut reply),
     )?;
     renderer.finish();
     println!();
+    if outcome == StreamOutcome::Completed {
+        maybe_save_output(mode, output_format, &reply)?;
+    }
     Ok(())
+}
+
+fn maybe_save_output(mode: ChatMode, format: OutputFormat, content: &str) -> Result<(), String> {
+    if !mode.supports_output_format_prompt() || !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Ok(());
+    }
+
+    let answer = Input::<String>::new()
+        .with_prompt("Save output to file? (y/N)")
+        .allow_empty(true)
+        .interact_text()
+        .map_err(|err| format!("Failed to read save choice: {err}"))?;
+    let normalized = answer.trim().to_ascii_lowercase();
+    if normalized != "y" && normalized != "yes" {
+        return Ok(());
+    }
+
+    let default_name = match (mode, format) {
+        (ChatMode::Plan, OutputFormat::Markdown) => "./output.md",
+        (ChatMode::Plan, OutputFormat::Plain) => "./output.txt",
+        (ChatMode::Doc, OutputFormat::Markdown) => "./output.md",
+        (ChatMode::Doc, OutputFormat::Plain) => "./output.txt",
+        _ => "./output.txt",
+    };
+    let path = Input::<String>::new()
+        .with_prompt(format!("Enter file path (default: {default_name})"))
+        .allow_empty(true)
+        .interact_text()
+        .map_err(|err| format!("Failed to read output path: {err}"))?;
+    let final_path = normalize_output_path(path.trim(), default_name, format);
+
+    if final_path.exists() {
+        let overwrite = Input::<String>::new()
+            .with_prompt("File exists. Overwrite? (y/N)")
+            .allow_empty(true)
+            .interact_text()
+            .map_err(|err| format!("Failed to read overwrite choice: {err}"))?;
+        let normalized = overwrite.trim().to_ascii_lowercase();
+        if normalized != "y" && normalized != "yes" {
+            return Ok(());
+        }
+    }
+
+    if let Some(parent) = final_path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)
+            .map_err(|err| format!("Failed to create output directory: {err}"))?;
+    }
+    std::fs::write(&final_path, content)
+        .map_err(|err| format!("Failed to save output: {err}"))?;
+    println!("Saved to: {}", final_path.display());
+    Ok(())
+}
+
+fn normalize_output_path(path: &str, default_name: &str, format: OutputFormat) -> std::path::PathBuf {
+    let raw = if path.is_empty() { default_name } else { path };
+    let mut path = std::path::PathBuf::from(raw);
+    if path.extension().is_none() {
+        path.set_extension(match format {
+            OutputFormat::Markdown => "md",
+            OutputFormat::Plain => "txt",
+        });
+    }
+    path
 }
 
 fn clear_screen() -> Result<(), String> {

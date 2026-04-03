@@ -44,7 +44,9 @@ use tar::Archive;
 use zip::ZipArchive;
 use terminal_info::ai::app::{EntryMode as AiEntryMode, run_entry as run_ai_entry};
 use terminal_info::ai::chat::ProviderKind;
-use terminal_info::ai::cli_chat::{ChatOptions as AiChatOptions, run as run_simple_chat};
+use terminal_info::ai::cli_chat::{
+    ChatMode, ChatOptions as AiChatOptions, run as run_simple_chat,
+};
 use terminal_info::ai::connections::{connections_path, load_connections};
 use terminal_info::ai::hook::{
     HookEventPayload, claude_settings_path, codex_hooks_path, hooks_enabled, install_hooks,
@@ -246,6 +248,28 @@ enum Command {
         #[arg(long)]
         conn: Option<String>,
     },
+    /// Ask the AI a single question
+    Ask {
+        /// AI provider to use
+        #[arg(long, value_enum)]
+        provider: Option<ChatProviderArg>,
+        /// Model override
+        #[arg(long)]
+        model: Option<String>,
+        /// System prompt override
+        #[arg(long)]
+        system: Option<String>,
+        /// Attach a configured connection by name
+        #[arg(long)]
+        conn: Option<String>,
+        /// Optional one-shot input
+        input: Vec<String>,
+    },
+    /// AI one-shot helpers
+    Ai {
+        #[command(subcommand)]
+        command: AiCommand,
+    },
     /// List configured AI connections
     Connections,
     /// Run diagnostics
@@ -375,6 +399,78 @@ enum WrapperCommand {
     Gemini {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum AiCommand {
+    /// Analyze problems and suggest fixes
+    Fix {
+        /// AI provider to use
+        #[arg(long, value_enum)]
+        provider: Option<ChatProviderArg>,
+        /// Model override
+        #[arg(long)]
+        model: Option<String>,
+        /// System prompt override
+        #[arg(long)]
+        system: Option<String>,
+        /// Attach a configured connection by name
+        #[arg(long)]
+        conn: Option<String>,
+        /// Optional one-shot input
+        input: Vec<String>,
+    },
+    /// Create a plan
+    Plan {
+        /// AI provider to use
+        #[arg(long, value_enum)]
+        provider: Option<ChatProviderArg>,
+        /// Model override
+        #[arg(long)]
+        model: Option<String>,
+        /// System prompt override
+        #[arg(long)]
+        system: Option<String>,
+        /// Attach a configured connection by name
+        #[arg(long)]
+        conn: Option<String>,
+        /// Optional one-shot input
+        input: Vec<String>,
+    },
+    /// Write documentation
+    Doc {
+        /// AI provider to use
+        #[arg(long, value_enum)]
+        provider: Option<ChatProviderArg>,
+        /// Model override
+        #[arg(long)]
+        model: Option<String>,
+        /// System prompt override
+        #[arg(long)]
+        system: Option<String>,
+        /// Attach a configured connection by name
+        #[arg(long)]
+        conn: Option<String>,
+        /// Optional one-shot input
+        input: Vec<String>,
+    },
+    /// Summarize content
+    Sum {
+        /// AI provider to use
+        #[arg(long, value_enum)]
+        provider: Option<ChatProviderArg>,
+        /// Model override
+        #[arg(long)]
+        model: Option<String>,
+        /// System prompt override
+        #[arg(long)]
+        system: Option<String>,
+        /// Attach a configured connection by name
+        #[arg(long)]
+        conn: Option<String>,
+        /// Optional one-shot input
+        input: Vec<String>,
     },
 }
 
@@ -824,7 +920,22 @@ fn main() {
             model,
             system,
             conn,
-        }) => handle_chat_command(provider, model, system, conn),
+        }) => handle_chat_command(ChatMode::Chat, provider, model, system, conn, None),
+        Some(Command::Ask {
+            provider,
+            model,
+            system,
+            conn,
+            input,
+        }) => handle_chat_command(
+            ChatMode::Ask,
+            provider,
+            model,
+            system,
+            conn,
+            join_optional_input(input),
+        ),
+        Some(Command::Ai { command }) => handle_ai_command(command),
         Some(Command::Connections) => handle_connections_list(),
         Some(Command::Diagnostic {
             command,
@@ -1904,17 +2015,90 @@ fn handle_agent_command(command: Option<AgentCommand>) -> Result<(), String> {
 }
 
 fn handle_chat_command(
+    mode: ChatMode,
     provider: Option<ChatProviderArg>,
     model: Option<String>,
     system: Option<String>,
     connection: Option<String>,
+    input: Option<String>,
 ) -> Result<(), String> {
     run_simple_chat(AiChatOptions {
+        mode,
         provider: provider.map(ChatProviderArg::into_provider_kind),
         model,
         system,
         connection,
+        input,
     })
+}
+
+fn handle_ai_command(command: AiCommand) -> Result<(), String> {
+    match command {
+        AiCommand::Fix {
+            provider,
+            model,
+            system,
+            conn,
+            input,
+        } => handle_chat_command(
+            ChatMode::Fix,
+            provider,
+            model,
+            system,
+            conn,
+            join_optional_input(input),
+        ),
+        AiCommand::Plan {
+            provider,
+            model,
+            system,
+            conn,
+            input,
+        } => handle_chat_command(
+            ChatMode::Plan,
+            provider,
+            model,
+            system,
+            conn,
+            join_optional_input(input),
+        ),
+        AiCommand::Doc {
+            provider,
+            model,
+            system,
+            conn,
+            input,
+        } => handle_chat_command(
+            ChatMode::Doc,
+            provider,
+            model,
+            system,
+            conn,
+            join_optional_input(input),
+        ),
+        AiCommand::Sum {
+            provider,
+            model,
+            system,
+            conn,
+            input,
+        } => handle_chat_command(
+            ChatMode::Summarize,
+            provider,
+            model,
+            system,
+            conn,
+            join_optional_input(input),
+        ),
+    }
+}
+
+fn join_optional_input(input: Vec<String>) -> Option<String> {
+    if input.is_empty() {
+        None
+    } else {
+        Some(input.join(" "))
+    }
 }
 
 fn handle_connections_list() -> Result<(), String> {

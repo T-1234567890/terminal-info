@@ -376,9 +376,19 @@ tinfo reinstall
 ```bash
 tinfo agent
 tinfo chat
+tinfo ask "why is this slow"
+tinfo ai fix @error.log
+tinfo ai sum @README.md
+tinfo ai plan "release checklist"
+tinfo ai doc @README.md
 ```
 
 `agent` opens the built-in AI agent manager.
-`chat` opens the built-in AI chat manager.
+`chat` opens the built-in multi-turn AI chat.
+`ask` runs a fast single-shot question.
+`ai fix` runs a single-shot debugging mode.
+`ai sum` runs a single-shot summarization mode.
+`ai plan` runs a planning mode with Markdown-or-plain output selection.
+`ai doc` runs a documentation mode with Markdown-or-plain output selection.
 
 See also: `docs/chat.md`

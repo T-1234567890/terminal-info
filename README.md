@@ -136,6 +136,14 @@ Instead of switching between multiple utilities, you get a unified system that c
 
 `tinfo chat` includes two strong developer workflows:
 
+It also now supports fast one-shot modes:
+
+```bash
+tinfo ask "why is this slow"
+tinfo ai fix @error.log
+tinfo ai sum @README.md
+```
+
 ### Pipe logs and command output into AI
 
 ```bash

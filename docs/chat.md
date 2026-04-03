@@ -1,11 +1,88 @@
-# Chat
+# Chat Modes
 
-`tinfo chat` starts a simple interactive AI chat in the terminal.
+The AI CLI uses one shared chat engine with multiple modes:
+
+- `tinfo chat`
+- `tinfo ask`
+- `tinfo ai fix`
+- `tinfo ai sum`
+- `tinfo ai plan`
+- `tinfo ai doc`
 
 It is designed for developer workflows, especially:
 - quick log analysis from stdin
 - file-aware prompts with `@file`
 - fast model switching in a terminal session
+
+## Modes
+
+### chat
+
+```bash
+tinfo chat
+```
+
+- interactive
+- multi-turn
+- keeps history when enabled
+
+### ask
+
+```bash
+tinfo ask "why is this slow"
+cat log.txt | tinfo ask
+```
+
+- single-shot
+- no history
+- concise answer
+- exits after the response
+
+### fix
+
+```bash
+tinfo ai fix @error.log
+cat error.log | tinfo ai fix
+```
+
+- single-shot
+- focused on debugging
+- asks the model to explain the problem, cause, and solution
+
+### summarize
+
+```bash
+tinfo ai sum @README.md
+cat README.md | tinfo ai sum
+```
+
+- single-shot
+- focused on summarization
+- prefers structured, concise output
+
+### plan
+
+```bash
+tinfo ai plan "roll out the plugin registry migration"
+cat notes.txt | tinfo ai plan
+```
+
+- single-shot
+- focused on producing a plan
+- prompts for Markdown or plain text before the request
+- can save the result to a file after output completes
+
+### doc
+
+```bash
+tinfo ai doc @src/main.rs
+cat notes.txt | tinfo ai doc
+```
+
+- single-shot
+- focused on writing documentation
+- prompts for Markdown or plain text before the request
+- can save the result to a file after output completes
 
 ## Recommendation
 
@@ -33,14 +110,58 @@ tinfo chat --system "You are concise and technical."
 tinfo chat --conn my_api
 ```
 
+One-shot modes support the same flags:
+
+```bash
+tinfo ask --provider openrouter "explain this stack trace"
+tinfo ai fix --conn my_api @error.log
+tinfo ai sum --model gpt-5.4 @notes.txt
+tinfo ai plan "migration checklist"
+tinfo ai doc @README.md
+```
+
+## Plan And Doc Output Format
+
+`plan` and `doc` ask for an output format before the AI request when the terminal is interactive:
+
+```text
+Output as Markdown? (Y/n):
+```
+
+Behavior:
+- default is Markdown
+- `Enter` or `y` keeps Markdown output
+- `n` switches to plain text
+
+Prompt behavior changes with the selected format:
+- Markdown forces headings, sections, and lists
+- plain text avoids Markdown formatting
+
+After output completes, `plan` and `doc` can save the result:
+
+```text
+Save output to file? (y/N):
+```
+
+If yes, `tinfo` asks for a path and defaults to:
+- `./output.md` for Markdown
+- `./output.txt` for plain text
+
+If the file already exists, it asks before overwriting.
+
 ## Killer Workflow: Pipe Into Chat
 
-`tinfo chat` supports piped stdin as a one-shot analysis mode.
+All AI modes support piped stdin. `chat` treats piped stdin as one-shot analysis mode, and `ask` / `fix` / `sum` / `plan` / `doc` stay single-shot.
 
 Example:
 
 ```bash
 cat error.log | tinfo chat
+cat error.log | tinfo ask
+cat error.log | tinfo ai fix
+cat README.md | tinfo ai sum
+cat outline.txt | tinfo ai plan
+cat notes.txt | tinfo ai doc
 ```
 
 Behavior:
@@ -55,6 +176,7 @@ Behavior:
 Example output:
 
 ```text
+Mode: fix
 Input detected (log, 2.3KB)
 Analyzing...
 
@@ -69,11 +191,15 @@ This is useful for:
 
 ## File References With `@file`
 
-Inside interactive chat, you can reference files directly:
+All AI modes support `@file` references:
 
 ```text
 @error.log explain this
 @src/main.rs what does this do?
+tinfo ai fix @error.log
+tinfo ai sum @README.md
+tinfo ai plan @plan.txt
+tinfo ai doc @README.md
 ```
 
 Behavior:
@@ -81,7 +207,7 @@ Behavior:
 - shows a load notice such as `Loaded file: error.log (2.1 KB)`
 - injects the file into the prompt as structured context
 
-This keeps chat terminal-native for debugging and code review workflows.
+This keeps the AI CLI terminal-native for debugging and code review workflows.
 
 Notes:
 - file loads are size-limited
