@@ -63,7 +63,7 @@ pub struct Message {
     pub content: String,
 }
 
-pub trait ChatProvider {
+pub trait ChatProvider: Send {
     fn send_message(
         &self,
         messages: Vec<Message>,

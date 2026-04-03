@@ -10,6 +10,7 @@ ALLOWED_PLATFORMS = {"linux", "macos", "windows"}
 NAME_RE = re.compile(r"^[a-z0-9_-]+$")
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+MAX_SHORT_DESCRIPTION = 79
 
 
 def validate_schema(data):
@@ -22,6 +23,7 @@ def validate_schema(data):
         "name",
         "version",
         "description",
+        "short_description",
         "author",
         "binary",
         "platform",
@@ -50,6 +52,16 @@ def validate_schema(data):
     description = data.get("description")
     if "description" in data and not isinstance(description, str):
         errors.append("description must be a string")
+
+    short_description = data.get("short_description")
+    if "short_description" in data:
+        if not isinstance(short_description, str) or not short_description.strip():
+            errors.append("short_description must be a non-empty string")
+        else:
+            if "\n" in short_description or "\r" in short_description:
+                errors.append("short_description must be a single line")
+            if len(short_description.strip()) > MAX_SHORT_DESCRIPTION:
+                errors.append("short_description must be under 80 characters")
 
     author = data.get("author")
     if "author" in data and not isinstance(author, str):

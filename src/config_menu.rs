@@ -3,10 +3,12 @@ use std::io::{self, Write};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use dialoguer::{Confirm, Input, Password, Select, theme::ColorfulTheme};
+use terminal_info::ai::chat::ProviderKind;
+use terminal_info::ai::secret::{SecretStore, SystemSecretStore, remove_provider_key};
 
 use crate::config::{
-    ApiProvider, Config, DashboardConfig, DashboardLayout, DefaultOutput, TaskSortOrder,
-    TimerWidgetMode, Units, config_path,
+    AiApprovalMode, ApiProvider, Config, DashboardConfig, DashboardLayout, DefaultOutput,
+    TaskSortOrder, TimerWidgetMode, Units, config_path,
 };
 use crate::dashboard::{
     WidgetDefinition, available_widget_definitions, default_enabled_widget_names,
@@ -36,6 +38,7 @@ pub fn show_config_menu(config: &mut Config) -> Result<(), String> {
             "Shell Completions",
             "Units",
             "API Keys",
+            "AI Features",
             "Server Mode",
             "Advanced and More Config",
             "Reset Config",
@@ -62,14 +65,15 @@ pub fn show_config_menu(config: &mut Config) -> Result<(), String> {
             Some(10) => show_completion_menu(&theme)?,
             Some(11) => show_units_menu(config, &theme)?,
             Some(12) => show_api_menu(config, &theme)?,
-            Some(13) => show_server_mode_menu(config, &theme)?,
-            Some(14) => show_advanced_config_menu(config, &theme)?,
-            Some(15) => {
+            Some(13) => show_ai_features_menu(config, &theme)?,
+            Some(14) => show_server_mode_menu(config, &theme)?,
+            Some(15) => show_advanced_config_menu(config, &theme)?,
+            Some(16) => {
                 config.reset();
                 config.save()?;
                 println!("Configuration reset.");
             }
-            Some(16) | None => break,
+            Some(17) | None => break,
             Some(_) => {}
         }
     }
@@ -914,7 +918,10 @@ fn show_api_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), Strin
     loop {
         let items = [
             "Set OpenWeather API key",
-            "Clear API key",
+            "Set OpenAI API key",
+            "Set Claude API key",
+            "Set OpenRouter API key",
+            "Clear an API key",
             "Show current API config",
             "Back",
         ];
@@ -943,21 +950,260 @@ fn show_api_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), Strin
                 }
             }
             Some(1) => {
-                config.api_key = None;
-                config.provider = None;
-                config.save()?;
-                println!("API key cleared.");
+                save_ai_provider_key(theme, config, ProviderKind::OpenAi)?;
             }
             Some(2) => {
-                println!("Provider: {}", config.provider_label());
+                save_ai_provider_key(theme, config, ProviderKind::Anthropic)?;
+            }
+            Some(3) => {
+                save_ai_provider_key(theme, config, ProviderKind::OpenRouter)?;
+            }
+            Some(4) => clear_api_key_menu(config, theme)?,
+            Some(5) => show_current_api_config(config),
+            Some(6) | None => break,
+            Some(_) => {}
+        }
+    }
+
+    Ok(())
+}
+
+fn save_ai_provider_key(
+    theme: &ColorfulTheme,
+    config: &mut Config,
+    provider: ProviderKind,
+) -> Result<(), String> {
+    let key = Password::with_theme(theme)
+        .with_prompt(format!("{} API key", provider.display_name()))
+        .allow_empty_password(true)
+        .interact()
+        .map_err(|err| format!("Failed to read API key: {err}"))?;
+
+    if key.trim().is_empty() {
+        println!("API key was not changed.");
+        return Ok(());
+    }
+
+    SystemSecretStore.save_provider_key(provider, &key)?;
+    config.ai.default_provider = Some(provider.config_key().to_string());
+    match provider {
+        ProviderKind::OpenAi => config.ai.providers.openai.api_key = None,
+        ProviderKind::Anthropic => config.ai.providers.anthropic.api_key = None,
+        ProviderKind::OpenRouter => config.ai.providers.openrouter.api_key = None,
+    }
+    config.save()?;
+    println!("{} API key saved.", provider.display_name());
+    Ok(())
+}
+
+fn clear_api_key_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
+    let items = ["OpenWeather", "OpenAI", "Claude", "OpenRouter", "Back"];
+    let selection = Select::with_theme(theme)
+        .with_prompt("Clear which API key?")
+        .items(&items)
+        .default(0)
+        .interact_opt()
+        .map_err(|err| format!("Failed to read API key selection: {err}"))?;
+
+    match selection {
+        Some(0) => {
+            config.api_key = None;
+            config.provider = None;
+            config.save()?;
+            println!("OpenWeather API key cleared.");
+        }
+        Some(1) => clear_ai_provider_key(config, ProviderKind::OpenAi)?,
+        Some(2) => clear_ai_provider_key(config, ProviderKind::Anthropic)?,
+        Some(3) => clear_ai_provider_key(config, ProviderKind::OpenRouter)?,
+        Some(4) | None => {}
+        Some(_) => {}
+    }
+
+    Ok(())
+}
+
+fn clear_ai_provider_key(config: &mut Config, provider: ProviderKind) -> Result<(), String> {
+    remove_provider_key(provider)?;
+    if config.ai.default_provider.as_deref() == Some(provider.config_key()) {
+        config.ai.default_provider = None;
+    }
+    config.save()?;
+    println!("{} API key cleared.", provider.display_name());
+    Ok(())
+}
+
+fn show_current_api_config(config: &Config) {
+    println!("Weather provider: {}", config.provider_label());
+    println!(
+        "OpenWeather API key: {}",
+        config
+            .masked_api_key()
+            .unwrap_or_else(|| "Not set".to_string())
+    );
+    show_ai_key_status("OpenAI", ProviderKind::OpenAi);
+    show_ai_key_status("Claude", ProviderKind::Anthropic);
+    show_ai_key_status("OpenRouter", ProviderKind::OpenRouter);
+}
+
+fn show_ai_key_status(label: &str, provider: ProviderKind) {
+    let value = match SystemSecretStore.load_provider_key(provider) {
+        Ok(Some(key)) => mask_value(&key),
+        Ok(None) => "Not set".to_string(),
+        Err(err) => format!("Unavailable ({err})"),
+    };
+    println!("{label} API key: {value}");
+}
+
+fn mask_value(value: &str) -> String {
+    if value.len() <= 4 {
+        "*".repeat(value.len())
+    } else {
+        format!("{}{}", "*".repeat(value.len() - 4), &value[value.len() - 4..])
+    }
+}
+
+fn show_ai_features_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
+    loop {
+        let items = [
+            "Toggle chat history",
+            "Toggle chat context",
+            "Toggle persisted transcripts",
+            "Edit default AI system prompt",
+            "Set default AI screen",
+            "Toggle remember last AI screen",
+            "Toggle AI tips",
+            "Set agent approval mode",
+            "Toggle AI audit log",
+            "Toggle AI web companion",
+            "Set AI refresh interval",
+            "Toggle compact agent activity",
+            "Back",
+        ];
+        let selection = Select::with_theme(theme)
+            .with_prompt("AI Features")
+            .items(&items)
+            .default(0)
+            .interact_opt()
+            .map_err(|err| format!("Failed to read AI features selection: {err}"))?;
+
+        match selection {
+            Some(0) => {
+                config.ai.runtime.chat_history = !config.ai.runtime.chat_history;
+                config.save()?;
+                println!("AI chat history: {}", config.ai.runtime.chat_history);
+            }
+            Some(1) => {
+                config.ai.runtime.chat_context = !config.ai.runtime.chat_context;
+                config.save()?;
+                println!("AI chat context: {}", config.ai.runtime.chat_context);
+            }
+            Some(2) => {
+                config.ai.runtime.persist_chat_transcripts = !config.ai.runtime.persist_chat_transcripts;
+                config.save()?;
                 println!(
-                    "API key: {}",
-                    config
-                        .masked_api_key()
-                        .unwrap_or_else(|| "Not set".to_string())
+                    "Persist chat transcripts: {}",
+                    config.ai.runtime.persist_chat_transcripts
                 );
             }
-            Some(3) | None => break,
+            Some(3) => {
+                let prompt = Input::<String>::with_theme(theme)
+                    .with_prompt("Default AI system prompt (leave blank to clear)")
+                    .allow_empty(true)
+                    .with_initial_text(config.ai.system_prompt.clone().unwrap_or_default())
+                    .interact_text()
+                    .map_err(|err| format!("Failed to read system prompt: {err}"))?;
+                config.ai.system_prompt = if prompt.trim().is_empty() {
+                    None
+                } else {
+                    Some(prompt.trim().to_string())
+                };
+                config.save()?;
+                println!("Default AI system prompt updated.");
+            }
+            Some(4) => {
+                let items = ["agent", "chat", "dashboard", "Keep current"];
+                let default = match config.ai.ui.default_view.as_str() {
+                    "chat" => 1,
+                    "dashboard" => 2,
+                    _ => 0,
+                };
+                let selection = Select::with_theme(theme)
+                    .with_prompt("Default AI screen")
+                    .items(&items)
+                    .default(default)
+                    .interact_opt()
+                    .map_err(|err| format!("Failed to read default AI screen: {err}"))?;
+                match selection {
+                    Some(0) => config.ai.ui.default_view = "agent".to_string(),
+                    Some(1) => config.ai.ui.default_view = "chat".to_string(),
+                    Some(2) => config.ai.ui.default_view = "dashboard".to_string(),
+                    _ => {}
+                }
+                config.save()?;
+                println!("Default AI screen: {}", config.ai.ui.default_view);
+            }
+            Some(5) => {
+                config.ai.ui.remember_last_view = !config.ai.ui.remember_last_view;
+                config.save()?;
+                println!("Remember last AI screen: {}", config.ai.ui.remember_last_view);
+            }
+            Some(6) => {
+                config.ai.ui.show_tips = !config.ai.ui.show_tips;
+                config.save()?;
+                println!("AI tips enabled: {}", config.ai.ui.show_tips);
+            }
+            Some(7) => {
+                let items = ["manual", "auto", "Keep current"];
+                let default = match config.ai.agent.approval_mode {
+                    AiApprovalMode::Manual => 0,
+                    AiApprovalMode::Auto => 1,
+                };
+                let selection = Select::with_theme(theme)
+                    .with_prompt("Agent approval mode")
+                    .items(&items)
+                    .default(default)
+                    .interact_opt()
+                    .map_err(|err| format!("Failed to read approval mode: {err}"))?;
+                match selection {
+                    Some(0) => config.ai.agent.approval_mode = AiApprovalMode::Manual,
+                    Some(1) => config.ai.agent.approval_mode = AiApprovalMode::Auto,
+                    _ => {}
+                }
+                config.save()?;
+                println!(
+                    "Agent approval mode: {}",
+                    match config.ai.agent.approval_mode {
+                        AiApprovalMode::Manual => "manual",
+                        AiApprovalMode::Auto => "auto",
+                    }
+                );
+            }
+            Some(8) => {
+                config.ai.agent.audit_log = !config.ai.agent.audit_log;
+                config.save()?;
+                println!("AI audit log: {}", config.ai.agent.audit_log);
+            }
+            Some(9) => {
+                config.ai.ui.web_enabled = !config.ai.ui.web_enabled;
+                config.save()?;
+                println!("AI web companion: {}", config.ai.ui.web_enabled);
+            }
+            Some(10) => {
+                let refresh: u64 = Input::with_theme(theme)
+                    .with_prompt("AI refresh interval in milliseconds")
+                    .default(config.ai.ui.refresh_ms.max(100))
+                    .interact_text()
+                    .map_err(|err| format!("Failed to read AI refresh interval: {err}"))?;
+                config.ai.ui.refresh_ms = refresh.max(100);
+                config.save()?;
+                println!("AI refresh interval: {} ms", config.ai.ui.refresh_ms);
+            }
+            Some(11) => {
+                config.ai.agent.compact_activity = !config.ai.agent.compact_activity;
+                config.save()?;
+                println!("Compact agent activity: {}", config.ai.agent.compact_activity);
+            }
+            Some(12) | None => break,
             Some(_) => {}
         }
     }

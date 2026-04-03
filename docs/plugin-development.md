@@ -120,8 +120,10 @@ dist/weather-v0.1.0.tar.gz.minisig
 dist/registry/weather.json
 ```
 
-`dist/registry/<plugin-name>.json` is the ready-to-submit registry JSON for the current build output.
-That JSON already follows the reviewed registry schema, including `repository`, `binary`, `entry`, `platform`, `type`, `requires_network`, optional `assets.icon`, `stability`, `popularity`, and install metadata, so plugin authors should submit the generated file instead of hand-editing registry metadata.
+`dist/registry/<plugin-name>.json` is the ready-to-publish detailed registry JSON for the current build output.
+That JSON already follows the reviewed registry schema, including `repository`, `binary`, `entry`, `platform`, `type`, `requires_network`, optional `assets.icon`, `stability`, `popularity`, and install metadata. Plugin authors should publish that file from the plugin repository and use the central Terminal Info registry only for the matching `plugins/index.json` summary entry.
+
+`short_description` is required for registry review. Keep it to one plain-text line under 80 characters so it reads cleanly in the CLI browser and search results.
 
 If you want to sign a file manually:
 
@@ -144,8 +146,9 @@ Use these before pushing a release tag.
 2. Let GitHub Actions build the release assets
 3. Let GitHub Actions run `tinfo plugin pack --from-dist` and upload the generated registry JSON artifact
 4. Confirm the bundles, checksums, `.minisig` files, and registry JSON artifact exist
-5. Add or update `plugins/<plugin-name>.json` in the Terminal Info registry using the generated JSON
-6. Submit a pull request for review
+5. Publish the generated detailed registry JSON from the plugin repository
+6. Add or update the matching summary entry in `plugins/index.json` in the Terminal Info registry
+7. Submit a pull request for review
 
 ## SDK Example
 

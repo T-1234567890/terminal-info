@@ -70,27 +70,6 @@ Downloads and verifies the release archive with SHA-256 and Minisign before inst
 curl -fsSL -o install.sh https://github.com/T-1234567890/terminal-info/releases/latest/download/install.sh && bash install.sh
 ```
 
-The installer sets up the main `tinfo` CLI, including the built-in AI managers.
-
-Interactive setup:
-
-```bash
-tinfo install
-```
-
-This prompts:
-
-```text
-Install AI module? (Y/n)
-```
-
-Pressing `Enter` installs the AI module for the smoother default path. Direct module commands are still available:
-
-```bash
-tinfo agent
-tinfo chat
-```
-
 Supported release assets include:
 
 - macOS Intel `x86_64`
@@ -135,6 +114,7 @@ Instead of switching between multiple utilities, you get a unified system that c
 ## Features
 
 - **A Plugin Platform**
+- Terminal-native AI chat for developers
 - Dashboard view when running `tinfo`
 - Weather, time, ping, network, system, and diagnostic commands
 - Separate `disk` and `storage` command groups for hardware health and filesystem usage
@@ -151,6 +131,43 @@ Instead of switching between multiple utilities, you get a unified system that c
 - A reusable `tinfo-plugin` SDK crate and plugin developer workflow
 - Plugin widgets with structured JSON output rendered by the dashboard
 - IP-based location detection with provider fallback and local caching
+
+## AI Chat
+
+`tinfo chat` includes two strong developer workflows:
+
+### Pipe logs and command output into AI
+
+```bash
+cat error.log | tinfo chat
+```
+
+This runs a one-shot analysis mode for piped stdin. The terminal flow looks like:
+
+```text
+Input detected (log, 2.3KB)
+Analyzing...
+
+AI: [streamed response]
+```
+
+It is useful for:
+- logs
+- stack traces
+- compiler errors
+- command output from other tools
+
+### Reference files directly in chat
+
+```text
+@error.log explain this
+@src/main.rs what does this do?
+```
+
+This loads the file content into the prompt automatically, which makes `tinfo chat` practical for debugging and code analysis from the terminal.
+
+See:
+- [docs/chat.md](docs/chat.md)
 
 ## Dashboard And Productivity
 

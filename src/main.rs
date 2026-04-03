@@ -45,6 +45,7 @@ use zip::ZipArchive;
 use terminal_info::ai::app::{EntryMode as AiEntryMode, run_entry as run_ai_entry};
 use terminal_info::ai::chat::ProviderKind;
 use terminal_info::ai::cli_chat::{ChatOptions as AiChatOptions, run as run_simple_chat};
+use terminal_info::ai::connections::{connections_path, load_connections};
 use terminal_info::ai::hook::{
     HookEventPayload, claude_settings_path, codex_hooks_path, hooks_enabled, install_hooks,
     read_hook_event_from_stdin, uninstall_hooks,
@@ -241,7 +242,12 @@ enum Command {
         /// System prompt override
         #[arg(long)]
         system: Option<String>,
+        /// Attach a configured connection by name
+        #[arg(long)]
+        conn: Option<String>,
     },
+    /// List configured AI connections
+    Connections,
     /// Run diagnostics
     Diagnostic {
         /// Export the diagnostic result as Markdown to the given path
@@ -817,7 +823,9 @@ fn main() {
             provider,
             model,
             system,
-        }) => handle_chat_command(provider, model, system),
+            conn,
+        }) => handle_chat_command(provider, model, system, conn),
+        Some(Command::Connections) => handle_connections_list(),
         Some(Command::Diagnostic {
             command,
             markdown_out,
@@ -1899,12 +1907,35 @@ fn handle_chat_command(
     provider: Option<ChatProviderArg>,
     model: Option<String>,
     system: Option<String>,
+    connection: Option<String>,
 ) -> Result<(), String> {
     run_simple_chat(AiChatOptions {
         provider: provider.map(ChatProviderArg::into_provider_kind),
         model,
         system,
+        connection,
     })
+}
+
+fn handle_connections_list() -> Result<(), String> {
+    let connections = load_connections()?;
+    if connections.is_empty() {
+        println!(
+            "No connections configured. Add entries to {}",
+            connections_path()?.display()
+        );
+        return Ok(());
+    }
+
+    for (name, connection) in connections {
+        if let Some(description) = connection.description.as_deref() {
+            println!("{name}\n  {}\n  {}\n", connection.url, description);
+        } else {
+            println!("{name}\n  {}\n", connection.url);
+        }
+    }
+
+    Ok(())
 }
 
 impl ChatProviderArg {

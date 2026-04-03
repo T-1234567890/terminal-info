@@ -2,6 +2,11 @@
 
 `tinfo chat` starts a simple interactive AI chat in the terminal.
 
+It is designed for developer workflows, especially:
+- quick log analysis from stdin
+- file-aware prompts with `@file`
+- fast model switching in a terminal session
+
 ## Recommendation
 
 For most users, `OpenRouter` is the best default choice.
@@ -25,6 +30,78 @@ tinfo chat --provider claude
 tinfo chat --provider openrouter
 tinfo chat --model gpt-5.4
 tinfo chat --system "You are concise and technical."
+tinfo chat --conn my_api
+```
+
+## Killer Workflow: Pipe Into Chat
+
+`tinfo chat` supports piped stdin as a one-shot analysis mode.
+
+Example:
+
+```bash
+cat error.log | tinfo chat
+```
+
+Behavior:
+- detects non-interactive stdin
+- shows a short detected-input banner, for example:
+  - `Input detected (log, 2.3KB)`
+  - `Analyzing...`
+- wraps the input into a structured analysis prompt
+- asks the model to explain it, identify issues, and suggest fixes
+- streams one response, then exits
+
+Example output:
+
+```text
+Input detected (log, 2.3KB)
+Analyzing...
+
+AI: [streamed response]
+```
+
+This is useful for:
+- logs
+- stack traces
+- compiler output
+- command output from other tools
+
+## File References With `@file`
+
+Inside interactive chat, you can reference files directly:
+
+```text
+@error.log explain this
+@src/main.rs what does this do?
+```
+
+Behavior:
+- loads the referenced file from disk
+- shows a load notice such as `Loaded file: error.log (2.1 KB)`
+- injects the file into the prompt as structured context
+
+This keeps chat terminal-native for debugging and code review workflows.
+
+Notes:
+- file loads are size-limited
+- missing files fail clearly instead of silently being ignored
+
+## Connections
+
+Connections are config-defined external resources that add context without tool execution.
+
+Commands:
+
+```bash
+tinfo connections
+tinfo chat --conn my_api
+```
+
+When a connection is active, the prompt shows it:
+
+```text
+[OpenRouter · model · my_api] >
 ```
 
 ## In-Chat Commands
@@ -33,8 +110,10 @@ tinfo chat --system "You are concise and technical."
 - `/model` switch model
 - `/new` start a new chat
 - `/chats` open saved chats
-- `exit` leave chat
-- `quit` leave chat
+- `/clear` clear the screen
+- `/copy` copy the last assistant response
+- `/exit` leave chat
+- `/quit` leave chat
 
 ## Provider Models
 

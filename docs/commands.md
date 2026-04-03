@@ -337,8 +337,8 @@ tinfo plugin remove <name>
 `plugin sign` signs a plugin artifact and writes a sibling `.minisig` file.
 `plugin inspect` shows local plugin metadata and compatibility information for the current project.
 `plugin test` validates the current plugin project, runs `--metadata`, and previews local plugin output with simulated host values.
-`plugin pack` builds a release binary, bundles it with `plugin.toml`, writes a checksum, signs the bundle, and generates `dist/registry/<plugin-name>.json`.
-`plugin pack --from-dist` skips the local build and generates registry JSON from previously downloaded workflow artifacts in `dist/`.
+`plugin pack` builds a release binary, bundles it with `plugin.toml`, writes a checksum, signs the bundle, and generates `dist/registry/<plugin-name>.json` for the plugin repository.
+`plugin pack --from-dist` skips the local build and generates the same detailed registry JSON from previously downloaded workflow artifacts in `dist/`.
 `plugin doctor` checks installed plugins for manifest, registry, path, checksum, and binary issues.
 `plugin lint` validates the current plugin project files.
 `plugin publish-check` validates plugin project files and release layout before publishing.

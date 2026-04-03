@@ -2074,13 +2074,6 @@ fn render_plugin_section(
             },
         ));
         html.push_str("</p>");
-        if !plugin.description.trim().is_empty()
-            && plugin.short_description.trim() != plugin.description.trim()
-        {
-            html.push_str("<div class=\"meta\">");
-            html.push_str(&html_escape(&plugin.description));
-            html.push_str("</div>");
-        }
         html.push_str("<div class=\"meta\">");
         if !plugin.author.trim().is_empty() {
             html.push_str("by ");
@@ -2500,6 +2493,12 @@ pub fn init_plugin_template(name: Option<String>) -> Result<(), String> {
         return Err("Description cannot be empty.".to_string());
     }
 
+    let default_short_description = default_short_description_for(&plugin_name, &description);
+    let short_description = prompt_value("Short description", &default_short_description)?;
+    let short_description = short_description.trim().to_string();
+    validate_short_description(&short_description)
+        .map_err(|err| format!("Invalid short description: {err}"))?;
+
     let directory = env::current_dir()
         .map_err(|err| format!("Failed to read current directory: {err}"))?
         .join(project_path);
@@ -2518,7 +2517,7 @@ pub fn init_plugin_template(name: Option<String>) -> Result<(), String> {
 
     fs::write(
         directory.join("plugin.toml"),
-        plugin_manifest_template(&plugin_name, &description),
+        plugin_manifest_template(&plugin_name, &description, &short_description),
     )
     .map_err(|err| format!("Failed to write plugin.toml: {err}"))?;
     fs::write(directory.join("Cargo.toml"), cargo_template(&plugin_name))
@@ -3106,6 +3105,8 @@ fn validate_plugin_index(index: &PluginIndexFile) -> Result<(), String> {
                 plugin.name
             ));
         }
+        validate_short_description(&plugin.short_description)
+            .map_err(|err| format!("Plugin '{}': {err}", plugin.name))?;
         validate_plugin_assets(&plugin.assets, &plugin.name)?;
         if !seen.insert(plugin.name.clone()) {
             return Err(format!(
@@ -3131,6 +3132,7 @@ fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
         || plugin.author.trim().is_empty()
         || plugin.license.trim().is_empty()
         || plugin.description.trim().is_empty()
+        || plugin.short_description.trim().is_empty()
         || plugin.repository.trim().is_empty()
         || plugin.binary.trim().is_empty()
         || plugin.entry.trim().is_empty()
@@ -3148,6 +3150,9 @@ fn validate_plugin_metadata(plugin: &PluginMetadata) -> Result<(), String> {
             plugin.name
         ));
     }
+
+    validate_short_description(&plugin.short_description)
+        .map_err(|err| format!("Plugin '{}': {err}", plugin.name))?;
 
     if !plugin.repository.starts_with("https://github.com/") {
         return Err(format!(
@@ -3317,6 +3322,31 @@ fn validate_capability(value: &str) -> Result<(), String> {
             value
         )),
     }
+}
+
+fn validate_short_description(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("short_description is required.".to_string());
+    }
+    if trimmed.contains('\n') || trimmed.contains('\r') {
+        return Err("short_description must be a single line.".to_string());
+    }
+    if trimmed.chars().count() > 79 {
+        return Err("short_description must be under 80 characters.".to_string());
+    }
+    if trimmed.chars().any(|ch| ch.is_control()) {
+        return Err("short_description must use plain text.".to_string());
+    }
+    Ok(())
+}
+
+fn default_short_description_for(plugin_name: &str, description: &str) -> String {
+    let trimmed = description.trim();
+    if !trimmed.is_empty() && trimmed.chars().count() < 80 {
+        return trimmed.to_string();
+    }
+    format!("{plugin_name} plugin for Terminal Info")
 }
 
 fn parse_github_repo(url: &str) -> Result<(String, String), String> {
@@ -3651,7 +3681,7 @@ fn write_plugin_manifest(
         .map_err(|err| format!("Failed to write plugin manifest: {err}"))
 }
 
-fn plugin_manifest_template(name: &str, description: &str) -> String {
+fn plugin_manifest_template(name: &str, description: &str, short_description: &str) -> String {
     format!(
         r#"[plugin]
 name = "{name}"
@@ -3672,7 +3702,7 @@ capabilities = ["config", "cache"]
 [release]
 repository = "https://github.com/OWNER/tinfo-{name}"
 pubkey_path = "keys/minisign.pub"
-short_description = "{description}"
+short_description = "{short_description}"
 "#,
         version = env!("CARGO_PKG_VERSION")
     )
@@ -3820,8 +3850,9 @@ cargo test
 
 1. Publish a GitHub release for this plugin
 2. Download the generated registry JSON artifact or use `dist/registry/{name}.json`
-3. Add or update `plugins/{name}.json` in the Terminal Info repository
-4. Open a pull request for registry review
+3. Publish that detailed registry JSON from this plugin repository
+4. Add or update the matching summary entry in `plugins/index.json` in the Terminal Info repository
+5. Open a pull request for registry review
 "#
     )
 }

@@ -3,7 +3,7 @@
   "plugins": [
     {
       "name": "news",
-      "registry": "https://raw.githubusercontent.com/T-1234567890/terminal-info/main/plugins/news.json",
+      "registry": "https://raw.githubusercontent.com/example/tinfo-news/main/registry/news.json",
       "version": "0.2.1",
       "description": "Fetches current news headlines from reviewed remote sources.",
       "short_description": "Current news headlines in the terminal",

@@ -70,7 +70,7 @@ Each plugin author:
 - signs their own plugin release artifacts
 - submits the public key in the reviewed registry entry
 
-Terminal Info verifies plugin downloads against the plugin-specific `pubkey` stored in `plugins/<plugin-name>.json`.
+Terminal Info verifies plugin downloads against the plugin-specific `pubkey` stored in the plugin's detailed registry JSON referenced by `plugins/index.json`.
 
 ## Trust Model
 

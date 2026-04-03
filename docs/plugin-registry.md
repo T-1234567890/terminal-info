@@ -9,6 +9,8 @@ The registry uses two layers:
 
 This keeps the first fetch small, supports pagination in the browser, and avoids fetching every plugin definition just to render a list.
 
+The summary index lives in the central Terminal Info registry repository. Detailed plugin registry JSON should be hosted by each plugin in its own repository or release assets, and the summary index points to that URL.
+
 ## Layer 1: index.json
 
 `index.json` is the summary layer for plugin discovery. It should stay lightweight even when the registry grows large.
@@ -18,12 +20,12 @@ Required fields:
 - `version`
 - `plugins[].name`
 - `plugins[].registry`
+- `plugins[].short_description`
 
 Recommended summary fields for browser and search:
 
 - `plugins[].version`
 - `plugins[].description`
-- `plugins[].short_description`
 - `plugins[].author`
 - `plugins[].repository`
 - `plugins[].homepage`
@@ -47,7 +49,7 @@ Example:
   "plugins": [
     {
       "name": "news",
-      "registry": "https://raw.githubusercontent.com/T-1234567890/terminal-info/main/plugins/news.json",
+      "registry": "https://raw.githubusercontent.com/example/tinfo-news/main/registry/news.json",
       "version": "0.2.1",
       "description": "Fetches current news headlines from reviewed remote sources.",
       "short_description": "Current news headlines in the terminal",
@@ -69,12 +71,26 @@ Example:
 
 Summary entries should contain enough metadata for `tinfo plugin search` and `tinfo plugin browse` to render a useful catalog without downloading every per-plugin file up front.
 
+`short_description` is the CLI-first summary field and should follow these rules:
+
+- one single line
+- under 80 characters
+- plain text only
+- quick to scan in a terminal list
+- explain what the plugin does, not marketing copy
+
+Examples:
+
+- `Show weather information in terminal`
+- `Analyze logs using AI`
+- `Manage local Docker containers`
+
 ## Layer 2: per-plugin registry JSON
 
 Each plugin has one detailed registry file:
 
 ```text
-plugins/<plugin-name>.json
+<plugin repository>/registry/<plugin-name>.json
 ```
 
 Example:
@@ -120,7 +136,6 @@ Example:
 
 Optional discovery fields:
 
-- `short_description`: compact summary used in search and browser cards
 - `homepage`: preferred user-facing project URL
 - `assets.icon`: optional icon under `assets/`, usually `assets/icon.png`
 - `screenshots`: optional preview asset URLs for the local browser UI
@@ -159,6 +174,7 @@ Required plugin metadata fields:
 - `name`: plugin command name
 - `version`: exact reviewed release version
 - `description`: full human-readable description
+- `short_description`: compact CLI summary used in search and browser cards
 - `author`: plugin author or maintainer
 - `license`: `MIT` or `Apache-2.0`
 - `repository`: GitHub repository URL used to derive release asset URLs
@@ -171,6 +187,8 @@ Required plugin metadata fields:
 - `capabilities`: declared SDK capabilities
 - `pubkey`: Minisign public key used for verification
 - `checksums`: per-target SHA-256 checksums
+
+`description` can be longer than `short_description`, but it should still stay factual and concise. Two to four plain sentences is enough for most plugins.
 
 ## Asset Rules
 
@@ -289,8 +307,9 @@ Then:
 
 1. publish the signed release assets
 2. generate or download the registry JSON produced by `tinfo plugin pack`
-3. update `plugins/<plugin-name>.json`
-4. submit a pull request
+3. publish that detailed JSON from the plugin repository
+4. update `plugins/index.json` so its `registry` URL points to the new detailed JSON
+5. submit a pull request
 
 ## Review expectations
 
@@ -300,7 +319,7 @@ Registry review should check:
 - built-in command conflicts
 - repository legitimacy
 - manifest and metadata shape
-- summary metadata consistency between `index.json` and per-plugin JSON
+- summary metadata consistency between `index.json` and the plugin-hosted detailed JSON
 - optional asset paths and naming
 - stability classification
 - install fallback metadata

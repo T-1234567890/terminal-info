@@ -69,6 +69,10 @@ impl AiConfig {
         Ok(Self::load_default())
     }
 
+    pub fn system_prompt(&self) -> Option<&str> {
+        self.shared.system_prompt.as_deref()
+    }
+
     pub fn provider_label(&self) -> String {
         let provider = self
             .configured_default_provider()

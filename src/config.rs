@@ -344,6 +344,8 @@ pub struct AiAgentSettings {
     pub approval_mode: AiApprovalMode,
     #[serde(default = "default_true")]
     pub audit_log: bool,
+    #[serde(default = "default_true")]
+    pub compact_activity: bool,
 }
 
 impl Default for AiAgentSettings {
@@ -351,6 +353,7 @@ impl Default for AiAgentSettings {
         Self {
             approval_mode: AiApprovalMode::default(),
             audit_log: true,
+            compact_activity: true,
         }
     }
 }
@@ -404,6 +407,12 @@ pub struct AiUiSettings {
     pub web_enabled: bool,
     #[serde(default = "default_ai_ui_refresh_ms")]
     pub refresh_ms: u64,
+    #[serde(default = "default_ai_default_view")]
+    pub default_view: String,
+    #[serde(default = "default_true")]
+    pub remember_last_view: bool,
+    #[serde(default = "default_true")]
+    pub show_tips: bool,
 }
 
 impl Default for AiUiSettings {
@@ -411,6 +420,9 @@ impl Default for AiUiSettings {
         Self {
             web_enabled: true,
             refresh_ms: default_ai_ui_refresh_ms(),
+            default_view: default_ai_default_view(),
+            remember_last_view: true,
+            show_tips: true,
         }
     }
 }
@@ -471,6 +483,8 @@ impl Default for AiAdaptersConfig {
 pub struct AiSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<String>,
     #[serde(default)]
     pub providers: AiProvidersConfig,
     #[serde(default)]
@@ -491,6 +505,7 @@ impl Default for AiSettings {
     fn default() -> Self {
         Self {
             default_provider: None,
+            system_prompt: None,
             providers: AiProvidersConfig::default(),
             agent: AiAgentSettings::default(),
             runtime: AiRuntimeSettings::default(),
@@ -532,6 +547,10 @@ fn default_ai_api_bind() -> String {
 
 fn default_ai_ui_refresh_ms() -> u64 {
     1000
+}
+
+fn default_ai_default_view() -> String {
+    "agent".to_string()
 }
 
 fn default_disabled_ai_adapter(command: &str, adapter: &str) -> AiAgentCliConfig {

@@ -5,7 +5,8 @@ This repository stores the reviewed plugin registry for `tinfo`.
 The registry is lightweight and decentralized:
 
 - plugin code is not stored here
-- the minimal plugin index and reviewed per-plugin JSON metadata are stored here
+- the minimal reviewed summary index is stored here
+- each plugin's detailed registry JSON is hosted in the plugin's own repository
 - plugin binaries are hosted by plugin authors on GitHub
 
 ## Submission Flow
@@ -15,15 +16,16 @@ To submit a plugin:
 1. Create a plugin repository
 2. Publish a GitHub release for the plugin binary
 3. Generate registry JSON with `tinfo plugin pack`
-4. Add or update a metadata JSON file in `plugins/`
-5. Open a pull request
+4. Publish the generated detailed registry JSON from the plugin repository
+5. Add or update the summary entry in `plugins/index.json`
+6. Open a pull request
 
 ## Metadata Schema
 
 The registry uses two JSON layers:
 
 - `plugins/index.json` lists plugin names and the URL of each detailed registry file
-- `plugins/<plugin-name>.json` stores the full reviewed metadata for one plugin
+- the detailed registry file itself is hosted in the plugin repository and referenced by URL
 
 Each detailed plugin file must be defined by JSON like this:
 
@@ -50,7 +52,12 @@ Fields:
 - `version`
   - exact reviewed release version
 - `description`
-  - short human-readable description
+  - longer human-readable description for detail views
+- `short_description`
+  - required CLI summary
+  - single line
+  - under 80 characters
+  - plain text only
 - `author`
   - plugin author or maintainer
 - `license`
@@ -76,6 +83,7 @@ Checks include:
 
 - JSON syntax validity
 - required fields present
+- `short_description` is one line and under 80 characters
 - no duplicate plugin names
 - no names conflicting with reserved built-in commands
 - repository URL shape
