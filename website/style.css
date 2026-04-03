@@ -381,6 +381,10 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
 .term-title-txt  { color: var(--text); font-weight: 600; }
 .term-key   { color: var(--text-muted); }
 .term-val   { color: var(--term-text); }
+.term-md-heading { color: var(--term-text); font-weight: 700; }
+.term-md-bullet  { color: var(--term-output); padding-left: 1rem; position: relative; display: inline-block; }
+.term-md-bullet::before { content: "•"; position: absolute; left: 0; color: var(--term-prompt); }
+.term-md-code { color: var(--term-text); background: rgba(198, 124, 46, 0.12); padding: 0 0.25rem; }
 
 .term-box {
   color: var(--term-text);

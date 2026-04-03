@@ -393,15 +393,15 @@
       info: {
         heading: "Simple terminal AI chat",
         headingZh: "简单的终端 AI 聊天",
-        desc: "The demo below highlights basic markdown rendering inside the terminal chat view.",
-        descZh: "下面的演示会展示终端聊天中的基础 Markdown 渲染效果。",
         bullets: [
           "Interactive AI chat in the terminal",
+          "Shows basic markdown rendering in the chat output",
           "The prompt always shows provider and model",
           "OpenRouter is recommended for broad model access"
         ],
         bulletsZh: [
           "直接在终端中进行交互式 AI 聊天",
+          "展示聊天输出中的基础 Markdown 渲染",
           "提示符会始终显示提供商和模型",
           "推荐使用 OpenRouter 来访问更多模型"
         ]
@@ -542,10 +542,6 @@
     var heading = currentLanguage === "zh" && info.headingZh ? info.headingZh : info.heading;
     var bullets = currentLanguage === "zh" && info.bulletsZh ? info.bulletsZh : info.bullets;
     var html = '<h3>' + heading + '</h3>';
-    var desc = currentLanguage === "zh" && info.descZh ? info.descZh : info.desc;
-    if (desc) {
-      html += '<p>' + desc + '</p>';
-    }
     if (bullets && bullets.length) {
       html += '<ul>';
       for (var i = 0; i < bullets.length; i++) {
