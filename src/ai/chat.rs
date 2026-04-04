@@ -1,6 +1,7 @@
 use std::io::{BufRead, BufReader};
 
 use reqwest::blocking::Client;
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -373,10 +374,14 @@ fn complete_openai_like(
         }));
     }
 
-    let response = client
+    let mut request = client
         .post(endpoint)
         .bearer_auth(api_key)
-        .header("User-Agent", "tinfo")
+        .header("User-Agent", "tinfo");
+    if session.provider() == ProviderKind::OpenRouter {
+        request = request.headers(openrouter_attribution_headers());
+    }
+    let response = request
         .json(&json!({
             "model": session.model(),
             "messages": messages,
@@ -422,10 +427,14 @@ where
         }));
     }
 
-    let response = client
+    let mut request = client
         .post(endpoint)
         .bearer_auth(api_key)
-        .header("User-Agent", "tinfo")
+        .header("User-Agent", "tinfo");
+    if session.provider() == ProviderKind::OpenRouter {
+        request = request.headers(openrouter_attribution_headers());
+    }
+    let response = request
         .json(&json!({
             "model": session.model(),
             "messages": messages,
@@ -621,6 +630,23 @@ fn default_endpoint(provider: ProviderKind) -> &'static str {
         ProviderKind::Anthropic => "https://api.anthropic.com/v1/messages",
         ProviderKind::OpenRouter => "https://openrouter.ai/api/v1/chat/completions",
     }
+}
+
+fn openrouter_attribution_headers() -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "HTTP-Referer",
+        HeaderValue::from_static("https://tinfo.1234567890.dev"),
+    );
+    headers.insert(
+        "X-OpenRouter-Title",
+        HeaderValue::from_static("Terminal Info (tinfo)"),
+    );
+    headers.insert(
+        "X-OpenRouter-Categories",
+        HeaderValue::from_static("cli-agent,programming-app"),
+    );
+    headers
 }
 
 struct OpenAiProvider {

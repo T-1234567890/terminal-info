@@ -918,9 +918,9 @@ fn show_api_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), Strin
     loop {
         let items = [
             "Set OpenWeather API key",
+            "Set OpenRouter API key (Recommended · multi-model support)",
             "Set OpenAI API key",
             "Set Claude API key",
-            "Set OpenRouter API key",
             "Clear an API key",
             "Show current API config",
             "Back",
@@ -950,13 +950,13 @@ fn show_api_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), Strin
                 }
             }
             Some(1) => {
-                save_ai_provider_key(theme, config, ProviderKind::OpenAi)?;
+                save_ai_provider_key(theme, config, ProviderKind::OpenRouter)?;
             }
             Some(2) => {
-                save_ai_provider_key(theme, config, ProviderKind::Anthropic)?;
+                save_ai_provider_key(theme, config, ProviderKind::OpenAi)?;
             }
             Some(3) => {
-                save_ai_provider_key(theme, config, ProviderKind::OpenRouter)?;
+                save_ai_provider_key(theme, config, ProviderKind::Anthropic)?;
             }
             Some(4) => clear_api_key_menu(config, theme)?,
             Some(5) => show_current_api_config(config),
@@ -997,7 +997,13 @@ fn save_ai_provider_key(
 }
 
 fn clear_api_key_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), String> {
-    let items = ["OpenWeather", "OpenAI", "Claude", "OpenRouter", "Back"];
+    let items = [
+        "OpenWeather",
+        "OpenRouter (Recommended · multi-model support)",
+        "OpenAI",
+        "Claude",
+        "Back",
+    ];
     let selection = Select::with_theme(theme)
         .with_prompt("Clear which API key?")
         .items(&items)
@@ -1012,9 +1018,9 @@ fn clear_api_key_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(), 
             config.save()?;
             println!("OpenWeather API key cleared.");
         }
-        Some(1) => clear_ai_provider_key(config, ProviderKind::OpenAi)?,
-        Some(2) => clear_ai_provider_key(config, ProviderKind::Anthropic)?,
-        Some(3) => clear_ai_provider_key(config, ProviderKind::OpenRouter)?,
+        Some(1) => clear_ai_provider_key(config, ProviderKind::OpenRouter)?,
+        Some(2) => clear_ai_provider_key(config, ProviderKind::OpenAi)?,
+        Some(3) => clear_ai_provider_key(config, ProviderKind::Anthropic)?,
         Some(4) | None => {}
         Some(_) => {}
     }
@@ -1040,9 +1046,12 @@ fn show_current_api_config(config: &Config) {
             .masked_api_key()
             .unwrap_or_else(|| "Not set".to_string())
     );
+    show_ai_key_status(
+        "OpenRouter (Recommended · multi-model support)",
+        ProviderKind::OpenRouter,
+    );
     show_ai_key_status("OpenAI", ProviderKind::OpenAi);
     show_ai_key_status("Claude", ProviderKind::Anthropic);
-    show_ai_key_status("OpenRouter", ProviderKind::OpenRouter);
 }
 
 fn show_ai_key_status(label: &str, provider: ProviderKind) {

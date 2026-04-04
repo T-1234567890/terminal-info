@@ -51,7 +51,9 @@ fn maybe_prompt_for_api_key(config: AiConfig, mode: EntryMode) -> Result<AiConfi
     }
 
     let install = Confirm::new()
-        .with_prompt("No AI provider API key found. Add an OpenAI API key now?")
+        .with_prompt(
+            "No AI provider API key found. Add an OpenRouter API key now? (Recommended · multi-model support)",
+        )
         .default(true)
         .interact()
         .map_err(|err| format!("Failed to read confirmation: {err}"))?;
@@ -60,11 +62,11 @@ fn maybe_prompt_for_api_key(config: AiConfig, mode: EntryMode) -> Result<AiConfi
     }
 
     let api_key = Password::new()
-        .with_prompt("OpenAI API key")
+        .with_prompt("OpenRouter API key (Recommended · multi-model support)")
         .allow_empty_password(false)
         .interact()
         .map_err(|err| format!("Failed to read API key: {err}"))?;
-    AiConfig::save_provider_api_key(ProviderKind::OpenAi, api_key)
+    AiConfig::save_provider_api_key(ProviderKind::OpenRouter, api_key)
 }
 
 fn parse_mode_from_env() -> EntryMode {

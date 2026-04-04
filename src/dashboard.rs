@@ -579,11 +579,10 @@ fn render_section_grid(sections: &[RenderedSection], columns: usize, gap: usize)
             let parts = row
                 .iter()
                 .map(|section| {
-                    section
-                        .lines
-                        .get(line_idx)
-                        .cloned()
-                        .unwrap_or_else(|| " ".repeat(section.width))
+                    section.lines.get(line_idx).map_or_else(
+                        || " ".repeat(section.width),
+                        |line| pad_grid_line(line, section.width),
+                    )
                 })
                 .collect::<Vec<_>>();
             lines.push(parts.join(&" ".repeat(gap)));
@@ -594,6 +593,44 @@ fn render_section_grid(sections: &[RenderedSection], columns: usize, gap: usize)
         lines.pop();
     }
     format!("{}\n", lines.join("\n"))
+}
+
+fn pad_grid_line(line: &str, width: usize) -> String {
+    let visible = visible_width(line);
+    if visible >= width {
+        line.to_string()
+    } else {
+        format!("{line}{}", " ".repeat(width - visible))
+    }
+}
+
+fn visible_width(line: &str) -> usize {
+    let mut width = 0usize;
+    let chars = line.chars().collect::<Vec<_>>();
+    let mut i = 0usize;
+
+    while i < chars.len() {
+        if chars[i] == '\x1b' {
+            i += 1;
+            if i < chars.len() && chars[i] == '[' {
+                i += 1;
+                while i < chars.len() {
+                    let ch = chars[i];
+                    i += 1;
+                    if ('@'..='~').contains(&ch) {
+                        break;
+                    }
+                }
+                continue;
+            }
+            continue;
+        }
+
+        width += 1;
+        i += 1;
+    }
+
+    width
 }
 
 fn normalize_tip_line(line: &str) -> String {

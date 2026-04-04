@@ -682,14 +682,14 @@ fn select_provider() -> Result<ProviderKind, String> {
     }
 
     println!("Select a provider:");
-    println!("1. OpenAI");
-    println!("2. Claude");
-    println!("3. OpenRouter");
+    println!("1. OpenRouter (Recommended · multi-model support)");
+    println!("2. OpenAI");
+    println!("3. Claude");
     println!();
     let choices = [
+        ProviderKind::OpenRouter,
         ProviderKind::OpenAi,
         ProviderKind::Anthropic,
-        ProviderKind::OpenRouter,
     ];
     let selection = Input::<String>::new()
         .with_prompt("Provider")
@@ -698,10 +698,10 @@ fn select_provider() -> Result<ProviderKind, String> {
         .map_err(|err| format!("Failed to read provider selection: {err}"))?;
     let normalized = selection.trim().to_ascii_lowercase();
     let provider = match normalized.as_str() {
-        "1" | "openai" => choices[0],
-        "2" | "claude" | "anthropic" => choices[1],
-        "3" | "openrouter" => choices[2],
-        _ => return Err("Invalid provider selection. Use 1, 2, 3, openai, claude, or openrouter.".to_string()),
+        "1" | "openrouter" => choices[0],
+        "2" | "openai" => choices[1],
+        "3" | "claude" | "anthropic" => choices[2],
+        _ => return Err("Invalid provider selection. Use 1, 2, 3, openrouter, openai, or claude.".to_string()),
     };
     let _ = AiConfig::save_default_provider(provider)?;
     Ok(provider)
