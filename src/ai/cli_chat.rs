@@ -1217,15 +1217,21 @@ fn stream_response(
 
         match rx.recv_timeout(Duration::from_millis(80)) {
             Ok(ResponseEvent::Chunk(chunk)) => {
-                saw_output = true;
                 if let Some(reply) = reply.as_deref_mut() {
                     reply.push_str(&chunk);
                 }
+                let cleaned = clean_stream_chunk(&chunk);
+                if cleaned.is_empty() {
+                    continue;
+                }
+                if !saw_output {
+                    print!("\rAI:\n");
+                    saw_output = true;
+                }
                 if paused {
-                    paused_chunks.push(chunk);
+                    paused_chunks.push(cleaned);
                 } else {
-                    print!("\rAI: ");
-                    renderer.push(&chunk);
+                    renderer.push(&cleaned);
                     io::stdout()
                         .flush()
                         .map_err(|err| format!("Failed to flush chat output: {err}"))?;
@@ -1237,12 +1243,14 @@ fn stream_response(
                         .map_err(|err| format!("Failed to disable chat controls: {err}"))?;
                 }
                 if !paused_chunks.is_empty() {
-                    print!("\rAI: ");
+                    if !saw_output {
+                        print!("\rAI:\n");
+                    }
                     for chunk in paused_chunks.drain(..) {
                         renderer.push(&chunk);
                     }
                 } else if !saw_output {
-                    print!("\rAI: ");
+                    print!("\rAI:");
                 }
                 io::stdout()
                     .flush()
@@ -1268,6 +1276,28 @@ fn stream_response(
             }
         }
     }
+}
+
+fn clean_stream_chunk(chunk: &str) -> String {
+    let stripped = strip_terminal_escape_sequences(chunk);
+    let mut cleaned = String::with_capacity(stripped.len());
+
+    for line in stripped.split_inclusive('\n') {
+        let (content, newline) = match line.strip_suffix('\n') {
+            Some(content) => (content, "\n"),
+            None => (line, ""),
+        };
+        let content = content.strip_prefix("AI: ").unwrap_or(content);
+        let content = content.strip_prefix("AI:").unwrap_or(content);
+        let filtered = content
+            .chars()
+            .filter(|ch| *ch == '\n' || *ch == '\t' || !ch.is_control())
+            .collect::<String>();
+        cleaned.push_str(&filtered);
+        cleaned.push_str(newline);
+    }
+
+    cleaned
 }
 
 #[derive(Default)]
@@ -1498,15 +1528,16 @@ fn render_table_row_aligned(row: &[String], widths: &[usize]) -> String {
         let pad = width.saturating_sub(value.chars().count());
         parts.push(format!("{rendered}{}", " ".repeat(pad)));
     }
-    format!("| {} |", parts.join(" | "))
+    parts.join("   ")
 }
 
 fn render_table_rule(widths: &[usize]) -> String {
-    let segments = widths
+    let total_width = widths
         .iter()
-        .map(|width| "─".repeat((*width).max(1)))
-        .collect::<Vec<_>>();
-    format!("{ANSI_DIM}|-{}-|{ANSI_RESET}", segments.join("-|-"))
+        .map(|width| (*width).max(1))
+        .sum::<usize>()
+        + widths.len().saturating_sub(1) * 3;
+    format!("{ANSI_DIM}{}{ANSI_RESET}", "─".repeat(total_width.max(1)))
 }
 
 fn render_inline_markdown(value: &str) -> String {

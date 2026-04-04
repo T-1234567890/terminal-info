@@ -69,13 +69,6 @@ fn classify_stdin_input(input: &str) -> &'static str {
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>();
 
-    if looks_like_toml(&non_empty_lines)
-        || looks_like_json(sample)
-        || looks_like_yaml(&non_empty_lines)
-    {
-        return "config";
-    }
-
     if lower.contains("traceback")
         || lower.contains("exception")
         || lower.contains("stack trace")
@@ -93,6 +86,10 @@ fn classify_stdin_input(input: &str) -> &'static str {
         return "log";
     }
 
+    if looks_like_markdown(&non_empty_lines) {
+        return "markdown";
+    }
+
     if lower.contains("fn ")
         || lower.contains("class ")
         || lower.contains("import ")
@@ -104,7 +101,48 @@ fn classify_stdin_input(input: &str) -> &'static str {
         return "code";
     }
 
+    if looks_like_toml(&non_empty_lines)
+        || looks_like_json(sample)
+        || looks_like_yaml(&non_empty_lines)
+    {
+        return "config";
+    }
+
     "text"
+}
+
+fn looks_like_markdown(lines: &[&str]) -> bool {
+    if lines.is_empty() {
+        return false;
+    }
+
+    let mut score = 0usize;
+    for line in lines.iter().take(40) {
+        if line.starts_with("# ")
+            || line.starts_with("## ")
+            || line.starts_with("### ")
+            || line.starts_with("- ")
+            || line.starts_with("* ")
+            || line.starts_with("> ")
+            || line.starts_with("```")
+        {
+            score += 2;
+        }
+
+        if line.contains('|') && line.matches('|').count() >= 2 {
+            score += 1;
+        }
+
+        if line.starts_with('[') && (line.contains("](") || line.contains("]: ")) {
+            score += 1;
+        }
+
+        if split_numbered_list_marker(line).is_some() {
+            score += 1;
+        }
+    }
+
+    score >= 2
 }
 
 fn looks_like_toml(lines: &[&str]) -> bool {
@@ -149,6 +187,23 @@ fn looks_like_yaml(lines: &[&str]) -> bool {
     }
 
     mappings >= 3
+}
+
+fn split_numbered_list_marker(value: &str) -> Option<&str> {
+    let mut chars = value.char_indices();
+    let mut end = 0usize;
+    for (idx, ch) in &mut chars {
+        if ch.is_ascii_digit() {
+            end = idx + ch.len_utf8();
+            continue;
+        }
+        if ch == '.' && end > 0 {
+            let rest = &value[idx + ch.len_utf8()..];
+            return rest.strip_prefix(' ');
+        }
+        break;
+    }
+    None
 }
 
 pub fn process_chat_input(
