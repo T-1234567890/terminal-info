@@ -1,6 +1,6 @@
 [package]
 name = "terminal-info"
-version = "1.4.1"
+version = "1.4.2"
 edition = "2024"
 
 description = "An extensible terminal information CLI and developer toolbox"
@@ -61,4 +61,5 @@ sysinfo = "0.33"
 toml = "0.8"
 flate2 = "1.1"
 tar = "0.4"
+textwrap = "0.16"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }

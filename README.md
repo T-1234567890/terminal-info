@@ -142,7 +142,17 @@ It also now supports fast one-shot modes:
 tinfo ask "why is this slow"
 tinfo ai fix @error.log
 tinfo ai sum @README.md
+tinfo ai fix --file src/main.rs
 ```
+
+AI modes now gather useful local context by default before sending the request:
+- current working directory
+- detected project type
+- git status and recent changes when available
+- recent logs when useful
+- basic environment info such as OS and shell
+
+You can turn that off per run with `--no-context`, or switch to simple mode from `tinfo config` -> `AI Features`.
 
 ### Pipe logs and command output into AI
 
@@ -173,6 +183,13 @@ It is useful for:
 ```
 
 This loads the file content into the prompt automatically, which makes `tinfo chat` practical for debugging and code analysis from the terminal.
+
+You can also attach a file directly:
+
+```bash
+tinfo ai fix --file src/main.rs
+tinfo ai doc --file README.md
+```
 
 See:
 - [docs/chat.md](docs/chat.md)

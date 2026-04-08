@@ -12,6 +12,8 @@ The AI CLI uses one shared chat engine with multiple modes:
 It is designed for developer workflows, especially:
 - quick log analysis from stdin
 - file-aware prompts with `@file`
+- explicit file input with `--file`
+- automatic local context gathering
 - fast model switching in a terminal session
 
 ## Modes
@@ -31,6 +33,7 @@ tinfo chat
 ```bash
 tinfo ask "why is this slow"
 cat log.txt | tinfo ask
+tinfo ask --file Cargo.toml
 ```
 
 - single-shot
@@ -43,6 +46,7 @@ cat log.txt | tinfo ask
 ```bash
 tinfo ai fix @error.log
 cat error.log | tinfo ai fix
+tinfo ai fix --file src/main.rs
 ```
 
 - single-shot
@@ -108,13 +112,18 @@ tinfo chat --provider openrouter
 tinfo chat --model gpt-5.4
 tinfo chat --system "You are concise and technical."
 tinfo chat --conn my_api
+tinfo chat --file README.md
+tinfo chat --no-context
 ```
 
 One-shot modes support the same flags:
 
 ```bash
 tinfo ask --provider openrouter "explain this stack trace"
+tinfo ask --file Cargo.toml
 tinfo ai fix --conn my_api @error.log
+tinfo ai fix --file src/main.rs
+tinfo ai fix --no-context
 tinfo ai sum --model gpt-5.4 @notes.txt
 tinfo ai plan "migration checklist"
 tinfo ai doc @README.md
@@ -189,6 +198,42 @@ This is useful for:
 - compiler output
 - command output from other tools
 
+## Intelligent Context Gathering
+
+Automatic context gathering is enabled by default.
+
+Before sending a request, `tinfo` can include:
+- current working directory
+- detected project type
+- git repo state and recent changes
+- recent logs when no primary log/error input was provided
+- environment metadata such as OS and shell
+
+The terminal shows this transparently, for example:
+
+```text
+Gathering context...
+✓ Detected project: Rust
+✓ Found git repo
+✓ Including recent changes
+```
+
+Primary input still wins:
+- piped stdin is treated as the main input
+- `--file` attaches a specific file as the main input
+- free text remains the main question
+
+Disable this per run with:
+
+```bash
+tinfo ai fix --no-context
+```
+
+Or switch to simple mode in:
+- `tinfo config`
+- `AI Features`
+- `Toggle simple AI mode (disable auto context)`
+
 ## File References With `@file`
 
 All AI modes support `@file` references:
@@ -212,6 +257,8 @@ This keeps the AI CLI terminal-native for debugging and code review workflows.
 Notes:
 - file loads are size-limited
 - missing files fail clearly instead of silently being ignored
+
+All one-shot modes also support explicit file input with `--file`.
 
 ## Connections
 
@@ -266,7 +313,7 @@ When a connection is active, the prompt shows it:
 
 - `z-ai/glm-5v-turbo`
 - `stepfun/step-3.5-flash:free`
-- `qwen/qwen3.6-plus-preview`
+- `qwen/qwen3.6-plus-preview:free`
 - `nvidia/nemotron-3-super:free`
 - `anthropic/claude-4.6-sonnet`
 - `anthropic/claude-4.6-opus`

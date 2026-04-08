@@ -1,17 +1,24 @@
 use std::io::{self, IsTerminal, Write};
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crossterm::cursor::MoveToColumn;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode, size as terminal_size};
+use crossterm::{execute, terminal::Clear, terminal::ClearType};
 use dialoguer::{Input, Password, Select, theme::ColorfulTheme};
+use textwrap::{Options as TextWrapOptions, wrap as textwrap_wrap};
 
 use crate::ai::chat::{ChatRole, ChatSession, HistoryMode, Message, ProviderKind, build_provider};
+use crate::ai::context::{ContextRequest, gather_context};
 use crate::ai::connections::{ConnectionConfig, get_connection};
 use crate::ai::config::AiConfig;
-use crate::ai::input::{build_stdin_analysis_prompt, process_chat_input, read_piped_stdin};
+use crate::ai::input::{
+    build_stdin_analysis_prompt, load_explicit_file_context, process_chat_input, read_piped_stdin,
+};
 use crate::ai::storage::Storage;
 
 const ANSI_BOLD: &str = "\x1b[1m";
@@ -19,6 +26,7 @@ const ANSI_DIM: &str = "\x1b[2m";
 const ANSI_CYAN: &str = "\x1b[36m";
 const ANSI_YELLOW: &str = "\x1b[33m";
 const ANSI_RESET: &str = "\x1b[0m";
+const DEFAULT_SYSTEM_PROMPT: &str = "You are a helpful AI assistant.\n\nYou should:\n- provide clear and structured answers\n- prioritize correctness and usefulness\n- adapt to the user's request\n\nDo NOT assume a specific identity or model name.";
 
 pub struct ChatOptions {
     pub mode: ChatMode,
@@ -26,6 +34,8 @@ pub struct ChatOptions {
     pub model: Option<String>,
     pub system: Option<String>,
     pub connection: Option<String>,
+    pub file: Option<PathBuf>,
+    pub context_enabled: bool,
     pub input: Option<String>,
 }
 
@@ -94,12 +104,17 @@ pub fn run(options: ChatOptions) -> Result<(), String> {
     let model = resolve_model(&config, provider, options.model)?;
     let connection = resolve_connection(options.connection.as_deref())?;
     let output_format = resolve_output_format(options.mode)?;
+    let auto_context_enabled = options.context_enabled && config.auto_context_enabled();
     let system_prompt = build_system_prompt(
         options.system.or_else(|| config.system_prompt().map(str::to_string)),
         connection.as_ref(),
         options.mode,
         output_format,
     );
+
+    if options.file.is_some() && !io::stdin().is_terminal() {
+        return Err("Use either --file or piped stdin, not both.".to_string());
+    }
 
     if let Some(stdin_input) = read_piped_stdin()? {
         return run_stdin_analysis(
@@ -110,6 +125,8 @@ pub fn run(options: ChatOptions) -> Result<(), String> {
             model,
             system_prompt,
             connection.as_ref(),
+            auto_context_enabled,
+            options.file.as_deref(),
             &stdin_input,
         );
     }
@@ -123,6 +140,8 @@ pub fn run(options: ChatOptions) -> Result<(), String> {
             model,
             system_prompt,
             connection.as_ref(),
+            options.file.as_deref(),
+            auto_context_enabled,
             options.input.as_deref(),
         );
     }
@@ -153,11 +172,33 @@ pub fn run(options: ChatOptions) -> Result<(), String> {
         system: system_prompt,
         history_enabled,
         context_enabled,
+        auto_context_enabled,
         connection: connection.clone(),
         storage,
         session,
     };
     sync_state_from_session(&mut state);
+
+    if let Some(file) = options.file.as_deref() {
+        let processed = build_explicit_file_input(
+            file,
+            None,
+            state.connection.as_ref().map(|(name, _)| name.as_str()),
+            state.connection.as_ref().map(|(_, connection)| connection),
+        )?;
+        for message in &processed.display_messages {
+            println!("{message}");
+        }
+        let prompt = merge_with_context(
+            processed.prompt,
+            build_context_block(state.auto_context_enabled, Some(file), false)?,
+        );
+        state
+            .session
+            .push_message(ChatRole::User, prompt, now_unix());
+        persist_session(&state)?;
+        execute_response(&mut state)?;
+    }
 
     loop {
         let input = read_user_input(
@@ -217,11 +258,14 @@ pub fn run(options: ChatOptions) -> Result<(), String> {
         for message in &processed.display_messages {
             println!("{message}");
         }
-
+        let prompt = merge_with_context(
+            processed.prompt,
+            build_context_block(state.auto_context_enabled, None, false)?,
+        );
         let now = now_unix();
         state
             .session
-            .push_message(ChatRole::User, processed.prompt, now);
+            .push_message(ChatRole::User, prompt, now);
         persist_session(&state)?;
         execute_response(&mut state)?;
     }
@@ -236,6 +280,7 @@ struct ChatState {
     system: Option<String>,
     history_enabled: bool,
     context_enabled: bool,
+    auto_context_enabled: bool,
     connection: Option<(String, ConnectionConfig)>,
     storage: Option<Storage>,
     session: ChatSession,
@@ -307,13 +352,13 @@ fn execute_response(state: &mut ChatState) -> Result<(), String> {
     ) {
         Ok(outcome) => outcome,
         Err(err) => {
-            renderer.finish();
+            renderer.finish()?;
             println!();
             print_chat_error(&err);
             return Ok(());
         }
     };
-    renderer.finish();
+    renderer.finish()?;
     println!();
     println!();
 
@@ -355,6 +400,8 @@ fn build_system_prompt(
     let mut parts = Vec::new();
     if let Some(base) = base.filter(|value| !value.trim().is_empty()) {
         parts.push(base);
+    } else {
+        parts.push(DEFAULT_SYSTEM_PROMPT.to_string());
     }
     if let Some(instruction) = mode.system_instruction() {
         parts.push(instruction.to_string());
@@ -416,29 +463,48 @@ fn run_single_shot_mode(
     model: String,
     system_prompt: Option<String>,
     connection: Option<&(String, ConnectionConfig)>,
+    file: Option<&Path>,
+    auto_context_enabled: bool,
     input: Option<&str>,
 ) -> Result<(), String> {
     let input = if let Some(input) = input.filter(|value| !value.trim().is_empty()) {
-        input.to_string()
-    } else if io::stdin().is_terminal() && io::stdout().is_terminal() {
-        read_user_input(
+        Some(input.to_string())
+    } else if file.is_none() && io::stdin().is_terminal() && io::stdout().is_terminal() {
+        let entered = read_user_input(
             provider,
             &model,
             connection.map(|(name, _)| name.as_str()),
-        )?
+        )?;
+        if entered.trim().is_empty() {
+            None
+        } else {
+            Some(entered)
+        }
     } else {
-        return Err(format!("Mode '{}' needs text input or piped stdin.", mode.label()));
+        None
     };
 
+    if input.is_none() && file.is_none() && !auto_context_enabled {
+        return Err(format!(
+            "Mode '{}' needs text input, --file, piped stdin, or automatic context enabled.",
+            mode.label()
+        ));
+    }
+
     println!("Mode: {}", mode.label());
-    let processed = process_chat_input(
-        input.trim(),
+    let processed = build_primary_input(
+        input.as_deref(),
+        file,
         connection.map(|(name, _)| name.as_str()),
         connection.map(|(_, connection)| connection),
     )?;
     for message in &processed.display_messages {
         println!("{message}");
     }
+    let prompt = merge_with_context(
+        processed.prompt,
+        build_context_block(auto_context_enabled, file, input.is_some())?,
+    );
     println!();
 
     let provider_client = build_provider(config, provider, model, system_prompt)?;
@@ -448,13 +514,13 @@ fn run_single_shot_mode(
         provider_client,
         vec![Message {
             role: "user".to_string(),
-            content: processed.prompt,
+            content: prompt,
         }],
         true,
         &mut renderer,
         Some(&mut reply),
     )?;
-    renderer.finish();
+    renderer.finish()?;
     println!();
     if outcome == StreamOutcome::Completed {
         maybe_save_output(mode, output_format, &reply)?;
@@ -470,6 +536,8 @@ fn run_stdin_analysis(
     model: String,
     system_prompt: Option<String>,
     connection: Option<&(String, ConnectionConfig)>,
+    auto_context_enabled: bool,
+    file: Option<&Path>,
     stdin_input: &str,
 ) -> Result<(), String> {
     println!("Mode: {}", mode.label());
@@ -477,6 +545,10 @@ fn run_stdin_analysis(
     for message in &processed.display_messages {
         println!("{message}");
     }
+    let prompt = merge_with_context(
+        processed.prompt,
+        build_context_block(auto_context_enabled, file, true)?,
+    );
     println!();
     let provider_client = build_provider(config, provider, model, system_prompt)?;
     let mut renderer = MarkdownStreamRenderer::default();
@@ -485,18 +557,108 @@ fn run_stdin_analysis(
         provider_client,
         vec![Message {
             role: "user".to_string(),
-            content: processed.prompt,
+            content: prompt,
         }],
         false,
         &mut renderer,
         Some(&mut reply),
     )?;
-    renderer.finish();
+    renderer.finish()?;
     println!();
     if outcome == StreamOutcome::Completed {
         maybe_save_output(mode, output_format, &reply)?;
     }
     Ok(())
+}
+
+fn build_primary_input(
+    input: Option<&str>,
+    file: Option<&Path>,
+    connection_name: Option<&str>,
+    connection: Option<&ConnectionConfig>,
+) -> Result<crate::ai::input::ProcessedChatInput, String> {
+    if let Some(file) = file {
+        return build_explicit_file_input(file, input, connection_name, connection);
+    }
+
+    if let Some(input) = input {
+        return process_chat_input(input.trim(), connection_name, connection);
+    }
+
+    Ok(crate::ai::input::ProcessedChatInput {
+        display_messages: Vec::new(),
+        prompt: "No direct input was provided. Diagnose likely issues using the gathered project context.".to_string(),
+    })
+}
+
+fn build_explicit_file_input(
+    file: &Path,
+    input: Option<&str>,
+    connection_name: Option<&str>,
+    connection: Option<&ConnectionConfig>,
+) -> Result<crate::ai::input::ProcessedChatInput, String> {
+    let file = load_explicit_file_context(file)?;
+    let size_kb = file.size_bytes as f64 / 1024.0;
+    let mut display_messages = if file.truncated {
+        vec![format!("Loaded file: {} ({size_kb:.1} KB, truncated)", file.display_name)]
+    } else {
+        vec![format!("Loaded file: {} ({size_kb:.1} KB)", file.display_name)]
+    };
+
+    if let Some(name) = connection_name {
+        display_messages.push(format!("Attached connection: {name}"));
+    } else if let Some(conn) = connection {
+        display_messages.push(format!("Attached connection: {}", conn.url));
+    }
+
+    let question = input
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("Please analyze this file and help with the next steps.");
+    let prompt = format!(
+        "---\nFile: {}\n\n{}\n\n---\nUser question:\n{}\n\n---",
+        file.display_name,
+        file.content.trim_end(),
+        question
+    );
+
+    Ok(crate::ai::input::ProcessedChatInput {
+        display_messages,
+        prompt,
+    })
+}
+
+fn build_context_block(
+    enabled: bool,
+    explicit_file: Option<&Path>,
+    primary_input_present: bool,
+) -> Result<Option<String>, String> {
+    if !enabled {
+        return Ok(None);
+    }
+
+    let cwd = std::env::current_dir().map_err(|err| format!("Failed to resolve current directory: {err}"))?;
+    let context = gather_context(&ContextRequest {
+        cwd,
+        explicit_file: explicit_file.map(Path::to_path_buf),
+        primary_input_present,
+    });
+    for message in &context.display_messages {
+        println!("{message}");
+    }
+    if context.prompt_block.trim().is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(context.prompt_block))
+    }
+}
+
+fn merge_with_context(primary_prompt: String, context_block: Option<String>) -> String {
+    if let Some(context_block) = context_block {
+        format!("{context_block}\n\n{primary_prompt}")
+    } else {
+        primary_prompt
+    }
 }
 
 fn maybe_save_output(mode: ChatMode, format: OutputFormat, content: &str) -> Result<(), String> {
@@ -806,7 +968,7 @@ fn models_for(provider: ProviderKind) -> &'static [&'static str] {
         ProviderKind::OpenRouter => &[
             "z-ai/glm-5v-turbo",
             "stepfun/step-3.5-flash:free",
-            "qwen/qwen3.6-plus-preview",
+            "qwen/qwen3.6-plus-preview:free",
             "nvidia/nemotron-3-super:free",
             "anthropic/claude-4.6-sonnet",
             "anthropic/claude-4.6-opus",
@@ -839,7 +1001,7 @@ fn openrouter_model_items() -> &'static [(&'static str, &'static str)] {
     &[
         ("z-ai/glm-5v-turbo", "z-ai/glm-5v-turbo"),
         ("stepfun/step-3.5-flash:free", "stepfun/step-3.5-flash:free"),
-        ("qwen/qwen3.6-plus-preview", "qwen/qwen3.6-plus-preview"),
+        ("qwen/qwen3.6-plus-preview:free", "qwen/qwen3.6-plus-preview:free"),
         ("nvidia/nemotron-3-super:free", "nvidia/nemotron-3-super:free"),
         ("anthropic/claude-4.6-sonnet", "anthropic/claude-4.6-sonnet"),
         ("anthropic/claude-4.6-opus", "anthropic/claude-4.6-opus"),
@@ -1163,13 +1325,12 @@ fn stream_response(
     if controls_enabled {
         enable_raw_mode().map_err(|err| format!("Failed to enable chat controls: {err}"))?;
         raw_mode_enabled = true;
-        println!("{ANSI_DIM}Press Space to pause/resume · q to stop the current response{ANSI_RESET}");
+        write_terminal_line(&format!(
+            "{ANSI_DIM}Press Space to pause/resume · q to stop the current response{ANSI_RESET}"
+        ))?;
     }
 
-    print!("AI: ");
-    io::stdout()
-        .flush()
-        .map_err(|err| format!("Failed to flush chat output: {err}"))?;
+    write_terminal("AI: ")?;
 
     let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
     let mut spinner_index = 0usize;
@@ -1192,22 +1353,20 @@ fn stream_response(
                                 disable_raw_mode()
                                     .map_err(|err| format!("Failed to disable chat controls: {err}"))?;
                             }
-                            println!("\rAI: [stopped]");
+                            redraw_ai_status_line("[stopped]")?;
+                            write_terminal_line("")?;
                             return Ok(StreamOutcome::Stopped);
                         }
                         KeyCode::Char(' ') => {
                             paused = !paused;
                             if paused {
-                                print!("\rAI: [paused]");
+                                redraw_ai_status_line("[paused]")?;
                             } else {
-                                print!("\rAI: ");
+                                redraw_ai_status_line("")?;
                                 for chunk in paused_chunks.drain(..) {
-                                    renderer.push(&chunk);
+                                    renderer.push(&chunk)?;
                                 }
                             }
-                            io::stdout()
-                                .flush()
-                                .map_err(|err| format!("Failed to update chat output: {err}"))?;
                         }
                         _ => {}
                     }
@@ -1225,16 +1384,14 @@ fn stream_response(
                     continue;
                 }
                 if !saw_output {
-                    print!("\rAI:\n");
+                    clear_current_terminal_line()?;
+                    write_terminal_line("AI:")?;
                     saw_output = true;
                 }
                 if paused {
                     paused_chunks.push(cleaned);
                 } else {
-                    renderer.push(&cleaned);
-                    io::stdout()
-                        .flush()
-                        .map_err(|err| format!("Failed to flush chat output: {err}"))?;
+                    renderer.push(&cleaned)?;
                 }
             }
             Ok(ResponseEvent::Done(result)) => {
@@ -1244,26 +1401,19 @@ fn stream_response(
                 }
                 if !paused_chunks.is_empty() {
                     if !saw_output {
-                        print!("\rAI:\n");
+                        clear_current_terminal_line()?;
+                        write_terminal_line("AI:")?;
                     }
                     for chunk in paused_chunks.drain(..) {
-                        renderer.push(&chunk);
+                        renderer.push(&chunk)?;
                     }
-                } else if !saw_output {
-                    print!("\rAI:");
                 }
-                io::stdout()
-                    .flush()
-                    .map_err(|err| format!("Failed to flush chat output: {err}"))?;
                 result?;
                 return Ok(StreamOutcome::Completed);
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 if !saw_output && !paused {
-                    print!("\rAI: {}", frames[spinner_index % frames.len()]);
-                    io::stdout()
-                        .flush()
-                        .map_err(|err| format!("Failed to flush chat output: {err}"))?;
+                    redraw_ai_status_line(frames[spinner_index % frames.len()])?;
                     spinner_index += 1;
                 }
             }
@@ -1276,6 +1426,21 @@ fn stream_response(
             }
         }
     }
+}
+
+fn clear_current_terminal_line() -> Result<(), String> {
+    execute!(io::stdout(), MoveToColumn(0), Clear(ClearType::CurrentLine))
+        .map_err(|err| format!("Failed to update chat output: {err}"))
+}
+
+fn redraw_ai_status_line(status: &str) -> Result<(), String> {
+    clear_current_terminal_line()?;
+    if status.is_empty() {
+        write_terminal("AI: ")?;
+    } else {
+        write_terminal(&format!("AI: {status}"))?;
+    }
+    Ok(())
 }
 
 fn clean_stream_chunk(chunk: &str) -> String {
@@ -1308,65 +1473,203 @@ struct MarkdownStreamRenderer {
 }
 
 impl MarkdownStreamRenderer {
-    fn push(&mut self, chunk: &str) {
+    fn push(&mut self, chunk: &str) -> Result<(), String> {
         for ch in chunk.chars() {
             match ch {
                 '\r' => {
                     if !self.buffer.is_empty() {
-                        self.flush_line(false);
+                        self.flush_line(false)?;
                     }
                 }
-                '\n' => self.flush_line(true),
+                '\n' => self.flush_line(true)?,
                 _ => self.buffer.push(ch),
             }
         }
+        Ok(())
     }
 
-    fn finish(&mut self) {
-        self.flush_table_block();
+    fn finish(&mut self) -> Result<(), String> {
+        self.flush_table_block()?;
         if !self.buffer.is_empty() {
-            self.flush_line(false);
+            self.flush_line(false)?;
         }
+        Ok(())
     }
 
-    fn flush_line(&mut self, with_newline: bool) {
+    fn flush_line(&mut self, with_newline: bool) -> Result<(), String> {
         let line = std::mem::take(&mut self.buffer);
         let trimmed = line.trim();
 
         if !self.in_code_block && (is_table_row(trimmed) || is_table_separator(trimmed)) {
             self.table_lines.push(line);
-            return;
+            return Ok(());
         }
 
-        self.flush_table_block();
+        self.flush_table_block()?;
         let rendered = render_markdown_line(&line, &mut self.in_code_block);
-        if with_newline {
-            println!("{rendered}");
-        } else {
-            print!("{rendered}");
-        }
+        write_rendered_text(&rendered, !self.in_code_block, with_newline)?;
+        Ok(())
     }
 
-    fn flush_table_block(&mut self) {
+    fn flush_table_block(&mut self) -> Result<(), String> {
         if self.table_lines.is_empty() {
-            return;
+            return Ok(());
         }
         for line in render_table_block(&self.table_lines) {
-            println!("{line}");
+            write_terminal_line(&line)?;
         }
         self.table_lines.clear();
+        Ok(())
     }
 }
 
-fn render_markdown_line(line: &str, in_code_block: &mut bool) -> String {
+fn write_rendered_text(text: &str, allow_wrap: bool, with_newline: bool) -> Result<(), String> {
+    let mut parts = Vec::new();
+    for logical_line in text.split('\n') {
+        if allow_wrap && should_wrap_rendered_line(logical_line) {
+            let wrapped = wrap_terminal_line(logical_line);
+            if wrapped.is_empty() {
+                parts.push(String::new());
+            } else {
+                parts.extend(wrapped);
+            }
+        } else {
+            parts.push(logical_line.to_string());
+        }
+    }
+
+    if with_newline {
+        for part in parts {
+            write_terminal_line(&part)?;
+        }
+    } else {
+        let joined = parts.join("\n");
+        write_terminal(&joined)?;
+    }
+    Ok(())
+}
+
+fn should_wrap_rendered_line(line: &str) -> bool {
     let trimmed = line.trim_start();
+    !trimmed.is_empty()
+        && !trimmed.starts_with('|')
+        && !trimmed.starts_with("```")
+        && !is_horizontal_rule(trimmed)
+        && !trimmed.starts_with("[code:")
+}
+
+fn wrap_terminal_line(line: &str) -> Vec<String> {
+    let width = terminal_text_width();
+    let trimmed = line.trim_end();
+    if trimmed.is_empty() {
+        return vec![String::new()];
+    }
+
+    let lines = if let Some(content) = trimmed.strip_prefix("• ") {
+        textwrap_wrap(
+            content,
+            TextWrapOptions::new(width)
+                .initial_indent("• ")
+                .subsequent_indent("  ")
+                .break_words(false)
+                .word_separator(textwrap::WordSeparator::AsciiSpace),
+        )
+        .into_iter()
+        .map(|cow| cow.into_owned())
+        .collect()
+    } else if let Some(content) = trimmed.strip_prefix("☐ ") {
+        textwrap_wrap(
+            content,
+            TextWrapOptions::new(width)
+                .initial_indent("☐ ")
+                .subsequent_indent("  ")
+                .break_words(false)
+                .word_separator(textwrap::WordSeparator::AsciiSpace),
+        )
+        .into_iter()
+        .map(|cow| cow.into_owned())
+        .collect()
+    } else if let Some(content) = trimmed.strip_prefix("☑ ") {
+        textwrap_wrap(
+            content,
+            TextWrapOptions::new(width)
+                .initial_indent("☑ ")
+                .subsequent_indent("  ")
+                .break_words(false)
+                .word_separator(textwrap::WordSeparator::AsciiSpace),
+        )
+        .into_iter()
+        .map(|cow| cow.into_owned())
+        .collect()
+    } else if let Some((marker, content)) = split_numbered_marker(trimmed) {
+        textwrap_wrap(
+            content,
+            TextWrapOptions::new(width)
+                .initial_indent(&format!("{marker} "))
+                .subsequent_indent(&" ".repeat(marker.len() + 1))
+                .break_words(false)
+                .word_separator(textwrap::WordSeparator::AsciiSpace),
+        )
+        .into_iter()
+        .map(|cow| cow.into_owned())
+        .collect()
+    } else {
+        textwrap_wrap(
+            trimmed,
+            TextWrapOptions::new(width)
+                .break_words(false)
+                .word_separator(textwrap::WordSeparator::AsciiSpace),
+        )
+        .into_iter()
+        .map(|cow| cow.into_owned())
+        .collect()
+    };
+
+    lines
+}
+
+fn terminal_text_width() -> usize {
+    terminal_size()
+        .map(|(width, _)| width as usize)
+        .ok()
+        .filter(|width| *width >= 40)
+        .unwrap_or(100)
+        .saturating_sub(2)
+}
+
+fn write_terminal(text: &str) -> Result<(), String> {
+    let mut stdout = io::stdout();
+    let normalized = text.replace('\n', "\r\n");
+    stdout
+        .write_all(normalized.as_bytes())
+        .map_err(|err| format!("Failed to write chat output: {err}"))?;
+    stdout
+        .flush()
+        .map_err(|err| format!("Failed to flush chat output: {err}"))
+}
+
+fn write_terminal_line(text: &str) -> Result<(), String> {
+    let mut stdout = io::stdout();
+    let normalized = text.replace('\n', "\r\n");
+    stdout
+        .write_all(normalized.as_bytes())
+        .and_then(|_| stdout.write_all(b"\r\n"))
+        .map_err(|err| format!("Failed to write chat output: {err}"))?;
+    stdout
+        .flush()
+        .map_err(|err| format!("Failed to flush chat output: {err}"))
+}
+
+fn render_markdown_line(line: &str, in_code_block: &mut bool) -> String {
+    let normalized = normalize_markdown_line(line);
+    let trimmed = normalized.trim_start();
     if trimmed.starts_with("```") {
         *in_code_block = !*in_code_block;
         return format!("{ANSI_DIM}```{ANSI_RESET}");
     }
 
     if *in_code_block {
-        return format!("{ANSI_DIM}    {line}{ANSI_RESET}");
+        return format!("{ANSI_DIM}    {normalized}{ANSI_RESET}");
     }
 
     if is_horizontal_rule(trimmed) {
@@ -1421,7 +1724,41 @@ fn render_markdown_line(line: &str, in_code_block: &mut bool) -> String {
         return format!("{marker} {}", render_inline_markdown(content));
     }
 
-    render_inline_markdown(line)
+    render_inline_markdown(trimmed)
+}
+
+fn normalize_markdown_line(line: &str) -> String {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if trimmed.starts_with("```") {
+        return trimmed.to_string();
+    }
+
+    let mut value = trimmed.to_string();
+    for marker in ["Cause:", "Fix:"] {
+        let spaced_marker = format!(" {marker}");
+        if value.contains(&spaced_marker) && !value.starts_with(marker) {
+            value = value.replacen(&spaced_marker, &format!("\n{marker}"), 1);
+        }
+    }
+    for number in 1..=9 {
+        let marker = format!("{number}. ");
+        if value.contains(&marker) && !value.starts_with(&marker) {
+            value = value.replacen(&marker, &format!("\n{marker}"), 1);
+        }
+    }
+    if value.contains(" --- ") {
+        value = value.replace(" --- ", "\n---\n");
+    }
+
+    value
+        .lines()
+        .map(|piece| piece.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|piece| !piece.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn split_numbered_marker(value: &str) -> Option<(&str, &str)> {
@@ -1512,32 +1849,19 @@ fn render_table_block(lines: &[String]) -> Vec<String> {
 
     let mut rendered = Vec::new();
     for (index, row) in rows.iter().enumerate() {
-        rendered.push(render_table_row_aligned(row, &widths));
+        let mut parts = Vec::with_capacity(widths.len());
+        for (cell_index, width) in widths.iter().enumerate() {
+            let value = row.get(cell_index).map(String::as_str).unwrap_or("");
+            let pad = width.saturating_sub(value.chars().count());
+            parts.push(format!("{value}{}", " ".repeat(pad)));
+        }
+        rendered.push(parts.join("   "));
         if index == 0 && rows.len() > 1 {
-            rendered.push(render_table_rule(&widths));
+            let total_width = widths.iter().sum::<usize>() + widths.len().saturating_sub(1) * 3;
+            rendered.push(format!("{ANSI_DIM}{}{ANSI_RESET}", "─".repeat(total_width.max(1))));
         }
     }
     rendered
-}
-
-fn render_table_row_aligned(row: &[String], widths: &[usize]) -> String {
-    let mut parts = Vec::with_capacity(widths.len());
-    for (index, width) in widths.iter().enumerate() {
-        let value = row.get(index).map(String::as_str).unwrap_or("");
-        let rendered = render_inline_markdown(value);
-        let pad = width.saturating_sub(value.chars().count());
-        parts.push(format!("{rendered}{}", " ".repeat(pad)));
-    }
-    parts.join("   ")
-}
-
-fn render_table_rule(widths: &[usize]) -> String {
-    let total_width = widths
-        .iter()
-        .map(|width| (*width).max(1))
-        .sum::<usize>()
-        + widths.len().saturating_sub(1) * 3;
-    format!("{ANSI_DIM}{}{ANSI_RESET}", "─".repeat(total_width.max(1)))
 }
 
 fn render_inline_markdown(value: &str) -> String {
@@ -1569,19 +1893,6 @@ fn render_inline_markdown(value: &str) -> String {
             }
         }
 
-        if chars[i] == '[' {
-            if let Some((text_end, url_start, url_end)) = find_link_bounds(&chars, i) {
-                let label = chars[i + 1..text_end].iter().collect::<String>();
-                let url = chars[url_start..url_end].iter().collect::<String>();
-                out.push_str(&label);
-                out.push_str(" (");
-                out.push_str(&url);
-                out.push(')');
-                i = url_end + 1;
-                continue;
-            }
-        }
-
         out.push(chars[i]);
         i += 1;
     }
@@ -1600,17 +1911,27 @@ fn find_double_star_end(chars: &[char], start: usize) -> Option<usize> {
     None
 }
 
-fn find_link_bounds(chars: &[char], start: usize) -> Option<(usize, usize, usize)> {
-    let text_end = chars[start + 1..]
-        .iter()
-        .position(|ch| *ch == ']')
-        .map(|idx| start + 1 + idx)?;
-    if chars.get(text_end + 1) != Some(&'(') {
-        return None;
+#[cfg(test)]
+mod tests {
+    use super::{normalize_markdown_line, render_markdown_line};
+
+    #[test]
+    fn normalizes_structured_fix_line_into_separate_lines() {
+        let input = "1. Problem: Blocking API calls freeze the TUI/CLI during AI requests Cause: Synchronous HTTP requests block rendering Fix:";
+        let normalized = normalize_markdown_line(input);
+        assert!(normalized.contains("1. Problem:"));
+        assert!(normalized.contains("\nCause:"));
+        assert!(normalized.contains("\nFix:"));
     }
-    let url_end = chars[text_end + 2..]
-        .iter()
-        .position(|ch| *ch == ')')
-        .map(|idx| text_end + 2 + idx)?;
-    Some((text_end, text_end + 2, url_end))
+
+    #[test]
+    fn preserves_code_block_lines_without_wrapping() {
+        let mut in_code_block = true;
+        let rendered = render_markdown_line(
+            "let response = client.post(&api_url).json(&payload).send().await?;",
+            &mut in_code_block,
+        );
+        assert!(rendered.contains("let response = client.post(&api_url).json(&payload).send().await?;"));
+        assert!(rendered.contains("    "));
+    }
 }

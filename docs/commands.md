@@ -377,7 +377,10 @@ tinfo reinstall
 tinfo agent
 tinfo chat
 tinfo ask "why is this slow"
+tinfo ask --file Cargo.toml
 tinfo ai fix @error.log
+tinfo ai fix --file src/main.rs
+tinfo ai fix --no-context
 tinfo ai sum @README.md
 tinfo ai plan "release checklist"
 tinfo ai doc @README.md
@@ -390,5 +393,6 @@ tinfo ai doc @README.md
 `ai sum` runs a single-shot summarization mode.
 `ai plan` runs a planning mode with Markdown-or-plain output selection.
 `ai doc` runs a documentation mode with Markdown-or-plain output selection.
+AI modes gather local context by default and also support `--file <path>` plus `--no-context`.
 
 See also: `docs/chat.md`

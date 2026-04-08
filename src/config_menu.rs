@@ -1076,6 +1076,7 @@ fn show_ai_features_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(
         let items = [
             "Toggle chat history",
             "Toggle chat context",
+            "Toggle simple AI mode (disable auto context)",
             "Toggle persisted transcripts",
             "Edit default AI system prompt",
             "Set default AI screen",
@@ -1107,6 +1108,14 @@ fn show_ai_features_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(
                 println!("AI chat context: {}", config.ai.runtime.chat_context);
             }
             Some(2) => {
+                config.ai.runtime.auto_context = !config.ai.runtime.auto_context;
+                config.save()?;
+                println!(
+                    "Automatic context gathering: {}",
+                    config.ai.runtime.auto_context
+                );
+            }
+            Some(3) => {
                 config.ai.runtime.persist_chat_transcripts = !config.ai.runtime.persist_chat_transcripts;
                 config.save()?;
                 println!(
@@ -1114,7 +1123,7 @@ fn show_ai_features_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(
                     config.ai.runtime.persist_chat_transcripts
                 );
             }
-            Some(3) => {
+            Some(4) => {
                 let prompt = Input::<String>::with_theme(theme)
                     .with_prompt("Default AI system prompt (leave blank to clear)")
                     .allow_empty(true)
@@ -1129,7 +1138,7 @@ fn show_ai_features_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(
                 config.save()?;
                 println!("Default AI system prompt updated.");
             }
-            Some(4) => {
+            Some(5) => {
                 let items = ["agent", "chat", "dashboard", "Keep current"];
                 let default = match config.ai.ui.default_view.as_str() {
                     "chat" => 1,
@@ -1151,17 +1160,17 @@ fn show_ai_features_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(
                 config.save()?;
                 println!("Default AI screen: {}", config.ai.ui.default_view);
             }
-            Some(5) => {
+            Some(6) => {
                 config.ai.ui.remember_last_view = !config.ai.ui.remember_last_view;
                 config.save()?;
                 println!("Remember last AI screen: {}", config.ai.ui.remember_last_view);
             }
-            Some(6) => {
+            Some(7) => {
                 config.ai.ui.show_tips = !config.ai.ui.show_tips;
                 config.save()?;
                 println!("AI tips enabled: {}", config.ai.ui.show_tips);
             }
-            Some(7) => {
+            Some(8) => {
                 let items = ["manual", "auto", "Keep current"];
                 let default = match config.ai.agent.approval_mode {
                     AiApprovalMode::Manual => 0,
@@ -1187,17 +1196,17 @@ fn show_ai_features_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(
                     }
                 );
             }
-            Some(8) => {
+            Some(9) => {
                 config.ai.agent.audit_log = !config.ai.agent.audit_log;
                 config.save()?;
                 println!("AI audit log: {}", config.ai.agent.audit_log);
             }
-            Some(9) => {
+            Some(10) => {
                 config.ai.ui.web_enabled = !config.ai.ui.web_enabled;
                 config.save()?;
                 println!("AI web companion: {}", config.ai.ui.web_enabled);
             }
-            Some(10) => {
+            Some(11) => {
                 let refresh: u64 = Input::with_theme(theme)
                     .with_prompt("AI refresh interval in milliseconds")
                     .default(config.ai.ui.refresh_ms.max(100))
@@ -1207,12 +1216,12 @@ fn show_ai_features_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(
                 config.save()?;
                 println!("AI refresh interval: {} ms", config.ai.ui.refresh_ms);
             }
-            Some(11) => {
+            Some(12) => {
                 config.ai.agent.compact_activity = !config.ai.agent.compact_activity;
                 config.save()?;
                 println!("Compact agent activity: {}", config.ai.agent.compact_activity);
             }
-            Some(12) | None => break,
+            Some(13) | None => break,
             Some(_) => {}
         }
     }

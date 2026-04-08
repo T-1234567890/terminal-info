@@ -172,6 +172,10 @@ impl AiConfig {
         self.shared.runtime.chat_context
     }
 
+    pub fn auto_context_enabled(&self) -> bool {
+        self.shared.runtime.auto_context
+    }
+
     pub fn persist_chat_transcripts(&self) -> bool {
         self.shared.runtime.persist_chat_transcripts
     }

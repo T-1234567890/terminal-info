@@ -370,6 +370,8 @@ pub struct AiRuntimeSettings {
     pub chat_history: bool,
     #[serde(default = "default_true")]
     pub chat_context: bool,
+    #[serde(default = "default_true")]
+    pub auto_context: bool,
     #[serde(default)]
     pub persist_chat_transcripts: bool,
 }
@@ -382,6 +384,7 @@ impl Default for AiRuntimeSettings {
             auto_reject_timeout_secs: None,
             chat_history: true,
             chat_context: true,
+            auto_context: true,
             persist_chat_transcripts: false,
         }
     }

@@ -4,6 +4,7 @@ pub mod agent;
 pub mod api;
 pub mod chat;
 pub mod cli_chat;
+pub mod context;
 pub mod connections;
 pub mod config;
 pub mod discovery;

@@ -248,6 +248,12 @@ enum Command {
         /// Attach a configured connection by name
         #[arg(long)]
         conn: Option<String>,
+        /// Attach a file as the primary input
+        #[arg(long, value_name = "PATH")]
+        file: Option<PathBuf>,
+        /// Disable automatic context gathering for this request
+        #[arg(long)]
+        no_context: bool,
     },
     /// Render content into other formats
     Render {
@@ -268,6 +274,12 @@ enum Command {
         /// Attach a configured connection by name
         #[arg(long)]
         conn: Option<String>,
+        /// Attach a file as the primary input
+        #[arg(long, value_name = "PATH")]
+        file: Option<PathBuf>,
+        /// Disable automatic context gathering for this request
+        #[arg(long)]
+        no_context: bool,
         /// Optional one-shot input
         input: Vec<String>,
     },
@@ -424,6 +436,12 @@ enum AiCommand {
         /// Attach a configured connection by name
         #[arg(long)]
         conn: Option<String>,
+        /// Attach a file as the primary input
+        #[arg(long, value_name = "PATH")]
+        file: Option<PathBuf>,
+        /// Disable automatic context gathering for this request
+        #[arg(long)]
+        no_context: bool,
         /// Optional one-shot input
         input: Vec<String>,
     },
@@ -441,6 +459,12 @@ enum AiCommand {
         /// Attach a configured connection by name
         #[arg(long)]
         conn: Option<String>,
+        /// Attach a file as the primary input
+        #[arg(long, value_name = "PATH")]
+        file: Option<PathBuf>,
+        /// Disable automatic context gathering for this request
+        #[arg(long)]
+        no_context: bool,
         /// Optional one-shot input
         input: Vec<String>,
     },
@@ -458,6 +482,12 @@ enum AiCommand {
         /// Attach a configured connection by name
         #[arg(long)]
         conn: Option<String>,
+        /// Attach a file as the primary input
+        #[arg(long, value_name = "PATH")]
+        file: Option<PathBuf>,
+        /// Disable automatic context gathering for this request
+        #[arg(long)]
+        no_context: bool,
         /// Optional one-shot input
         input: Vec<String>,
     },
@@ -475,6 +505,12 @@ enum AiCommand {
         /// Attach a configured connection by name
         #[arg(long)]
         conn: Option<String>,
+        /// Attach a file as the primary input
+        #[arg(long, value_name = "PATH")]
+        file: Option<PathBuf>,
+        /// Disable automatic context gathering for this request
+        #[arg(long)]
+        no_context: bool,
         /// Optional one-shot input
         input: Vec<String>,
     },
@@ -938,13 +974,26 @@ fn main() {
             model,
             system,
             conn,
-        }) => handle_chat_command(ChatMode::Chat, provider, model, system, conn, None),
+            file,
+            no_context,
+        }) => handle_chat_command(
+            ChatMode::Chat,
+            provider,
+            model,
+            system,
+            conn,
+            file,
+            no_context,
+            None,
+        ),
         Some(Command::Render { command }) => handle_render_command(command),
         Some(Command::Ask {
             provider,
             model,
             system,
             conn,
+            file,
+            no_context,
             input,
         }) => handle_chat_command(
             ChatMode::Ask,
@@ -952,6 +1001,8 @@ fn main() {
             model,
             system,
             conn,
+            file,
+            no_context,
             join_optional_input(input),
         ),
         Some(Command::Ai { command }) => handle_ai_command(command),
@@ -2039,6 +2090,8 @@ fn handle_chat_command(
     model: Option<String>,
     system: Option<String>,
     connection: Option<String>,
+    file: Option<PathBuf>,
+    no_context: bool,
     input: Option<String>,
 ) -> Result<(), String> {
     run_simple_chat(AiChatOptions {
@@ -2047,6 +2100,8 @@ fn handle_chat_command(
         model,
         system,
         connection,
+        file,
+        context_enabled: !no_context,
         input,
     })
 }
@@ -2058,6 +2113,8 @@ fn handle_ai_command(command: AiCommand) -> Result<(), String> {
             model,
             system,
             conn,
+            file,
+            no_context,
             input,
         } => handle_chat_command(
             ChatMode::Fix,
@@ -2065,6 +2122,8 @@ fn handle_ai_command(command: AiCommand) -> Result<(), String> {
             model,
             system,
             conn,
+            file,
+            no_context,
             join_optional_input(input),
         ),
         AiCommand::Plan {
@@ -2072,6 +2131,8 @@ fn handle_ai_command(command: AiCommand) -> Result<(), String> {
             model,
             system,
             conn,
+            file,
+            no_context,
             input,
         } => handle_chat_command(
             ChatMode::Plan,
@@ -2079,6 +2140,8 @@ fn handle_ai_command(command: AiCommand) -> Result<(), String> {
             model,
             system,
             conn,
+            file,
+            no_context,
             join_optional_input(input),
         ),
         AiCommand::Doc {
@@ -2086,6 +2149,8 @@ fn handle_ai_command(command: AiCommand) -> Result<(), String> {
             model,
             system,
             conn,
+            file,
+            no_context,
             input,
         } => handle_chat_command(
             ChatMode::Doc,
@@ -2093,6 +2158,8 @@ fn handle_ai_command(command: AiCommand) -> Result<(), String> {
             model,
             system,
             conn,
+            file,
+            no_context,
             join_optional_input(input),
         ),
         AiCommand::Sum {
@@ -2100,6 +2167,8 @@ fn handle_ai_command(command: AiCommand) -> Result<(), String> {
             model,
             system,
             conn,
+            file,
+            no_context,
             input,
         } => handle_chat_command(
             ChatMode::Summarize,
@@ -2107,6 +2176,8 @@ fn handle_ai_command(command: AiCommand) -> Result<(), String> {
             model,
             system,
             conn,
+            file,
+            no_context,
             join_optional_input(input),
         ),
     }

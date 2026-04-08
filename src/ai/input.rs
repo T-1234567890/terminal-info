@@ -20,6 +20,10 @@ pub struct ProcessedChatInput {
     pub prompt: String,
 }
 
+pub fn load_explicit_file_context(path: &Path) -> Result<LoadedFileContext, String> {
+    load_file_context_from_path(path)
+}
+
 pub fn read_piped_stdin() -> Result<Option<String>, String> {
     if io::stdin().is_terminal() {
         return Ok(None);
@@ -289,7 +293,11 @@ fn strip_file_references(input: &str) -> String {
 
 fn load_file_context(reference: &str) -> Result<LoadedFileContext, String> {
     let path = resolve_reference_path(reference)?;
-    let bytes = fs::read(&path)
+    load_file_context_from_path(&path)
+}
+
+fn load_file_context_from_path(path: &Path) -> Result<LoadedFileContext, String> {
+    let bytes = fs::read(path)
         .map_err(|err| format!("Failed to read {}: {err}", path.display()))?;
     let truncated = bytes.len() > MAX_FILE_BYTES;
     let visible = if truncated {
