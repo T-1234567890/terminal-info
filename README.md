@@ -204,6 +204,8 @@ Productivity tools are integrated into the same local workflow and dashboard run
 - `tinfo timer start 25m` starts a countdown
 - `tinfo stopwatch start` starts a separate stopwatch
 - `tinfo task` opens an interactive task menu
+- `tinfo calendar add "Planning" 2026-04-12 --time 14:30` creates a scheduled task event
+- `tinfo task add --event 1 bring notes` attaches a new task to an existing event
 - `tinfo note add ...` captures quick notes
 - `tinfo history --limit 10` shows recent shell commands
 - `tinfo remind 15m take a break` schedules a reminder and opens the live dashboard
@@ -211,6 +213,7 @@ Productivity tools are integrated into the same local workflow and dashboard run
 Notes:
 
 - reminders trigger while the dashboard is running
+- calendar events are regular tasks with a required date and optional time; interactive task creation defaults to `No event` when attaching is offered
 - deleted tasks are recoverable for 7 days from the task menu before automatic cleanup
 - widget ordering and feature settings live in `~/.tinfo/config.toml`
 
@@ -218,6 +221,7 @@ See:
 
 - [docs/dashboard.md](docs/dashboard.md)
 - [docs/widgets.md](docs/widgets.md)
+- [docs/productivity.md](docs/productivity.md)
 - [docs/commands.md](docs/commands.md)
 - [docs/config.md](docs/config.md)
 

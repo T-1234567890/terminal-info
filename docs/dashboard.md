@@ -69,7 +69,7 @@ Dashboard widgets can be ordered in the config file:
 
 ```toml
 [dashboard]
-widgets = ["weather", "time", "network", "system", "timer", "tasks", "notes", "history", "reminders", "plugins"]
+widgets = ["weather", "time", "network", "system", "timer", "tasks", "calendar", "notes", "history", "reminders", "plugins"]
 ```
 
 Supported widget names are:
@@ -80,6 +80,7 @@ Supported widget names are:
 - `system`
 - `timer`
 - `tasks`
+- `calendar`
 - `notes`
 - `history`
 - `reminders`

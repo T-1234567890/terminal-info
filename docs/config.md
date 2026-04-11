@@ -89,7 +89,7 @@ Dashboard widget order:
 
 ```toml
 [dashboard]
-widgets = ["weather", "time", "network", "system", "timer", "tasks", "notes", "history", "reminders", "plugins"]
+widgets = ["weather", "time", "network", "system", "timer", "tasks", "calendar", "notes", "history", "reminders", "plugins"]
 refresh_interval = 1
 layout = "auto"
 columns = 2
@@ -302,7 +302,7 @@ tinfo config widgets
 tinfo config widgets show
 tinfo config widgets add timer
 tinfo config widgets remove network
-tinfo config widgets set weather time system timer tasks notes history reminders plugins
+tinfo config widgets set weather time system timer tasks calendar notes history reminders plugins
 tinfo config widgets reset
 ```
 

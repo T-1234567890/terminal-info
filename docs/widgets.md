@@ -4,7 +4,7 @@ Terminal Info widgets are small dashboard data sources. They do not own layout o
 
 Widgets come in two forms:
 
-- built-in widgets such as `weather`, `time`, `network`, `system`, `timer`, `tasks`, `notes`, `history`, and `reminders`
+- built-in widgets such as `weather`, `time`, `network`, `system`, `timer`, `tasks`, `calendar`, `notes`, `history`, and `reminders`
 - plugin widgets returned by trusted plugins through `--widget`
 
 ## Dashboard Configuration
@@ -13,7 +13,7 @@ Widget order is configured in `~/.tinfo/config.toml`:
 
 ```toml
 [dashboard]
-widgets = ["weather", "time", "network", "system", "timer", "tasks", "notes", "history", "reminders", "plugins"]
+widgets = ["weather", "time", "network", "system", "timer", "tasks", "calendar", "notes", "history", "reminders", "plugins"]
 refresh_interval = 1
 layout = "auto"
 columns = 2
@@ -29,6 +29,7 @@ Supported built-in widget names:
 - `system`
 - `timer`
 - `tasks`
+- `calendar`
 - `notes`
 - `history`
 - `reminders`
@@ -40,6 +41,7 @@ Notes:
 - productivity widgets read local state from `~/.tinfo/data/`
 - `notes` renders recent note entries from `~/.tinfo/data/notes.json`
 - `tasks` renders the latest tasks from `~/.tinfo/data/tasks.json`
+- `calendar` renders upcoming tasks with a calendar date from `~/.tinfo/data/tasks.json`
 - `timer` renders the active stopwatch or countdown from `~/.tinfo/data/timer.json`
 - `history` renders recent shell history entries
 - `reminders` renders the next scheduled reminder from `~/.tinfo/data/reminders.json`
@@ -56,7 +58,7 @@ Quick widget commands:
 tinfo config widgets show
 tinfo config widgets add timer
 tinfo config widgets remove network
-tinfo config widgets set weather time system timer tasks notes history reminders plugins
+tinfo config widgets set weather time system timer tasks calendar notes history reminders plugins
 tinfo config widgets reset
 ```
 
@@ -107,6 +109,7 @@ Rendering behavior:
 - `timer.hide_when_complete = true` keeps `completed` visible briefly before removing the finished countdown
 - `timer.mode = "compact"` shortens timer text in the dashboard widget
 - `tasks` shows recent tasks based on the task settings in `config.toml`
+- `calendar` shows the next upcoming scheduled task, with a countdown for timed events, and up to three events in full mode
 - deleted tasks are not shown in the task widget
 - deleted tasks remain recoverable for 7 days before automatic removal
 - `notes` shows recent note entries as a list

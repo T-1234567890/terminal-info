@@ -249,9 +249,16 @@ tinfo stopwatch start
 tinfo stopwatch stop
 tinfo task
 tinfo task add finish README
+tinfo task add --event 1 bring notes
 tinfo task list
 tinfo task done 1
 tinfo task delete 1
+tinfo calendar
+tinfo calendar add "Planning" 2026-04-12
+tinfo calendar add "Planning" 2026-04-12 --time 14:30
+tinfo calendar attach 2 2026-04-12 --time 14:30
+tinfo calendar list --upcoming --limit 3
+tinfo calendar remove 1
 tinfo note add remember to rotate keys
 tinfo note list
 tinfo history --limit 10
@@ -261,31 +268,7 @@ tinfo remind 14:30 stand up
 tinfo remind 30m stand up
 ```
 
-These commands store lightweight local state in:
-
-```text
-~/.tinfo/data/
-```
-
-- `timer` opens a live timer dashboard by default, starts a countdown with `start [duration]`, and uses the configured default duration when omitted
-- `stopwatch` manages the stopwatch separately with `start` and `stop`
-- `task` opens an interactive menu by default and also supports `add`, `list`, `done`, and `delete`
-- the interactive task menu includes:
-  - current task list
-  - `List all tasks`
-  - `Deleted tasks`
-  - `Add task`
-  - `Delete task`
-  - `Exit`
-- selecting a task or an item in `List all tasks` toggles its done state in one selection
-- deleted tasks move into a recoverable deleted-task area instead of being removed permanently
-- deleted tasks can be recovered for 7 days
-- when `tinfo` loads the task store on or after the seventh day, expired deleted tasks are removed automatically
-- `note` appends quick notes for later review and for the dashboard notes widget
-- `history` shows recent shell history lines from the detected history file
-- `remind` schedules a local reminder for a delay like `15m`, `1h30m`, or `45s`, or for a clock time like `14:30`; if omitted it uses the configured default duration
-- reminders are written to `~/.tinfo/data/reminders.json`, then `tinfo` opens the live dashboard automatically
-- after scheduling, `tinfo` prints: `Note: reminders trigger while the dashboard is running.`
+For behavior, storage, dashboard widgets, and task/calendar attachment details, see [productivity.md](productivity.md).
 
 ## Profiles
 
