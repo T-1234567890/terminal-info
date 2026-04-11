@@ -235,6 +235,7 @@ fn default_dashboard_widgets() -> Vec<String> {
         "system".to_string(),
         "timer".to_string(),
         "tasks".to_string(),
+        "calendar".to_string(),
         "notes".to_string(),
         "history".to_string(),
         "reminders".to_string(),

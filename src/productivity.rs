@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use chrono::{Local, LocalResult, NaiveTime, TimeZone};
+use chrono::{Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
 use dialoguer::{Input, Select, theme::ColorfulTheme};
 use serde::{Deserialize, Serialize};
 
@@ -51,6 +51,10 @@ struct TaskItem {
     done: bool,
     #[serde(default)]
     created_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    datetime: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -60,6 +64,10 @@ struct DeletedTaskItem {
     done: bool,
     #[serde(default)]
     created_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    datetime: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
     deleted_at: u64,
 }
 
@@ -113,6 +121,7 @@ pub struct TaskWidget;
 pub struct NotesWidget;
 pub struct HistoryWidget;
 pub struct ReminderWidget;
+pub struct CalendarWidget;
 
 #[derive(Clone, Copy, Debug)]
 pub enum TimerLiveTarget {
@@ -222,22 +231,126 @@ pub fn timer_live_active(target: TimerLiveTarget) -> Result<bool, String> {
 }
 
 pub fn add_task(text: &str) -> Result<(), String> {
+    add_task_with_event(text, None)
+}
+
+pub fn add_task_with_event(text: &str, event_id: Option<u64>) -> Result<(), String> {
     let text = text.trim();
     if text.is_empty() {
         return Err("Task text cannot be empty.".to_string());
     }
 
     let mut store = load_tasks()?;
+    let attached_datetime = match event_id {
+        Some(event_id) => Some(calendar_event_datetime(&store.tasks, event_id)?),
+        None => None,
+    };
     let id = next_id(&mut store.next_id);
     store.tasks.push(TaskItem {
         id,
         text: text.to_string(),
         done: false,
         created_at: now_unix(),
+        datetime: attached_datetime.clone(),
+        description: None,
     });
     save_tasks(&store)?;
-    println!("Added task #{id}: {text}");
+    if let Some(datetime) = attached_datetime {
+        println!("Added task #{id}: {text} ({datetime})");
+    } else {
+        println!("Added task #{id}: {text}");
+    }
     Ok(())
+}
+
+pub fn add_calendar_event(
+    title: &str,
+    date: &str,
+    time: Option<&str>,
+    description: Option<&str>,
+) -> Result<(), String> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err("Event title cannot be empty.".to_string());
+    }
+    let datetime = normalize_calendar_datetime(date, time)?;
+    let description = description
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+
+    let mut store = load_tasks()?;
+    let id = next_id(&mut store.next_id);
+    store.tasks.push(TaskItem {
+        id,
+        text: title.to_string(),
+        done: false,
+        created_at: now_unix(),
+        datetime: Some(datetime.clone()),
+        description,
+    });
+    save_tasks(&store)?;
+    println!("Added event #{id}: {title} at {datetime}");
+    Ok(())
+}
+
+pub fn attach_task_to_calendar(id: u64, date: &str, time: Option<&str>) -> Result<(), String> {
+    let datetime = normalize_calendar_datetime(date, time)?;
+    let mut store = load_tasks()?;
+    let task = store
+        .tasks
+        .iter_mut()
+        .find(|task| task.id == id)
+        .ok_or_else(|| format!("Task #{id} was not found."))?;
+    task.datetime = Some(datetime.clone());
+    save_tasks(&store)?;
+    println!("Attached task #{id} to {datetime}.");
+    Ok(())
+}
+
+pub fn list_calendar_events(
+    today: bool,
+    upcoming: bool,
+    limit: Option<usize>,
+) -> Result<(), String> {
+    let mut events = calendar_events(load_tasks()?.tasks);
+    if today {
+        events.retain(|task| task.datetime.as_deref().is_some_and(is_today));
+    }
+    if upcoming {
+        events.retain(|task| task.datetime.as_deref().is_some_and(is_upcoming));
+    }
+    sort_by_datetime(&mut events);
+    if let Some(limit) = limit {
+        events.truncate(limit.max(1));
+    }
+
+    if events.is_empty() {
+        println!("No events.");
+        return Ok(());
+    }
+
+    for event in events {
+        let datetime = event.datetime.unwrap_or_default();
+        if let Some(description) = event.description.filter(|value| !value.trim().is_empty()) {
+            println!("{} {} {} - {}", event.id, datetime, event.text, description);
+        } else {
+            println!("{} {} {}", event.id, datetime, event.text);
+        }
+    }
+    Ok(())
+}
+
+pub fn remove_calendar_event(id: u64) -> Result<(), String> {
+    let store = load_tasks()?;
+    let is_event = store
+        .tasks
+        .iter()
+        .any(|task| task.id == id && task.datetime.is_some());
+    if !is_event {
+        return Err(format!("Event #{id} was not found."));
+    }
+    delete_task(id)
 }
 
 pub fn list_tasks() -> Result<(), String> {
@@ -292,6 +405,8 @@ pub fn delete_task(id: u64) -> Result<(), String> {
         text: task.text,
         done: task.done,
         created_at: task.created_at,
+        datetime: task.datetime,
+        description: task.description,
         deleted_at: now_unix(),
     });
     save_tasks(&store)?;
@@ -312,6 +427,8 @@ pub fn recover_task(id: u64) -> Result<(), String> {
         text: task.text,
         done: task.done,
         created_at: task.created_at,
+        datetime: task.datetime,
+        description: task.description,
     });
     save_tasks(&store)?;
     println!("Recovered task #{id}.");
@@ -409,6 +526,28 @@ fn choose_task_to_toggle(
     }
 }
 
+fn choose_calendar_event_for_task(theme: &ColorfulTheme, tasks: &[TaskItem]) -> Result<Option<u64>, String> {
+    let events = calendar_events(tasks.to_vec());
+    if events.is_empty() {
+        return Ok(None);
+    }
+
+    let mut items = vec!["No event".to_string()];
+    items.extend(events.iter().map(calendar_event_choice_label));
+
+    let selection = Select::with_theme(theme)
+        .with_prompt("Attach to calendar event")
+        .items(&items)
+        .default(0)
+        .interact_opt()
+        .map_err(|err| format!("Failed to read calendar event selection: {err}"))?;
+
+    match selection {
+        Some(0) | None => Ok(None),
+        Some(index) => Ok(events.get(index - 1).map(|event| event.id)),
+    }
+}
+
 pub fn add_note(text: &str) -> Result<(), String> {
     let text = text.trim();
     if text.is_empty() {
@@ -499,7 +638,8 @@ pub fn interactive_task_menu(config: &Config) -> Result<(), String> {
             }
             Some(index) if index == tasks.len() + 2 => {
                 if let Some(text) = prompt_task_text()? {
-                    add_task(&text)?;
+                    let event_id = choose_calendar_event_for_task(&theme, &store.tasks)?;
+                    add_task_with_event(&text, event_id)?;
                 }
             }
             Some(index) if index == tasks.len() + 3 => {
@@ -726,12 +866,51 @@ impl DashboardDataWidget for ReminderWidget {
     }
 }
 
+impl DashboardDataWidget for CalendarWidget {
+    fn refresh_interval(&self) -> Duration {
+        Duration::from_secs(30)
+    }
+
+    fn render(&self, compact: bool) -> Result<Option<PluginWidget>, String> {
+        let mut events = calendar_events(load_tasks()?.tasks)
+            .into_iter()
+            .filter(|task| task.datetime.as_deref().is_some_and(is_upcoming))
+            .collect::<Vec<_>>();
+        sort_by_datetime(&mut events);
+        if events.is_empty() {
+            return Ok(None);
+        }
+
+        let items = events
+            .iter()
+            .take(if compact { 1 } else { 3 })
+            .map(calendar_widget_line)
+            .collect::<Vec<_>>();
+
+        Ok(Some(PluginWidget {
+            name: "calendar".to_string(),
+            display_name: "Calendar".to_string(),
+            description: Some("Shows upcoming scheduled tasks".to_string()),
+            enabled_by_default: true,
+            title: "Calendar".to_string(),
+            refresh_interval_secs: Some(30),
+            full: PluginWidgetBody::List {
+                items: items.clone(),
+            },
+            compact: Some(PluginWidgetBody::Text {
+                content: items.first().cloned().unwrap_or_default(),
+            }),
+        }))
+    }
+}
+
 pub struct ProductivityWidgetManager {
     timer: TimerWidget,
     tasks: TaskWidget,
     notes: NotesWidget,
     history: HistoryWidget,
     reminders: ReminderWidget,
+    calendar: CalendarWidget,
 }
 
 impl ProductivityWidgetManager {
@@ -742,6 +921,7 @@ impl ProductivityWidgetManager {
             notes: NotesWidget,
             history: HistoryWidget,
             reminders: ReminderWidget,
+            calendar: CalendarWidget,
         }
     }
 
@@ -756,6 +936,7 @@ impl ProductivityWidgetManager {
             "notes" => &self.notes,
             "history" => &self.history,
             "reminders" => &self.reminders,
+            "calendar" => &self.calendar,
             _ => return Ok(None),
         };
         Ok(widget
@@ -789,6 +970,175 @@ fn display_tasks(
     }
 
     items
+}
+
+fn calendar_events(tasks: Vec<TaskItem>) -> Vec<TaskItem> {
+    tasks
+        .into_iter()
+        .filter(|task| task.datetime.is_some())
+        .collect()
+}
+
+fn calendar_event_datetime(tasks: &[TaskItem], event_id: u64) -> Result<String, String> {
+    tasks
+        .iter()
+        .find(|task| task.id == event_id)
+        .and_then(|task| task.datetime.clone())
+        .ok_or_else(|| format!("Calendar event #{event_id} was not found."))
+}
+
+fn calendar_event_choice_label(task: &TaskItem) -> String {
+    let datetime = task.datetime.as_deref().unwrap_or_default();
+    format!("#{} {} {}", task.id, datetime, task.text)
+}
+
+fn normalize_calendar_datetime(date: &str, time: Option<&str>) -> Result<String, String> {
+    let date = date.trim();
+    if date.contains('T') {
+        if time.is_some() {
+            return Err("Use either YYYY-MM-DDTHH:MM input or --time, not both.".to_string());
+        }
+        return calendar_time_key(date);
+    }
+
+    let date = parse_calendar_date(date)?;
+    let Some(time) = time.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(date.format("%Y-%m-%d").to_string());
+    };
+    let time = parse_calendar_time(time)?;
+    Ok(date.and_time(time).format("%Y-%m-%dT%H:%M").to_string())
+}
+
+fn parse_calendar_date(input: &str) -> Result<NaiveDate, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err("Date cannot be empty.".to_string());
+    }
+    NaiveDate::parse_from_str(trimmed, "%Y-%m-%d").map_err(|_| {
+        format!(
+            "Invalid date '{}'. Use ISO 8601 date format like 2026-04-12.",
+            input
+        )
+    })
+}
+
+fn parse_calendar_time(input: &str) -> Result<NaiveTime, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err("Time cannot be empty.".to_string());
+    }
+    NaiveTime::parse_from_str(trimmed, "%H:%M").map_err(|_| {
+        format!(
+            "Invalid time '{}'. Use 24-hour HH:MM format like 14:30.",
+            input
+        )
+    })
+}
+
+fn parse_calendar_datetime(input: &str) -> Result<Option<NaiveDateTime>, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err("Date cannot be empty.".to_string());
+    }
+    if !trimmed.contains('T') {
+        return Ok(None);
+    }
+    NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M")
+        .or_else(|_| NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S"))
+        .map(Some)
+        .map_err(|_| {
+            format!(
+                "Invalid datetime '{}'. Use ISO 8601 local format like 2026-04-12T14:30.",
+                input
+            )
+        })
+}
+
+fn calendar_time_key(input: &str) -> Result<String, String> {
+    let datetime = parse_calendar_datetime(input)?
+        .ok_or_else(|| format!("Invalid datetime '{}'. Use YYYY-MM-DDTHH:MM.", input))?;
+    Ok(datetime.format("%Y-%m-%dT%H:%M").to_string())
+}
+
+fn task_date(task: &TaskItem) -> Option<NaiveDate> {
+    let value = task.datetime.as_deref()?;
+    parse_calendar_datetime(value)
+        .ok()
+        .flatten()
+        .map(|datetime| datetime.date())
+        .or_else(|| parse_calendar_date(value).ok())
+}
+
+fn task_datetime(task: &TaskItem) -> Option<NaiveDateTime> {
+    task.datetime
+        .as_deref()
+        .and_then(|value| parse_calendar_datetime(value).ok().flatten())
+        .or_else(|| {
+            task_date(task)
+                .and_then(|date| NaiveTime::from_hms_opt(0, 0, 0).map(|time| date.and_time(time)))
+        })
+}
+
+pub fn is_today(datetime: &str) -> bool {
+    calendar_date(datetime)
+        .map(|value| value == Local::now().naive_local().date())
+        .unwrap_or(false)
+}
+
+pub fn is_upcoming(datetime: &str) -> bool {
+    if let Ok(Some(value)) = parse_calendar_datetime(datetime) {
+        return value >= Local::now().naive_local();
+    }
+    calendar_date(datetime)
+        .map(|value| value >= Local::now().naive_local().date())
+        .unwrap_or(false)
+}
+
+fn calendar_date(input: &str) -> Result<NaiveDate, String> {
+    parse_calendar_datetime(input)
+        .map(|value| value.map(|datetime| datetime.date()))
+        .and_then(|value| match value {
+            Some(date) => Ok(date),
+            None => parse_calendar_date(input),
+        })
+}
+
+fn sort_by_datetime(tasks: &mut [TaskItem]) {
+    tasks.sort_by_key(|task| (task_datetime(task), task.id));
+}
+
+fn calendar_widget_line(task: &TaskItem) -> String {
+    let datetime = task.datetime.as_deref().unwrap_or_default();
+    let countdown = calendar_countdown_label(datetime);
+    format!("{} {} ({})", datetime, task.text, countdown)
+}
+
+fn calendar_countdown_label(input: &str) -> String {
+    if let Ok(Some(datetime)) = parse_calendar_datetime(input) {
+        return calendar_countdown(datetime);
+    }
+
+    let Ok(date) = parse_calendar_date(input) else {
+        return "scheduled".to_string();
+    };
+    let today = Local::now().naive_local().date();
+    if date == today {
+        "today".to_string()
+    } else if date > today {
+        format!("in {}d", date.signed_duration_since(today).num_days())
+    } else {
+        "past".to_string()
+    }
+}
+
+fn calendar_countdown(datetime: NaiveDateTime) -> String {
+    let now = Local::now().naive_local();
+    let seconds = datetime.signed_duration_since(now).num_seconds().max(0) as u64;
+    if seconds == 0 {
+        "due now".to_string()
+    } else {
+        format!("in {}", format_duration(seconds))
+    }
 }
 
 fn toggle_task(id: u64, settings: &TasksConfig) -> Result<(), String> {
@@ -1329,5 +1679,59 @@ mod tests {
 
         assert!(countdown_is_running(&running));
         assert!(!countdown_is_running(&completed));
+    }
+
+    #[test]
+    fn normalizes_calendar_datetime() {
+        assert_eq!(
+            normalize_calendar_datetime("2026-04-12T14:30", None).unwrap(),
+            "2026-04-12T14:30"
+        );
+        assert_eq!(
+            normalize_calendar_datetime("2026-04-12T14:30:45", None).unwrap(),
+            "2026-04-12T14:30"
+        );
+        assert_eq!(
+            normalize_calendar_datetime("2026-04-12", None).unwrap(),
+            "2026-04-12"
+        );
+        assert_eq!(
+            normalize_calendar_datetime("2026-04-12", Some("14:30")).unwrap(),
+            "2026-04-12T14:30"
+        );
+        assert!(normalize_calendar_datetime("2026-04-12 14:30", None).is_err());
+        assert!(normalize_calendar_datetime("2026-04-12T14:30", Some("15:00")).is_err());
+    }
+
+    #[test]
+    fn sorts_calendar_tasks_by_datetime() {
+        let mut tasks = vec![
+            TaskItem {
+                id: 2,
+                text: "Later".to_string(),
+                done: false,
+                created_at: 0,
+                datetime: Some("2026-04-12T16:00".to_string()),
+                description: None,
+            },
+            TaskItem {
+                id: 1,
+                text: "Sooner".to_string(),
+                done: false,
+                created_at: 0,
+                datetime: Some("2026-04-12T14:30".to_string()),
+                description: None,
+            },
+        ];
+
+        sort_by_datetime(&mut tasks);
+
+        assert_eq!(
+            tasks
+                .iter()
+                .map(|task| task.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Sooner", "Later"]
+        );
     }
 }

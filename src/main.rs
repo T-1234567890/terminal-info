@@ -76,10 +76,11 @@ use crate::plugin::{
     verify_plugins,
 };
 use crate::productivity::{
-    TimerLiveTarget, add_note, add_reminder, add_task, clear_notes, complete_task, delete_task,
-    has_active_timer_state, interactive_task_menu, list_notes, list_tasks,
-    replace_notes_with_single_entry, show_history, start_stopwatch, start_timer, stop_stopwatch,
-    stop_timer, timer_dashboard_output, timer_live_active,
+    TimerLiveTarget, add_calendar_event, add_note, add_reminder, add_task, clear_notes,
+    add_task_with_event, attach_task_to_calendar, complete_task, delete_task,
+    has_active_timer_state, interactive_task_menu, list_calendar_events, list_notes, list_tasks,
+    remove_calendar_event, replace_notes_with_single_entry, show_history, start_stopwatch,
+    start_timer, stop_stopwatch, stop_timer, timer_dashboard_output, timer_live_active,
 };
 use crate::theme::{AccentColor, BorderStyle, format_box_table, set_theme};
 use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, WeatherReport};
@@ -183,6 +184,11 @@ enum Command {
     Task {
         #[command(subcommand)]
         command: Option<TaskCommand>,
+    },
+    /// Manage scheduled task events
+    Calendar {
+        #[command(subcommand)]
+        command: Option<CalendarCommand>,
     },
     /// Capture quick notes
     Note {
@@ -595,10 +601,45 @@ enum ProfileCommand {
 
 #[derive(Subcommand, Debug)]
 enum TaskCommand {
-    Add { text: Vec<String> },
+    Add {
+        #[arg(long)]
+        event: Option<u64>,
+        text: Vec<String>,
+    },
     List,
     Done { id: u64 },
     Delete { id: u64 },
+}
+
+#[derive(Subcommand, Debug)]
+enum CalendarCommand {
+    /// Add a scheduled task event
+    Add {
+        title: String,
+        date: String,
+        #[arg(long)]
+        time: Option<String>,
+        #[arg(long)]
+        description: Option<String>,
+    },
+    /// Attach an existing task to a calendar date
+    Attach {
+        id: u64,
+        date: String,
+        #[arg(long)]
+        time: Option<String>,
+    },
+    /// List scheduled task events
+    List {
+        #[arg(long)]
+        today: bool,
+        #[arg(long)]
+        upcoming: bool,
+        #[arg(long)]
+        limit: Option<usize>,
+    },
+    /// Remove a scheduled task event
+    Remove { id: u64 },
 }
 
 #[derive(Subcommand, Debug)]
@@ -946,6 +987,7 @@ fn main() {
         Some(Command::Timer { command }) => handle_timer(command, live_view_freeze, &config),
         Some(Command::Stopwatch { command }) => handle_stopwatch(command, live_view_freeze),
         Some(Command::Task { command }) => handle_task(&config, command),
+        Some(Command::Calendar { command }) => handle_calendar(command),
         Some(Command::Note { command }) => handle_note(command),
         Some(Command::History { limit }) => show_history(limit),
         Some(Command::Remind { time, message }) => {
@@ -1748,10 +1790,35 @@ fn handle_profile(config: &mut Config, command: ProfileCommand) -> Result<(), St
 fn handle_task(config: &Config, command: Option<TaskCommand>) -> Result<(), String> {
     match command {
         None => interactive_task_menu(config),
-        Some(TaskCommand::Add { text }) => add_task(&text.join(" ")),
+        Some(TaskCommand::Add { event: None, text }) => add_task(&text.join(" ")),
+        Some(TaskCommand::Add {
+            event: Some(event),
+            text,
+        }) => add_task_with_event(&text.join(" "), Some(event)),
         Some(TaskCommand::List) => list_tasks(),
         Some(TaskCommand::Done { id }) => complete_task(id),
         Some(TaskCommand::Delete { id }) => delete_task(id),
+    }
+}
+
+fn handle_calendar(command: Option<CalendarCommand>) -> Result<(), String> {
+    match command {
+        None => list_calendar_events(false, false, None),
+        Some(CalendarCommand::Add {
+            title,
+            date,
+            time,
+            description,
+        }) => add_calendar_event(&title, &date, time.as_deref(), description.as_deref()),
+        Some(CalendarCommand::Attach { id, date, time }) => {
+            attach_task_to_calendar(id, &date, time.as_deref())
+        }
+        Some(CalendarCommand::List {
+            today,
+            upcoming,
+            limit,
+        }) => list_calendar_events(today, upcoming, limit),
+        Some(CalendarCommand::Remove { id }) => remove_calendar_event(id),
     }
 }
 

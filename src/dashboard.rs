@@ -128,7 +128,7 @@ impl DashboardRenderer {
                             fields.push(format!("cpu={}", snapshot.cpu));
                             fields.push(format!("mem={}", snapshot.memory));
                         }
-                        "notes" | "timer" | "tasks" | "history" | "reminders" => {
+                        "notes" | "timer" | "tasks" | "calendar" | "history" | "reminders" => {
                             if let Some(widget) = self.built_in_widget(widget, true) {
                                 fields.push(format!(
                                     "{}={}",
@@ -317,6 +317,12 @@ fn core_widget_definitions() -> Vec<WidgetDefinition> {
             enabled_by_default: true,
         },
         WidgetDefinition {
+            name: "calendar".to_string(),
+            display_name: "Calendar".to_string(),
+            description: Some("Shows upcoming scheduled tasks".to_string()),
+            enabled_by_default: true,
+        },
+        WidgetDefinition {
             name: "notes".to_string(),
             display_name: "Notes".to_string(),
             description: Some("Shows recent notes".to_string()),
@@ -403,7 +409,7 @@ fn dashboard_sections(
                 main_rows.push(("CPU".to_string(), snapshot.cpu.clone()));
                 main_rows.push(("Memory".to_string(), snapshot.memory.clone()));
             }
-            "timer" | "tasks" | "notes" | "history" | "reminders" => {
+            "timer" | "tasks" | "calendar" | "notes" | "history" | "reminders" => {
                 if let Some(widget) = renderer.built_in_widget(widget, compact) {
                     sections.push(DashboardSection {
                         title: widget.title.clone(),
