@@ -95,8 +95,10 @@ pub fn run_dashboard(
             refresh_ui_state(&runtime, &mut ui);
             let snapshot = ui.snapshot.clone();
             ui.selected_agent = clamp_index(ui.selected_agent, snapshot.agents.len());
-            ui.selected_approval =
-                clamp_index(ui.selected_approval, pending_requests(snapshot.approvals.as_slice()).len());
+            ui.selected_approval = clamp_index(
+                ui.selected_approval,
+                pending_requests(snapshot.approvals.as_slice()).len(),
+            );
             Ok(render_dashboard(
                 &snapshot,
                 &ui.focus,
@@ -118,8 +120,10 @@ pub fn run_dashboard(
             refresh_ui_state(&runtime, &mut ui);
             let snapshot = ui.snapshot.clone();
             ui.selected_agent = clamp_index(ui.selected_agent, snapshot.agents.len());
-            ui.selected_approval =
-                clamp_index(ui.selected_approval, pending_requests(snapshot.approvals.as_slice()).len());
+            ui.selected_approval = clamp_index(
+                ui.selected_approval,
+                pending_requests(snapshot.approvals.as_slice()).len(),
+            );
 
             if let Event::Key(key) = next {
                 if key.kind == KeyEventKind::Release {
@@ -191,8 +195,10 @@ pub fn run_dashboard(
                     }
                     KeyCode::Char('g') if ui.focus == FocusPane::Chat => {
                         if let Some(session) = snapshot.active_session.as_ref() {
-                            let selected =
-                                snapshot.agents.get(ui.selected_agent).map(|agent| agent.id.clone());
+                            let selected = snapshot
+                                .agents
+                                .get(ui.selected_agent)
+                                .map(|agent| agent.id.clone());
                             let _ = runtime.send_chat_to_agent(session.id(), selected);
                         }
                     }
@@ -254,7 +260,12 @@ fn handle_chat_submit(runtime: &Runtime, input: &mut String) -> Result<(), Strin
         let provider = ProviderKind::from_label(command.trim());
         let snapshot = runtime.snapshot();
         if let Some(session) = snapshot.active_session.as_ref() {
-            runtime.ensure_chat_session(Some(session.id().to_string()), Some(provider), None, None)?;
+            runtime.ensure_chat_session(
+                Some(session.id().to_string()),
+                Some(provider),
+                None,
+                None,
+            )?;
         } else {
             let _ = runtime.create_chat_session(Some(provider), None, None)?;
         }
@@ -289,7 +300,10 @@ fn handle_chat_submit(runtime: &Runtime, input: &mut String) -> Result<(), Strin
     let session_id = if let Some(session) = snapshot.active_session.as_ref() {
         session.id().to_string()
     } else {
-        runtime.create_chat_session(None, None, None)?.id().to_string()
+        runtime
+            .create_chat_session(None, None, None)?
+            .id()
+            .to_string()
     };
     runtime.send_chat_message(&session_id, payload)
 }
@@ -411,7 +425,8 @@ fn render_agent_manager(
             "ai agent".to_string(),
             String::new(),
             "Waiting for agent...".to_string(),
-            "Tip: Start `tinfo codex` or `tinfo claude-code` while this screen is open.".to_string(),
+            "Tip: Start `tinfo codex` or `tinfo claude-code` while this screen is open."
+                .to_string(),
             String::new(),
             "Press q or Ctrl+C to exit".to_string(),
         ]
@@ -432,7 +447,9 @@ fn render_agent_manager(
     let mut lines = Vec::new();
     lines.push("ai agent".to_string());
     lines.push("Manage external CLI agents with live status, approvals, and activity.".to_string());
-    lines.push("Tip: Start `tinfo codex` or `tinfo claude-code` while this screen is open.".to_string());
+    lines.push(
+        "Tip: Start `tinfo codex` or `tinfo claude-code` while this screen is open.".to_string(),
+    );
     lines.push(String::new());
 
     if snapshot
@@ -440,7 +457,9 @@ fn render_agent_manager(
         .iter()
         .any(|agent| agent.adapter_type == "gemini")
     {
-        lines.push("[Experimental] Gemini does not support hooks. Behavior may be unstable.".to_string());
+        lines.push(
+            "[Experimental] Gemini does not support hooks. Behavior may be unstable.".to_string(),
+        );
         lines.push(String::new());
     }
 
@@ -459,7 +478,11 @@ fn render_agent_manager(
             lines.push(format!("Agent is waiting for approval in {agent_label}"));
             lines.push("→ Go to terminal to approve".to_string());
             lines.push(request.action.clone());
-            if let Some(details) = request.details.as_deref().filter(|value| !value.trim().is_empty()) {
+            if let Some(details) = request
+                .details
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            {
                 lines.push(details.to_string());
             }
             lines.push(String::new());
@@ -546,7 +569,12 @@ fn render_chat_manager(
         .unwrap_or(120);
     let mut body = String::new();
     body.push_str(&format_box_table_with_width("ai chat", &header, None));
-    body.push_str(&render_chat(snapshot, *focus == FocusPane::Chat, chat_input, width));
+    body.push_str(&render_chat(
+        snapshot,
+        *focus == FocusPane::Chat,
+        chat_input,
+        width,
+    ));
     body.push('\n');
     body.push_str(&render_activity(snapshot, selected_agent, width));
     body.push('\n');
@@ -616,12 +644,12 @@ fn render_approvals(
             let title = if request.state == ApprovalState::Pending {
                 format!("{pointer} {agent_label} wants to:")
             } else {
-                format!("{pointer} {agent_label} {}", approval_state_label(request.state))
+                format!(
+                    "{pointer} {agent_label} {}",
+                    approval_state_label(request.state)
+                )
             };
-            rows.push((
-                title,
-                approval_display(request),
-            ));
+            rows.push((title, approval_display(request)));
         }
     }
     format_box_table_with_width("Approvals", &rows, Some(section_width(width)))
@@ -684,7 +712,11 @@ fn render_chat(
         rows.push(("Chat".to_string(), "No active chat session".to_string()));
     }
     rows.push((
-        if focused { "input >".to_string() } else { "input".to_string() },
+        if focused {
+            "input >".to_string()
+        } else {
+            "input".to_string()
+        },
         chat_input.to_string(),
     ));
     format_box_table_with_width("Chat", &rows, Some(width.saturating_sub(4)))
@@ -793,7 +825,11 @@ fn agent_status_label(agent: &crate::ai::agent::AgentSession) -> String {
 }
 
 fn approval_display(request: &ApprovalRequest) -> String {
-    if let Some(details) = request.details.as_deref().filter(|value| !value.trim().is_empty()) {
+    if let Some(details) = request
+        .details
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
         format!("{}\n{}", request.action, details)
     } else {
         request.action.clone()
@@ -900,10 +936,7 @@ fn agent_has_pending_approval(
         .any(|request| request.agent_id == agent.id && request.state == ApprovalState::Pending)
 }
 
-fn is_editing_files(
-    snapshot: &RuntimeSnapshot,
-    agent: &crate::ai::agent::AgentSession,
-) -> bool {
+fn is_editing_files(snapshot: &RuntimeSnapshot, agent: &crate::ai::agent::AgentSession) -> bool {
     let task_text = agent
         .current_task
         .as_ref()

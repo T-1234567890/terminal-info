@@ -32,10 +32,7 @@ impl AiConfig {
         }
     }
 
-    pub fn save_provider_api_key(
-        provider: ProviderKind,
-        api_key: String,
-    ) -> Result<Self, String> {
+    pub fn save_provider_api_key(provider: ProviderKind, api_key: String) -> Result<Self, String> {
         let mut config = Config::load_or_create()?;
         SystemSecretStore.save_provider_key(provider, &api_key)?;
         config.ai.default_provider = Some(provider.config_key().to_string());
@@ -189,13 +186,21 @@ impl AiConfig {
     pub fn agents(&self) -> Vec<ConfiguredAgent> {
         let mut agents = Vec::new();
         let adapters = [
-            ("codex", AgentAdapterKind::Codex, &self.shared.adapters.codex),
+            (
+                "codex",
+                AgentAdapterKind::Codex,
+                &self.shared.adapters.codex,
+            ),
             (
                 "claude_code",
                 AgentAdapterKind::ClaudeCode,
                 &self.shared.adapters.claude_code,
             ),
-            ("gemini", AgentAdapterKind::Gemini, &self.shared.adapters.gemini),
+            (
+                "gemini",
+                AgentAdapterKind::Gemini,
+                &self.shared.adapters.gemini,
+            ),
         ];
 
         for (id, kind, config) in adapters {

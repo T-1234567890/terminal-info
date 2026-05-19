@@ -6,6 +6,7 @@ mod dashboard;
 mod disk;
 mod hardware;
 mod live;
+mod math;
 mod migration;
 mod output;
 mod plugin;
@@ -41,19 +42,17 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tar::Archive;
-#[cfg(target_os = "windows")]
-use zip::ZipArchive;
 use terminal_info::ai::app::{EntryMode as AiEntryMode, run_entry as run_ai_entry};
 use terminal_info::ai::chat::ProviderKind;
-use terminal_info::ai::cli_chat::{
-    ChatMode, ChatOptions as AiChatOptions, run as run_simple_chat,
-};
+use terminal_info::ai::cli_chat::{ChatMode, ChatOptions as AiChatOptions, run as run_simple_chat};
 use terminal_info::ai::connections::{connections_path, load_connections};
 use terminal_info::ai::hook::{
     HookEventPayload, claude_settings_path, codex_hooks_path, hooks_enabled, install_hooks,
     read_hook_event_from_stdin, uninstall_hooks,
 };
 use terminal_info::ai::ipc::{append_hook_event, take_agent_decision};
+#[cfg(target_os = "windows")]
+use zip::ZipArchive;
 
 use crate::builtins::{
     run_config_doctor, run_diagnostic_all, run_diagnostic_full, run_diagnostic_leaks,
@@ -61,12 +60,11 @@ use crate::builtins::{
     run_diagnostic_system, run_ping, show_network_info, show_system_info,
 };
 use crate::cache::{read_cache, write_cache};
-use crate::config::{
-    ApiProvider, Config, DefaultOutput, Units, config_path, home_dir_path,
-};
+use crate::config::{ApiProvider, Config, DefaultOutput, Units, config_path, home_dir_path};
 use crate::config_menu::show_config_menu;
 use crate::dashboard::{available_widget_definitions, default_enabled_widget_names};
 use crate::live::run_live_loop;
+use crate::math::{Audience, ExplainStyle, GraphArgs, MathThemeArg, RenderArgs, SolveArgs};
 use crate::output::{OutputMode, set_json_output, set_output_mode};
 use crate::plugin::{
     info_plugin, init_plugin_template, install_plugin, list_plugins, list_trusted_plugins,
@@ -76,11 +74,11 @@ use crate::plugin::{
     verify_plugins,
 };
 use crate::productivity::{
-    TimerLiveTarget, add_calendar_event, add_note, add_reminder, add_task, clear_notes,
-    add_task_with_event, attach_task_to_calendar, complete_task, delete_task,
-    has_active_timer_state, interactive_task_menu, list_calendar_events, list_notes, list_tasks,
-    remove_calendar_event, replace_notes_with_single_entry, show_history, start_stopwatch,
-    start_timer, stop_stopwatch, stop_timer, timer_dashboard_output, timer_live_active,
+    TimerLiveTarget, add_calendar_event, add_note, add_reminder, add_task, add_task_with_event,
+    attach_task_to_calendar, clear_notes, complete_task, delete_task, has_active_timer_state,
+    interactive_task_menu, list_calendar_events, list_notes, list_tasks, remove_calendar_event,
+    replace_notes_with_single_entry, show_history, start_stopwatch, start_timer, stop_stopwatch,
+    stop_timer, timer_dashboard_output, timer_live_active,
 };
 use crate::theme::{AccentColor, BorderStyle, format_box_table, set_theme};
 use crate::weather::{AlertsReport, ForecastReport, HourlyReport, WeatherClient, WeatherReport};
@@ -169,6 +167,11 @@ enum Command {
     Time {
         /// Optional city name
         city: Option<String>,
+    },
+    /// Symbolic math utilities
+    Math {
+        #[command(subcommand)]
+        command: MathCommand,
     },
     /// Show or manage countdown timers
     Timer {
@@ -404,10 +407,7 @@ enum AgentHookCommand {
     /// Show the Codex and Claude Code hook config paths
     Path,
     #[command(hide = true)]
-    Event {
-        adapter: String,
-        event_type: String,
-    },
+    Event { adapter: String, event_type: String },
 }
 
 #[derive(Subcommand, Debug)]
@@ -534,6 +534,104 @@ enum RenderCommand {
     },
 }
 
+#[derive(Subcommand, Debug)]
+enum MathCommand {
+    /// Solve, simplify, substitute, and evaluate symbolic input
+    Solve {
+        /// Math input file. If omitted, reads piped stdin.
+        input: Option<PathBuf>,
+        /// Show deterministic solve steps
+        #[arg(long)]
+        steps: bool,
+        /// Render results as LaTeX
+        #[arg(long)]
+        latex: bool,
+        /// Floating point precision
+        #[arg(long, default_value_t = 6)]
+        precision: usize,
+        /// Show variable dependency table
+        #[arg(long)]
+        vars: bool,
+        /// Show symbolic passes and transformations
+        #[arg(long)]
+        trace: bool,
+        /// Show internal symbolic debug output
+        #[arg(long)]
+        debug: bool,
+    },
+    /// Generate symbolic dependency graphs
+    Graph {
+        /// Math input file. If omitted, reads piped stdin.
+        input: Option<PathBuf>,
+        /// Generate interactive HTML graph
+        #[arg(long)]
+        html: bool,
+        /// Generate Mermaid output
+        #[arg(long)]
+        mermaid: bool,
+        /// Generate Graphviz DOT output
+        #[arg(long)]
+        dot: bool,
+        /// Open generated output file
+        #[arg(long)]
+        open: bool,
+        /// Custom output path
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// Render symbolic reports
+    Render {
+        /// Math input file. If omitted, reads piped stdin.
+        input: Option<PathBuf>,
+        /// Generate HTML
+        #[arg(long)]
+        html: bool,
+        /// Generate PDF
+        #[arg(long)]
+        pdf: bool,
+        /// Generate Markdown
+        #[arg(long)]
+        md: bool,
+        /// Report theme
+        #[arg(long, value_enum, default_value_t = MathThemeArg::System)]
+        theme: MathThemeArg,
+        /// Minimal report style
+        #[arg(long)]
+        compact: bool,
+        /// Custom output path
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// Explain deterministic symbolic output
+    Explain {
+        /// Math input file. If omitted, reads piped stdin.
+        input: Option<PathBuf>,
+        /// Enable AI explanations
+        #[arg(long)]
+        ai: bool,
+        /// Explanation audience
+        #[arg(long, value_enum, default_value_t = Audience::Developer)]
+        audience: Audience,
+        /// Explanation style
+        #[arg(long, value_enum, default_value_t = ExplainStyle::Concise)]
+        style: ExplainStyle,
+        /// Generate AI-enhanced HTML report
+        #[arg(long)]
+        html: bool,
+        /// Generate AI-enhanced PDF report
+        #[arg(long)]
+        pdf: bool,
+        /// Use an existing AI provider
+        #[arg(long, value_enum)]
+        model: Option<ChatProviderArg>,
+        /// Custom output path
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// Open an interactive symbolic shell
+    Repl,
+}
+
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum ChatProviderArg {
     Openai,
@@ -607,8 +705,12 @@ enum TaskCommand {
         text: Vec<String>,
     },
     List,
-    Done { id: u64 },
-    Delete { id: u64 },
+    Done {
+        id: u64,
+    },
+    Delete {
+        id: u64,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -984,6 +1086,7 @@ fn main() {
         Some(Command::System { command }) => handle_system(command),
         Some(Command::Ps { limit, sort }) => process_inspect::show_processes(limit, sort.into()),
         Some(Command::Time { city }) => live_time(city, live_view_freeze),
+        Some(Command::Math { command }) => handle_math(command),
         Some(Command::Timer { command }) => handle_timer(command, live_view_freeze, &config),
         Some(Command::Stopwatch { command }) => handle_stopwatch(command, live_view_freeze),
         Some(Command::Task { command }) => handle_task(&config, command),
@@ -1005,9 +1108,7 @@ fn main() {
             event_type,
         }) => handle_agent_hook_event(adapter, event_type),
         Some(Command::Wrapper { command }) => handle_wrapper_command(command),
-        Some(Command::Codex { args }) => {
-            handle_wrapper_command(WrapperCommand::Codex { args })
-        }
+        Some(Command::Codex { args }) => handle_wrapper_command(WrapperCommand::Codex { args }),
         Some(Command::ClaudeCode { args }) => {
             handle_wrapper_command(WrapperCommand::Claude { args })
         }
@@ -1801,6 +1902,80 @@ fn handle_task(config: &Config, command: Option<TaskCommand>) -> Result<(), Stri
     }
 }
 
+fn handle_math(command: MathCommand) -> Result<(), String> {
+    match command {
+        MathCommand::Solve {
+            input,
+            steps,
+            latex,
+            precision,
+            vars,
+            trace,
+            debug,
+        } => math::handle_solve(SolveArgs {
+            input,
+            steps,
+            latex,
+            precision,
+            vars,
+            trace,
+            debug,
+        }),
+        MathCommand::Graph {
+            input,
+            html,
+            mermaid,
+            dot,
+            open,
+            output,
+        } => math::handle_graph(GraphArgs {
+            input,
+            html,
+            mermaid,
+            dot,
+            open,
+            output,
+        }),
+        MathCommand::Render {
+            input,
+            html,
+            pdf,
+            md,
+            theme,
+            compact,
+            output,
+        } => math::handle_render(RenderArgs {
+            input,
+            html,
+            pdf,
+            md,
+            theme,
+            compact,
+            output,
+        }),
+        MathCommand::Explain {
+            input,
+            ai,
+            audience,
+            style,
+            html,
+            pdf,
+            model,
+            output,
+        } => math::handle_explain(crate::math::ExplainArgs {
+            input,
+            ai,
+            audience,
+            style,
+            html,
+            pdf,
+            model: model.map(ChatProviderArg::into_provider_kind),
+            output,
+        }),
+        MathCommand::Repl => math::run_repl(),
+    }
+}
+
 fn handle_calendar(command: Option<CalendarCommand>) -> Result<(), String> {
     match command {
         None => list_calendar_events(false, false, None),
@@ -2515,7 +2690,9 @@ fn handle_agent_discover() -> Result<(), String> {
 fn handle_agent_attach(pid: u32) -> Result<(), String> {
     let _ = pid;
     println!("Process attach is deprecated.");
-    println!("Use agent hooks instead: `tinfo agent hook install` and launch through `tinfo codex` or `tinfo claude-code`.");
+    println!(
+        "Use agent hooks instead: `tinfo agent hook install` and launch through `tinfo codex` or `tinfo claude-code`."
+    );
     Ok(())
 }
 
@@ -2678,31 +2855,33 @@ fn run_wrapped_agent(program: &str, adapter: &str, args: Vec<String>) -> Result<
 
     let decision_writer = writer.clone();
     let decision_agent_id = agent_id.clone();
-    let _decision_handle = thread::spawn(move || loop {
-        match take_agent_decision(&decision_agent_id) {
-            Ok(Some(decision)) => {
-                let bytes: &[u8] = match decision.decision.as_str() {
-                    "approve" => b"\n",
-                    "deny" => b"\x1b",
-                    _ => &[],
-                };
-                if bytes.is_empty() {
-                    thread::sleep(Duration::from_millis(150));
-                    continue;
-                }
-                if let Ok(mut writer) = decision_writer.lock() {
-                    if writer.write_all(bytes).is_err() || writer.flush().is_err() {
+    let _decision_handle = thread::spawn(move || {
+        loop {
+            match take_agent_decision(&decision_agent_id) {
+                Ok(Some(decision)) => {
+                    let bytes: &[u8] = match decision.decision.as_str() {
+                        "approve" => b"\n",
+                        "deny" => b"\x1b",
+                        _ => &[],
+                    };
+                    if bytes.is_empty() {
+                        thread::sleep(Duration::from_millis(150));
+                        continue;
+                    }
+                    if let Ok(mut writer) = decision_writer.lock() {
+                        if writer.write_all(bytes).is_err() || writer.flush().is_err() {
+                            break;
+                        }
+                    } else {
                         break;
                     }
-                } else {
-                    break;
                 }
-            }
-            Ok(None) => {
-                thread::sleep(Duration::from_millis(150));
-            }
-            Err(_) => {
-                thread::sleep(Duration::from_millis(300));
+                Ok(None) => {
+                    thread::sleep(Duration::from_millis(150));
+                }
+                Err(_) => {
+                    thread::sleep(Duration::from_millis(300));
+                }
             }
         }
     });

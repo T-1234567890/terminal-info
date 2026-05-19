@@ -178,8 +178,10 @@ jobs:
           pattern: release-*
           merge-multiple: true
 
-      - name: Add installer asset
-        run: cp install.sh dist/install.sh
+      - name: Add installer assets
+        run: |
+          cp install.sh dist/install.sh
+          cp quick-install.sh dist/quick-install.sh
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2

@@ -391,16 +391,24 @@ fn complete_openai_like(
         .map_err(|err| format!("Failed to contact {}: {err}", session.provider().label()))?
         .error_for_status()
         .map_err(|err| format!("{} request failed: {err}", session.provider().label()))?;
-    let body: Value = response
-        .json()
-        .map_err(|err| format!("Failed to parse {} response: {err}", session.provider().label()))?;
+    let body: Value = response.json().map_err(|err| {
+        format!(
+            "Failed to parse {} response: {err}",
+            session.provider().label()
+        )
+    })?;
     body.get("choices")
         .and_then(|value| value.get(0))
         .and_then(|value| value.get("message"))
         .and_then(|value| value.get("content"))
         .and_then(Value::as_str)
         .map(|text| text.to_string())
-        .ok_or_else(|| format!("{} response did not include assistant content.", session.provider().label()))
+        .ok_or_else(|| {
+            format!(
+                "{} response did not include assistant content.",
+                session.provider().label()
+            )
+        })
 }
 
 fn stream_openai_like<F>(

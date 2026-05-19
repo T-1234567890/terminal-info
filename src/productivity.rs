@@ -526,7 +526,10 @@ fn choose_task_to_toggle(
     }
 }
 
-fn choose_calendar_event_for_task(theme: &ColorfulTheme, tasks: &[TaskItem]) -> Result<Option<u64>, String> {
+fn choose_calendar_event_for_task(
+    theme: &ColorfulTheme,
+    tasks: &[TaskItem],
+) -> Result<Option<u64>, String> {
     let events = calendar_events(tasks.to_vec());
     if events.is_empty() {
         return Ok(None);

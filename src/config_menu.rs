@@ -1067,7 +1067,11 @@ fn mask_value(value: &str) -> String {
     if value.len() <= 4 {
         "*".repeat(value.len())
     } else {
-        format!("{}{}", "*".repeat(value.len() - 4), &value[value.len() - 4..])
+        format!(
+            "{}{}",
+            "*".repeat(value.len() - 4),
+            &value[value.len() - 4..]
+        )
     }
 }
 
@@ -1116,7 +1120,8 @@ fn show_ai_features_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(
                 );
             }
             Some(3) => {
-                config.ai.runtime.persist_chat_transcripts = !config.ai.runtime.persist_chat_transcripts;
+                config.ai.runtime.persist_chat_transcripts =
+                    !config.ai.runtime.persist_chat_transcripts;
                 config.save()?;
                 println!(
                     "Persist chat transcripts: {}",
@@ -1163,7 +1168,10 @@ fn show_ai_features_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(
             Some(6) => {
                 config.ai.ui.remember_last_view = !config.ai.ui.remember_last_view;
                 config.save()?;
-                println!("Remember last AI screen: {}", config.ai.ui.remember_last_view);
+                println!(
+                    "Remember last AI screen: {}",
+                    config.ai.ui.remember_last_view
+                );
             }
             Some(7) => {
                 config.ai.ui.show_tips = !config.ai.ui.show_tips;
@@ -1219,7 +1227,10 @@ fn show_ai_features_menu(config: &mut Config, theme: &ColorfulTheme) -> Result<(
             Some(12) => {
                 config.ai.agent.compact_activity = !config.ai.agent.compact_activity;
                 config.save()?;
-                println!("Compact agent activity: {}", config.ai.agent.compact_activity);
+                println!(
+                    "Compact agent activity: {}",
+                    config.ai.agent.compact_activity
+                );
             }
             Some(13) | None => break,
             Some(_) => {}

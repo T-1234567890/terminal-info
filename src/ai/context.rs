@@ -57,7 +57,11 @@ pub fn gather_context(request: &ContextRequest) -> ContextBundle {
 }
 
 trait ContextCollector {
-    fn collect(&self, request: &ContextRequest, display_messages: &mut Vec<String>) -> Option<ContextSection>;
+    fn collect(
+        &self,
+        request: &ContextRequest,
+        display_messages: &mut Vec<String>,
+    ) -> Option<ContextSection>;
 }
 
 struct ContextSection {
@@ -72,7 +76,11 @@ struct LogContextCollector;
 struct FileContextCollector;
 
 impl ContextCollector for EnvContextCollector {
-    fn collect(&self, request: &ContextRequest, display_messages: &mut Vec<String>) -> Option<ContextSection> {
+    fn collect(
+        &self,
+        request: &ContextRequest,
+        display_messages: &mut Vec<String>,
+    ) -> Option<ContextSection> {
         let shell = env::var("SHELL")
             .or_else(|_| env::var("ComSpec"))
             .unwrap_or_else(|_| "unknown".to_string());
@@ -91,7 +99,11 @@ impl ContextCollector for EnvContextCollector {
 }
 
 impl ContextCollector for ProjectContextCollector {
-    fn collect(&self, request: &ContextRequest, display_messages: &mut Vec<String>) -> Option<ContextSection> {
+    fn collect(
+        &self,
+        request: &ContextRequest,
+        display_messages: &mut Vec<String>,
+    ) -> Option<ContextSection> {
         let project = detect_project_type(&request.cwd);
         let mut lines = vec![format!("Detected project type: {}", project.as_str())];
         if let Some(toolchain) = detect_toolchain_details(&request.cwd, project) {
@@ -106,12 +118,15 @@ impl ContextCollector for ProjectContextCollector {
 }
 
 impl ContextCollector for GitContextCollector {
-    fn collect(&self, request: &ContextRequest, display_messages: &mut Vec<String>) -> Option<ContextSection> {
+    fn collect(
+        &self,
+        request: &ContextRequest,
+        display_messages: &mut Vec<String>,
+    ) -> Option<ContextSection> {
         let git_root = run_command(&request.cwd, &["git", "rev-parse", "--show-toplevel"]).ok()?;
         let branch = run_command(&request.cwd, &["git", "rev-parse", "--abbrev-ref", "HEAD"])
             .unwrap_or_else(|_| "unknown".to_string());
-        let status = run_command(&request.cwd, &["git", "status", "--short"])
-            .unwrap_or_default();
+        let status = run_command(&request.cwd, &["git", "status", "--short"]).unwrap_or_default();
         let diff = run_command(
             &request.cwd,
             &["git", "diff", "--stat", "--compact-summary", "HEAD"],
@@ -132,15 +147,16 @@ impl ContextCollector for GitContextCollector {
         if !diff.trim().is_empty() || !status.trim().is_empty() {
             display_messages.push("✓ Including recent changes".to_string());
         }
-        Some(ContextSection {
-            title: "Git",
-            body,
-        })
+        Some(ContextSection { title: "Git", body })
     }
 }
 
 impl ContextCollector for LogContextCollector {
-    fn collect(&self, request: &ContextRequest, display_messages: &mut Vec<String>) -> Option<ContextSection> {
+    fn collect(
+        &self,
+        request: &ContextRequest,
+        display_messages: &mut Vec<String>,
+    ) -> Option<ContextSection> {
         if request.primary_input_present {
             return None;
         }
@@ -173,10 +189,17 @@ impl ContextCollector for LogContextCollector {
 }
 
 impl ContextCollector for FileContextCollector {
-    fn collect(&self, request: &ContextRequest, display_messages: &mut Vec<String>) -> Option<ContextSection> {
+    fn collect(
+        &self,
+        request: &ContextRequest,
+        display_messages: &mut Vec<String>,
+    ) -> Option<ContextSection> {
         let path = request.explicit_file.as_ref()?;
         let metadata = fs::metadata(path).ok()?;
-        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("unknown");
+        let extension = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("unknown");
         let mut body = format!(
             "Primary file: {}\nExtension: {}\nSize: {} bytes",
             display_path(path),
@@ -246,7 +269,9 @@ fn detect_toolchain_details(cwd: &Path, project: ProjectType) -> Option<String> 
         ProjectType::Rust => Some("Toolchain markers: Cargo.toml".to_string()),
         ProjectType::Swift => Some("Toolchain markers: Package.swift / Xcode project".to_string()),
         ProjectType::Node => Some("Toolchain markers: package.json".to_string()),
-        ProjectType::Python => Some("Toolchain markers: pyproject.toml / requirements.txt".to_string()),
+        ProjectType::Python => {
+            Some("Toolchain markers: pyproject.toml / requirements.txt".to_string())
+        }
         ProjectType::Go => Some("Toolchain markers: go.mod".to_string()),
         ProjectType::Unknown => {
             let entries = fs::read_dir(cwd).ok()?;
@@ -270,8 +295,14 @@ fn find_recent_log_file(cwd: &Path) -> Option<PathBuf> {
         .map(PathBuf::from);
     let mut candidates = Vec::new();
     visit_dirs(cwd, 0, &mut |path| {
-        let name = path.file_name().and_then(|v| v.to_str()).unwrap_or_default();
-        let ext = path.extension().and_then(|v| v.to_str()).unwrap_or_default();
+        let name = path
+            .file_name()
+            .and_then(|v| v.to_str())
+            .unwrap_or_default();
+        let ext = path
+            .extension()
+            .and_then(|v| v.to_str())
+            .unwrap_or_default();
         let lower = name.to_ascii_lowercase();
         if git_root
             .as_deref()
@@ -284,11 +315,7 @@ fn find_recent_log_file(cwd: &Path) -> Option<PathBuf> {
         }
     });
 
-    candidates.sort_by_key(|path| {
-        fs::metadata(path)
-            .and_then(|meta| meta.modified())
-            .ok()
-    });
+    candidates.sort_by_key(|path| fs::metadata(path).and_then(|meta| meta.modified()).ok());
     candidates.pop()
 }
 
@@ -315,7 +342,10 @@ fn visit_dirs(dir: &Path, depth: usize, on_file: &mut dyn FnMut(&Path)) {
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            let name = path.file_name().and_then(|v| v.to_str()).unwrap_or_default();
+            let name = path
+                .file_name()
+                .and_then(|v| v.to_str())
+                .unwrap_or_default();
             if name == ".git" || name == "target" || name == "node_modules" {
                 continue;
             }
@@ -364,7 +394,9 @@ fn display_path(path: &Path) -> String {
 }
 
 fn run_command(cwd: &Path, args: &[&str]) -> Result<String, String> {
-    let (program, rest) = args.split_first().ok_or_else(|| "Missing command".to_string())?;
+    let (program, rest) = args
+        .split_first()
+        .ok_or_else(|| "Missing command".to_string())?;
     let output = Command::new(program)
         .args(rest)
         .current_dir(cwd)

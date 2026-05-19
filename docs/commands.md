@@ -238,6 +238,24 @@ tinfo dashboard notes clear
 `--freeze` forces snapshot mode.
 `--live` forces live mode even when `dashboard.freeze = true` in config.
 
+## Math
+
+```bash
+tinfo math solve equation.math
+cat equation.math | tinfo math solve
+tinfo --json math solve equation.math
+tinfo math graph equation.math --mermaid
+tinfo math graph equation.math --html --output graph.html
+tinfo math render equation.math --md
+tinfo math render equation.math --html --output report.html
+tinfo math explain equation.math
+tinfo math explain equation.math --ai
+tinfo math explain equation.math --ai --output explanation.md
+tinfo math repl
+```
+
+`math` provides deterministic symbolic parsing, solving, simplification, dependency graphs, reports, and optional AI explanations. For details and limits, see [math.md](math.md).
+
 ## Productivity
 
 ```bash

@@ -1,7 +1,7 @@
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -13,9 +13,9 @@ use dialoguer::{Input, Password, Select, theme::ColorfulTheme};
 use textwrap::{Options as TextWrapOptions, wrap as textwrap_wrap};
 
 use crate::ai::chat::{ChatRole, ChatSession, HistoryMode, Message, ProviderKind, build_provider};
-use crate::ai::context::{ContextRequest, gather_context};
-use crate::ai::connections::{ConnectionConfig, get_connection};
 use crate::ai::config::AiConfig;
+use crate::ai::connections::{ConnectionConfig, get_connection};
+use crate::ai::context::{ContextRequest, gather_context};
 use crate::ai::input::{
     build_stdin_analysis_prompt, load_explicit_file_context, process_chat_input, read_piped_stdin,
 };
@@ -37,6 +37,14 @@ pub struct ChatOptions {
     pub file: Option<PathBuf>,
     pub context_enabled: bool,
     pub input: Option<String>,
+}
+
+pub struct AiPromptOptions {
+    pub provider: Option<ProviderKind>,
+    pub model: Option<String>,
+    pub system: Option<String>,
+    pub prompt: String,
+    pub stream_to_stdout: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -97,6 +105,32 @@ impl ChatMode {
     }
 }
 
+pub fn complete_prompt(options: AiPromptOptions) -> Result<String, String> {
+    let mut config = AiConfig::load_default();
+    let provider = resolve_provider(&config, options.provider)?;
+    config = ensure_api_key(config, provider)?;
+    let model = resolve_model(&config, provider, options.model)?;
+    let provider_client = build_provider(&config, provider, model, options.system)?;
+    let mut reply = String::new();
+    provider_client.send_message(
+        vec![Message {
+            role: "user".to_string(),
+            content: options.prompt,
+        }],
+        &mut |chunk| {
+            if options.stream_to_stdout {
+                print!("{chunk}");
+                let _ = io::stdout().flush();
+            }
+            reply.push_str(chunk);
+        },
+    )?;
+    if options.stream_to_stdout {
+        println!();
+    }
+    Ok(reply)
+}
+
 pub fn run(options: ChatOptions) -> Result<(), String> {
     let mut config = AiConfig::load_default();
     let provider = resolve_provider(&config, options.provider)?;
@@ -106,7 +140,9 @@ pub fn run(options: ChatOptions) -> Result<(), String> {
     let output_format = resolve_output_format(options.mode)?;
     let auto_context_enabled = options.context_enabled && config.auto_context_enabled();
     let system_prompt = build_system_prompt(
-        options.system.or_else(|| config.system_prompt().map(str::to_string)),
+        options
+            .system
+            .or_else(|| config.system_prompt().map(str::to_string)),
         connection.as_ref(),
         options.mode,
         output_format,
@@ -207,9 +243,7 @@ pub fn run(options: ChatOptions) -> Result<(), String> {
             state.connection.as_ref().map(|(name, _)| name.as_str()),
         )?;
         let trimmed = input.trim();
-        if trimmed.eq_ignore_ascii_case("/exit")
-            || trimmed.eq_ignore_ascii_case("/quit")
-        {
+        if trimmed.eq_ignore_ascii_case("/exit") || trimmed.eq_ignore_ascii_case("/quit") {
             break;
         }
         if trimmed.is_empty() {
@@ -263,9 +297,7 @@ pub fn run(options: ChatOptions) -> Result<(), String> {
             build_context_block(state.auto_context_enabled, None, false)?,
         );
         let now = now_unix();
-        state
-            .session
-            .push_message(ChatRole::User, prompt, now);
+        state.session.push_message(ChatRole::User, prompt, now);
         persist_session(&state)?;
         execute_response(&mut state)?;
     }
@@ -290,8 +322,12 @@ fn resolve_connection(name: Option<&str>) -> Result<Option<(String, ConnectionCo
     let Some(name) = name else {
         return Ok(None);
     };
-    let connection = get_connection(name)?
-        .ok_or_else(|| format!("Connection '{}' was not found in ~/.tinfo/connections.toml.", name))?;
+    let connection = get_connection(name)?.ok_or_else(|| {
+        format!(
+            "Connection '{}' was not found in ~/.tinfo/connections.toml.",
+            name
+        )
+    })?;
     Ok(Some((name.to_string(), connection)))
 }
 
@@ -363,7 +399,9 @@ fn execute_response(state: &mut ChatState) -> Result<(), String> {
     println!();
 
     if outcome == StreamOutcome::Completed {
-        state.session.push_message(ChatRole::Assistant, reply, now_unix());
+        state
+            .session
+            .push_message(ChatRole::Assistant, reply, now_unix());
         persist_session(state)?;
     }
     Ok(())
@@ -470,11 +508,7 @@ fn run_single_shot_mode(
     let input = if let Some(input) = input.filter(|value| !value.trim().is_empty()) {
         Some(input.to_string())
     } else if file.is_none() && io::stdin().is_terminal() && io::stdout().is_terminal() {
-        let entered = read_user_input(
-            provider,
-            &model,
-            connection.map(|(name, _)| name.as_str()),
-        )?;
+        let entered = read_user_input(provider, &model, connection.map(|(name, _)| name.as_str()))?;
         if entered.trim().is_empty() {
             None
         } else {
@@ -600,9 +634,15 @@ fn build_explicit_file_input(
     let file = load_explicit_file_context(file)?;
     let size_kb = file.size_bytes as f64 / 1024.0;
     let mut display_messages = if file.truncated {
-        vec![format!("Loaded file: {} ({size_kb:.1} KB, truncated)", file.display_name)]
+        vec![format!(
+            "Loaded file: {} ({size_kb:.1} KB, truncated)",
+            file.display_name
+        )]
     } else {
-        vec![format!("Loaded file: {} ({size_kb:.1} KB)", file.display_name)]
+        vec![format!(
+            "Loaded file: {} ({size_kb:.1} KB)",
+            file.display_name
+        )]
     };
 
     if let Some(name) = connection_name {
@@ -637,7 +677,8 @@ fn build_context_block(
         return Ok(None);
     }
 
-    let cwd = std::env::current_dir().map_err(|err| format!("Failed to resolve current directory: {err}"))?;
+    let cwd = std::env::current_dir()
+        .map_err(|err| format!("Failed to resolve current directory: {err}"))?;
     let context = gather_context(&ContextRequest {
         cwd,
         explicit_file: explicit_file.map(Path::to_path_buf),
@@ -662,7 +703,10 @@ fn merge_with_context(primary_prompt: String, context_block: Option<String>) -> 
 }
 
 fn maybe_save_output(mode: ChatMode, format: OutputFormat, content: &str) -> Result<(), String> {
-    if !mode.supports_output_format_prompt() || !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+    if !mode.supports_output_format_prompt()
+        || !io::stdin().is_terminal()
+        || !io::stdout().is_terminal()
+    {
         return Ok(());
     }
 
@@ -702,17 +746,23 @@ fn maybe_save_output(mode: ChatMode, format: OutputFormat, content: &str) -> Res
         }
     }
 
-    if let Some(parent) = final_path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+    if let Some(parent) = final_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
         std::fs::create_dir_all(parent)
             .map_err(|err| format!("Failed to create output directory: {err}"))?;
     }
-    std::fs::write(&final_path, content)
-        .map_err(|err| format!("Failed to save output: {err}"))?;
+    std::fs::write(&final_path, content).map_err(|err| format!("Failed to save output: {err}"))?;
     println!("Saved to: {}", final_path.display());
     Ok(())
 }
 
-fn normalize_output_path(path: &str, default_name: &str, format: OutputFormat) -> std::path::PathBuf {
+fn normalize_output_path(
+    path: &str,
+    default_name: &str,
+    format: OutputFormat,
+) -> std::path::PathBuf {
     let raw = if path.is_empty() { default_name } else { path };
     let mut path = std::path::PathBuf::from(raw);
     if path.extension().is_none() {
@@ -863,7 +913,12 @@ fn select_provider() -> Result<ProviderKind, String> {
         "1" | "openrouter" => choices[0],
         "2" | "openai" => choices[1],
         "3" | "claude" | "anthropic" => choices[2],
-        _ => return Err("Invalid provider selection. Use 1, 2, 3, openrouter, openai, or claude.".to_string()),
+        _ => {
+            return Err(
+                "Invalid provider selection. Use 1, 2, 3, openrouter, openai, or claude."
+                    .to_string(),
+            );
+        }
     };
     let _ = AiConfig::save_default_provider(provider)?;
     Ok(provider)
@@ -960,11 +1015,7 @@ fn models_for(provider: ProviderKind) -> &'static [&'static str] {
             "gpt-4.1",
             "o3-deep-research",
         ],
-        ProviderKind::Anthropic => &[
-            "claude-opus-4-6",
-            "claude-sonnet-4-6",
-            "claude-haiku-4-5",
-        ],
+        ProviderKind::Anthropic => &["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"],
         ProviderKind::OpenRouter => &[
             "z-ai/glm-5v-turbo",
             "stepfun/step-3.5-flash:free",
@@ -1001,13 +1052,22 @@ fn openrouter_model_items() -> &'static [(&'static str, &'static str)] {
     &[
         ("z-ai/glm-5v-turbo", "z-ai/glm-5v-turbo"),
         ("stepfun/step-3.5-flash:free", "stepfun/step-3.5-flash:free"),
-        ("qwen/qwen3.6-plus-preview:free", "qwen/qwen3.6-plus-preview:free"),
-        ("nvidia/nemotron-3-super:free", "nvidia/nemotron-3-super:free"),
+        (
+            "qwen/qwen3.6-plus-preview:free",
+            "qwen/qwen3.6-plus-preview:free",
+        ),
+        (
+            "nvidia/nemotron-3-super:free",
+            "nvidia/nemotron-3-super:free",
+        ),
         ("anthropic/claude-4.6-sonnet", "anthropic/claude-4.6-sonnet"),
         ("anthropic/claude-4.6-opus", "anthropic/claude-4.6-opus"),
         ("openai/gpt-5.4-pro", "openai/gpt-5.4-pro"),
         ("openai/gpt-5.3-codex", "openai/gpt-5.3-codex"),
-        ("google/gemini-3.1-pro-preview", "google/gemini-3.1-pro-preview"),
+        (
+            "google/gemini-3.1-pro-preview",
+            "google/gemini-3.1-pro-preview",
+        ),
         ("google/gemini-3.1-flash", "google/gemini-3.1-flash"),
         ("deepseek/deepseek-v3.2", "deepseek/deepseek-v3.2"),
         ("deepseek/deepseek-r1 (Reasoning)", "deepseek/deepseek-r1"),
@@ -1016,7 +1076,10 @@ fn openrouter_model_items() -> &'static [(&'static str, &'static str)] {
         ("x-ai/grok-4.20-multi-agent", "x-ai/grok-4.20-multi-agent"),
         ("x-ai/grok-4.20", "x-ai/grok-4.20"),
         ("meta/llama-4-400b-instruct", "meta/llama-4-400b-instruct"),
-        ("mistralai/mistral-large-2603", "mistralai/mistral-large-2603"),
+        (
+            "mistralai/mistral-large-2603",
+            "mistralai/mistral-large-2603",
+        ),
         ("mistralai/devstral-2-123b", "mistralai/devstral-2-123b"),
         ("z-ai/glm-5", "z-ai/glm-5"),
         ("z-ai/glm-4.5-air", "z-ai/glm-4.5-air"),
@@ -1079,7 +1142,12 @@ fn read_user_input(
     connection_name: Option<&str>,
 ) -> Result<String, String> {
     if let Some(connection_name) = connection_name {
-        print!("[{} · {} · {}] > ", provider.display_name(), model, connection_name);
+        print!(
+            "[{} · {} · {}] > ",
+            provider.display_name(),
+            model,
+            connection_name
+        );
     } else {
         print!("[{} · {}] > ", provider.display_name(), model);
     }
@@ -1320,7 +1388,8 @@ fn stream_response(
         let _ = tx.send(ResponseEvent::Done(result));
     });
 
-    let controls_enabled = interactive_controls && io::stdin().is_terminal() && io::stdout().is_terminal();
+    let controls_enabled =
+        interactive_controls && io::stdin().is_terminal() && io::stdout().is_terminal();
     let mut raw_mode_enabled = false;
     if controls_enabled {
         enable_raw_mode().map_err(|err| format!("Failed to enable chat controls: {err}"))?;
@@ -1350,8 +1419,9 @@ fn stream_response(
                     match key.code {
                         KeyCode::Char('q') => {
                             if raw_mode_enabled {
-                                disable_raw_mode()
-                                    .map_err(|err| format!("Failed to disable chat controls: {err}"))?;
+                                disable_raw_mode().map_err(|err| {
+                                    format!("Failed to disable chat controls: {err}")
+                                })?;
                             }
                             redraw_ai_status_line("[stopped]")?;
                             write_terminal_line("")?;
@@ -1694,7 +1764,10 @@ fn render_markdown_line(line: &str, in_code_block: &mut bool) -> String {
         return format!("{ANSI_BOLD}{ANSI_CYAN}{content}{ANSI_RESET}");
     }
     if let Some(content) = trimmed.strip_prefix("> ") {
-        return format!("{ANSI_DIM}> {}{ANSI_RESET}", render_inline_markdown(content));
+        return format!(
+            "{ANSI_DIM}> {}{ANSI_RESET}",
+            render_inline_markdown(content)
+        );
     }
     if let Some(content) = trimmed.strip_prefix("- ") {
         if let Some(task) = content.strip_prefix("[ ]") {
@@ -1858,7 +1931,10 @@ fn render_table_block(lines: &[String]) -> Vec<String> {
         rendered.push(parts.join("   "));
         if index == 0 && rows.len() > 1 {
             let total_width = widths.iter().sum::<usize>() + widths.len().saturating_sub(1) * 3;
-            rendered.push(format!("{ANSI_DIM}{}{ANSI_RESET}", "─".repeat(total_width.max(1))));
+            rendered.push(format!(
+                "{ANSI_DIM}{}{ANSI_RESET}",
+                "─".repeat(total_width.max(1))
+            ));
         }
     }
     rendered
@@ -1931,7 +2007,9 @@ mod tests {
             "let response = client.post(&api_url).json(&payload).send().await?;",
             &mut in_code_block,
         );
-        assert!(rendered.contains("let response = client.post(&api_url).json(&payload).send().await?;"));
+        assert!(
+            rendered.contains("let response = client.post(&api_url).json(&payload).send().await?;")
+        );
         assert!(rendered.contains("    "));
     }
 }

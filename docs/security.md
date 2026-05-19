@@ -24,6 +24,8 @@ The GitHub Actions release workflow builds each target on a native runner:
 
 The install script and `tinfo update` command both download the release archive, its `.sha256` file, and its `.minisig` file. They verify the SHA-256 checksum first, then verify the Minisign signature using the public key embedded in the installer or the running Terminal Info binary from `keys/minisign.pub`.
 
+`quick-install.sh` is a fallback path for users blocked from installing Minisign. It verifies the official SHA-256 checksum but intentionally skips Minisign signature verification, so the regular `install.sh` path remains recommended.
+
 If either verification step fails, installation or update is aborted.
 
 ## Release Signing Workflow

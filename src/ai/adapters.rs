@@ -159,12 +159,16 @@ pub fn parse_structured_line(line: &str) -> Vec<AdapterFrame> {
             message: parsed.message.unwrap_or_default(),
         }],
         "event" => vec![AdapterFrame::Event {
-            event_type: parsed.event_type.unwrap_or_else(|| "output_stream".to_string()),
+            event_type: parsed
+                .event_type
+                .unwrap_or_else(|| "output_stream".to_string()),
             message: parsed.message,
         }],
         "approval" => vec![AdapterFrame::Approval {
             kind: parse_approval_kind(parsed.approval_kind.as_deref()),
-            action: parsed.action.unwrap_or_else(|| "approval requested".to_string()),
+            action: parsed
+                .action
+                .unwrap_or_else(|| "approval requested".to_string()),
             details: parsed.details,
         }],
         "task" => vec![AdapterFrame::Task {

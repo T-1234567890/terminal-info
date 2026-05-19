@@ -132,13 +132,16 @@ pub fn read_hook_event_from_stdin(
     let raw_event_type = event_type
         .map(|value| value.to_string())
         .or_else(|| {
-            first_string(&parsed, &[
-                &["event_type"],
-                &["hook_event_name"],
-                &["event"],
-                &["hook_event", "name"],
-                &["eventName"],
-            ])
+            first_string(
+                &parsed,
+                &[
+                    &["event_type"],
+                    &["hook_event_name"],
+                    &["event"],
+                    &["hook_event", "name"],
+                    &["eventName"],
+                ],
+            )
         })
         .unwrap_or_else(|| "output".to_string());
     let adapter = adapter
@@ -149,12 +152,8 @@ pub fn read_hook_event_from_stdin(
     let command = extract_hook_command(&parsed);
     let output = extract_hook_output(&parsed);
     let details = extract_hook_details(&parsed);
-    let agent_id = first_string(&parsed, &[
-        &["agent_id"],
-        &["session_id"],
-        &["thread_id"],
-    ])
-    .unwrap_or_else(|| adapter.to_string());
+    let agent_id = first_string(&parsed, &[&["agent_id"], &["session_id"], &["thread_id"]])
+        .unwrap_or_else(|| adapter.to_string());
 
     Ok(HookEventPayload {
         adapter: adapter.to_string(),
@@ -278,7 +277,8 @@ fn merge_tinfo_hooks(value: &mut Value, tinfo_exe: &Path) -> Result<(), String> 
         };
         let command = build_hook_command(tinfo_exe, "codex", event_type);
         let already_present = array.iter().any(|entry| {
-            entry.get("hooks")
+            entry
+                .get("hooks")
                 .and_then(Value::as_array)
                 .into_iter()
                 .flatten()
@@ -329,7 +329,8 @@ fn merge_tinfo_claude_hooks(value: &mut Value, tinfo_exe: &Path) -> Result<(), S
         };
         let command = build_hook_command(tinfo_exe, "claude_code", event_type);
         let already_present = array.iter().any(|entry| {
-            entry.get("hooks")
+            entry
+                .get("hooks")
                 .and_then(Value::as_array)
                 .into_iter()
                 .flatten()
@@ -370,9 +371,7 @@ fn remove_tinfo_hooks(value: &mut Value) {
                 .and_then(|items| items.first())
                 .and_then(|item| item.get("command"))
                 .and_then(Value::as_str);
-            !command
-                .map(is_tinfo_codex_hook_command)
-                .unwrap_or(false)
+            !command.map(is_tinfo_codex_hook_command).unwrap_or(false)
         });
     }
 }
@@ -401,46 +400,40 @@ fn remove_tinfo_claude_hooks(value: &mut Value) {
 }
 
 fn hooks_json_contains_tinfo(value: &Value) -> bool {
-    value.get("hooks")
+    value
+        .get("hooks")
         .and_then(Value::as_object)
         .map(|hooks| {
             hooks.values().any(|entries| {
-                entries
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .any(|entry| {
-                        entry
-                            .get("hooks")
-                            .and_then(Value::as_array)
-                            .into_iter()
-                            .flatten()
-                            .filter_map(|item| item.get("command").and_then(Value::as_str))
-                            .any(is_current_tinfo_codex_hook_command)
-                    })
+                entries.as_array().into_iter().flatten().any(|entry| {
+                    entry
+                        .get("hooks")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|item| item.get("command").and_then(Value::as_str))
+                        .any(is_current_tinfo_codex_hook_command)
+                })
             })
         })
         .unwrap_or(false)
 }
 
 fn claude_settings_contains_tinfo(value: &Value) -> bool {
-    value.get("hooks")
+    value
+        .get("hooks")
         .and_then(Value::as_object)
         .map(|hooks| {
             hooks.values().any(|entries| {
-                entries
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .any(|entry| {
-                        entry
-                            .get("hooks")
-                            .and_then(Value::as_array)
-                            .into_iter()
-                            .flatten()
-                            .filter_map(|item| item.get("command").and_then(Value::as_str))
-                            .any(is_current_tinfo_claude_hook_command)
-                    })
+                entries.as_array().into_iter().flatten().any(|entry| {
+                    entry
+                        .get("hooks")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|item| item.get("command").and_then(Value::as_str))
+                        .any(is_current_tinfo_claude_hook_command)
+                })
             })
         })
         .unwrap_or(false)
@@ -452,7 +445,8 @@ fn build_hook_command(tinfo_exe: &Path, adapter: &str, event_type: &str) -> Stri
 }
 
 fn normalize_event_type(adapter: &str, event_type: &str, parsed: &Value) -> String {
-    let raw = first_string(parsed, &[&["hook_event_name"]]).unwrap_or_else(|| event_type.to_string());
+    let raw =
+        first_string(parsed, &[&["hook_event_name"]]).unwrap_or_else(|| event_type.to_string());
     let adapter = adapter.trim().to_ascii_lowercase();
     if adapter == "claude" || adapter == "claude_code" || adapter == "claude code" {
         return match raw.as_str() {
@@ -470,26 +464,32 @@ fn normalize_event_type(adapter: &str, event_type: &str, parsed: &Value) -> Stri
 }
 
 fn extract_hook_command(parsed: &Value) -> Option<String> {
-    if let Some(command) = first_string(parsed, &[
-        &["command"],
-        &["payload", "command"],
-        &["tool", "command"],
-        &["details", "command"],
-        &["tool_input", "command"],
-        &["tool_input", "cmd"],
-    ]) {
+    if let Some(command) = first_string(
+        parsed,
+        &[
+            &["command"],
+            &["payload", "command"],
+            &["tool", "command"],
+            &["details", "command"],
+            &["tool_input", "command"],
+            &["tool_input", "cmd"],
+        ],
+    ) {
         return Some(command);
     }
 
     let tool_name = first_string(parsed, &[&["tool_name"]])?;
-    let target = first_string(parsed, &[
-        &["tool_input", "file_path"],
-        &["tool_input", "path"],
-        &["tool_input", "url"],
-        &["tool_input", "query"],
-        &["tool_input", "description"],
-        &["tool_input", "prompt"],
-    ]);
+    let target = first_string(
+        parsed,
+        &[
+            &["tool_input", "file_path"],
+            &["tool_input", "path"],
+            &["tool_input", "url"],
+            &["tool_input", "query"],
+            &["tool_input", "description"],
+            &["tool_input", "prompt"],
+        ],
+    );
     Some(match target {
         Some(target) if !target.trim().is_empty() => format!("{tool_name}: {target}"),
         _ => tool_name,
@@ -497,34 +497,38 @@ fn extract_hook_command(parsed: &Value) -> Option<String> {
 }
 
 fn extract_hook_output(parsed: &Value) -> Option<String> {
-    first_string(parsed, &[
-        &["output"],
-        &["message"],
-        &["payload", "output"],
-        &["payload", "message"],
-        &["text"],
-        &["tool_response", "stdout"],
-        &["tool_response", "stderr"],
-        &["tool_response", "message"],
-    ])
+    first_string(
+        parsed,
+        &[
+            &["output"],
+            &["message"],
+            &["payload", "output"],
+            &["payload", "message"],
+            &["text"],
+            &["tool_response", "stdout"],
+            &["tool_response", "stderr"],
+            &["tool_response", "message"],
+        ],
+    )
 }
 
 fn extract_hook_details(parsed: &Value) -> Option<String> {
-    first_string(parsed, &[
-        &["details"],
-        &["payload", "details"],
-        &["tool_name"],
-        &["reason"],
-    ])
+    first_string(
+        parsed,
+        &[
+            &["details"],
+            &["payload", "details"],
+            &["tool_name"],
+            &["reason"],
+        ],
+    )
 }
 
 fn infer_adapter(parsed: &Value, raw_event_type: &str) -> Option<String> {
-    if let Some(adapter) = first_string(parsed, &[
-        &["adapter"],
-        &["source"],
-        &["client"],
-        &["provider"],
-    ]) {
+    if let Some(adapter) = first_string(
+        parsed,
+        &[&["adapter"], &["source"], &["client"], &["provider"]],
+    ) {
         let normalized = adapter.trim().to_ascii_lowercase();
         if normalized.contains("claude") {
             return Some("claude_code".to_string());
@@ -539,9 +543,7 @@ fn infer_adapter(parsed: &Value, raw_event_type: &str) -> Option<String> {
 
     match raw_event_type {
         "SessionEnd" | "PreToolUse" | "PostToolUse" | "PermissionRequest" | "Notification"
-        | "SubagentStop" | "SubagentStart" => {
-            Some("claude_code".to_string())
-        }
+        | "SubagentStop" | "SubagentStart" => Some("claude_code".to_string()),
         _ => None,
     }
 }
@@ -572,7 +574,9 @@ fn backup_if_exists(path: &Path) -> Result<(), String> {
         .as_secs();
     let backup_path = path.with_extension(format!(
         "{}.bak.{}",
-        path.extension().and_then(|ext| ext.to_str()).unwrap_or("backup"),
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("backup"),
         timestamp
     ));
     fs::copy(path, &backup_path).map_err(|err| {

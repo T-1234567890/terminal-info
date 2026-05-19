@@ -64,18 +64,50 @@ impl Default for RuntimeState {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RuntimeEvent {
-    AgentStarted { agent_id: String },
-    AgentPaused { agent_id: String },
-    AgentResumed { agent_id: String },
-    StepStarted { agent_id: String, step: String },
-    ToolCalled { agent_id: String, tool: String },
-    WaitingApproval { agent_id: String, request_id: String },
-    ApprovalResolved { agent_id: String, request_id: String, state: ApprovalState },
-    OutputStream { agent_id: String, chunk: String },
-    ChatChunk { session_id: String, chunk: String },
-    ChatFinished { session_id: String },
-    Finished { agent_id: String },
-    Error { agent_id: String, message: String },
+    AgentStarted {
+        agent_id: String,
+    },
+    AgentPaused {
+        agent_id: String,
+    },
+    AgentResumed {
+        agent_id: String,
+    },
+    StepStarted {
+        agent_id: String,
+        step: String,
+    },
+    ToolCalled {
+        agent_id: String,
+        tool: String,
+    },
+    WaitingApproval {
+        agent_id: String,
+        request_id: String,
+    },
+    ApprovalResolved {
+        agent_id: String,
+        request_id: String,
+        state: ApprovalState,
+    },
+    OutputStream {
+        agent_id: String,
+        chunk: String,
+    },
+    ChatChunk {
+        session_id: String,
+        chunk: String,
+    },
+    ChatFinished {
+        session_id: String,
+    },
+    Finished {
+        agent_id: String,
+    },
+    Error {
+        agent_id: String,
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -695,7 +727,9 @@ impl Runtime {
                 .insert(configured.id.clone(), bootstrap_agent_session(&configured));
         }
         for session in stored.chat_sessions {
-            state.chat_sessions.insert(session.id().to_string(), session);
+            state
+                .chat_sessions
+                .insert(session.id().to_string(), session);
         }
         if state.chat_sessions.is_empty() {
             let session = ChatSession::new(
@@ -717,7 +751,9 @@ impl Runtime {
             );
             self.storage.upsert_chat_session(&session).ok();
             state.active_chat_session_id = Some(session.id().to_string());
-            state.chat_sessions.insert(session.id().to_string(), session);
+            state
+                .chat_sessions
+                .insert(session.id().to_string(), session);
         } else {
             state.active_chat_session_id = state.chat_sessions.keys().next().cloned();
         }
@@ -878,7 +914,9 @@ impl Runtime {
     }
 
     fn cleanup_stopped_agent_locked(&self, state: &mut RuntimeState, agent_id: &str) {
-        state.approvals.retain(|request| request.agent_id != agent_id);
+        state
+            .approvals
+            .retain(|request| request.agent_id != agent_id);
         if self.is_transient_hook_agent(agent_id) {
             state.agents.remove(agent_id);
             let _ = self.storage.delete_agent(agent_id);
@@ -898,7 +936,12 @@ impl Runtime {
     }
 
     fn is_transient_hook_agent(&self, agent_id: &str) -> bool {
-        agent_id.contains(':') && !self.config.agents().iter().any(|agent| agent.id == agent_id)
+        agent_id.contains(':')
+            && !self
+                .config
+                .agents()
+                .iter()
+                .any(|agent| agent.id == agent_id)
     }
 
     fn resolve_agent_id_locked(&self, state: &RuntimeState, requested: &str) -> String {
@@ -1026,8 +1069,7 @@ fn maybe_extract_approval_from_output<'a>(
         return None;
     }
 
-    if agent
-        .and_then(|agent| agent.pending_approval_action.as_deref())
+    if agent.and_then(|agent| agent.pending_approval_action.as_deref())
         == Some("__awaiting_command__")
     {
         let candidate = approval_candidate_from_command(message)?;
@@ -1070,7 +1112,11 @@ fn extract_approval_candidate_from_prompt(message: &str) -> Option<ApprovalCandi
 
     let mut reason = None;
     let mut command = None;
-    for line in message.lines().map(str::trim).filter(|line| !line.is_empty()) {
+    for line in message
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
         let lower = line.to_ascii_lowercase();
         if lower.contains("would you like to run") || line == "[Approve] [Deny]" {
             continue;

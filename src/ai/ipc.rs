@@ -51,8 +51,7 @@ pub fn append_hook_event(event: &HookEventPayload) -> Result<(), String> {
 
 pub fn write_agent_decision(decision: &AgentDecision) -> Result<(), String> {
     let dir = decisions_dir_path()?;
-    fs::create_dir_all(&dir)
-        .map_err(|err| format!("Failed to create {}: {err}", dir.display()))?;
+    fs::create_dir_all(&dir).map_err(|err| format!("Failed to create {}: {err}", dir.display()))?;
     let path = decision_path(&decision.agent_id)?;
     let encoded = serde_json::to_string(decision)
         .map_err(|err| format!("Failed to encode agent decision: {err}"))?;
@@ -68,8 +67,7 @@ pub fn take_agent_decision(agent_id: &str) -> Result<Option<AgentDecision>, Stri
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(err) => return Err(format!("Failed to read {}: {err}", path.display())),
     };
-    fs::remove_file(&path)
-        .map_err(|err| format!("Failed to remove {}: {err}", path.display()))?;
+    fs::remove_file(&path).map_err(|err| format!("Failed to remove {}: {err}", path.display()))?;
     let decision = serde_json::from_str(&encoded)
         .map_err(|err| format!("Failed to decode {}: {err}", path.display()))?;
     Ok(Some(decision))

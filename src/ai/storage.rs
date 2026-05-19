@@ -27,8 +27,12 @@ pub struct StoredState {
 
 impl Storage {
     pub fn new(root: PathBuf, persist_chat_transcripts: bool) -> Result<Self, String> {
-        fs::create_dir_all(&root)
-            .map_err(|err| format!("Failed to create AI data directory {}: {err}", root.display()))?;
+        fs::create_dir_all(&root).map_err(|err| {
+            format!(
+                "Failed to create AI data directory {}: {err}",
+                root.display()
+            )
+        })?;
         let storage = Self {
             db_path: root.join("runtime.sqlite3"),
             logs_path: root.join("logs.jsonl"),
@@ -51,9 +55,7 @@ impl Storage {
 
         {
             let mut stmt = conn
-                .prepare(
-                    "SELECT payload FROM agents ORDER BY id",
-                )
+                .prepare("SELECT payload FROM agents ORDER BY id")
                 .map_err(|err| format!("Failed to read agents: {err}"))?;
             let rows = stmt
                 .query_map([], |row| row.get::<_, String>(0))
@@ -76,8 +78,7 @@ impl Storage {
                 .query_map([], |row| row.get::<_, String>(0))
                 .map_err(|err| format!("Failed to query approvals: {err}"))?;
             for row in rows {
-                let payload =
-                    row.map_err(|err| format!("Failed to read approval row: {err}"))?;
+                let payload = row.map_err(|err| format!("Failed to read approval row: {err}"))?;
                 if let Ok(approval) = serde_json::from_str::<ApprovalRequest>(&payload) {
                     state.approvals.push(approval);
                 }
@@ -124,8 +125,11 @@ impl Storage {
 
     pub fn delete_approvals_for_agent(&self, agent_id: &str) -> Result<(), String> {
         let conn = self.open()?;
-        conn.execute("DELETE FROM approvals WHERE json_extract(payload, '$.agent_id') = ?1", params![agent_id])
-            .map_err(|err| format!("Failed to delete approvals for agent: {err}"))?;
+        conn.execute(
+            "DELETE FROM approvals WHERE json_extract(payload, '$.agent_id') = ?1",
+            params![agent_id],
+        )
+        .map_err(|err| format!("Failed to delete approvals for agent: {err}"))?;
         Ok(())
     }
 
@@ -171,8 +175,12 @@ impl Storage {
     }
 
     fn open(&self) -> Result<Connection, String> {
-        Connection::open(&self.db_path)
-            .map_err(|err| format!("Failed to open AI runtime database {}: {err}", self.db_path.display()))
+        Connection::open(&self.db_path).map_err(|err| {
+            format!(
+                "Failed to open AI runtime database {}: {err}",
+                self.db_path.display()
+            )
+        })
     }
 
     fn upsert_json<T: Serialize>(
@@ -226,6 +234,5 @@ fn append_jsonl<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
         .append(true)
         .open(path)
         .map_err(|err| format!("Failed to open {}: {err}", path.display()))?;
-    writeln!(file, "{line}")
-        .map_err(|err| format!("Failed to write {}: {err}", path.display()))
+    writeln!(file, "{line}").map_err(|err| format!("Failed to write {}: {err}", path.display()))
 }

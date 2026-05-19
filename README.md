@@ -61,6 +61,15 @@ This is the beginning of terminal-info as a platform, not just a tool.
 ![Latest Release](https://img.shields.io/github/v/release/T-1234567890/terminal-info)
 ![github downloads](https://img.shields.io/github/downloads/T-1234567890/terminal-info/total?label=github%20downloads)
 [![cargo installs](https://img.shields.io/crates/d/terminal-info.svg?label=cargo%20installs)](https://crates.io/crates/terminal-info)
+
+Platform support:
+
+| Platform | Status | Notes |
+| --- | --- | --- |
+| macOS | Primary platform | Fully supported and actively optimized. |
+| Linux | Supported | Supported with most functionality available. |
+| Windows | Experimental / Partial | Experimental support. Some features may be unavailable or untested. |
+
 ### Install script 
 `Recommended`
 
@@ -68,6 +77,17 @@ Downloads and verifies the release archive with SHA-256 and Minisign before inst
 
 ```bash
 curl -fsSL -o install.sh https://github.com/T-1234567890/terminal-info/releases/latest/download/install.sh && bash install.sh
+```
+
+If Minisign installation is blocked during the regular install, use the quick install script below to verify SHA-256 only, or continue installing Minisign for the fully verified install.
+
+### Quick install
+`Fallback when Minisign is blocked`
+
+Downloads the release archive and verifies its SHA-256 checksum, but skips Minisign signature verification:
+
+```bash
+curl -fsSL -o quick-install.sh https://github.com/T-1234567890/terminal-info/releases/latest/download/quick-install.sh && bash quick-install.sh
 ```
 
 Supported release assets include:
@@ -118,6 +138,7 @@ Instead of switching between multiple utilities, you get a unified system that c
 - Dashboard view when running `tinfo`
 - Weather, time, ping, network, system, and diagnostic commands
 - Separate `disk` and `storage` command groups for hardware health and filesystem usage
+- Built-in symbolic math utilities with solving, dependency graphs, reports, and optional AI explanations
 - TOML configuration with profiles in `~/.tinfo/config.toml`
 - Optional server mode for server and VPS diagnostics
 - Dashboard widget ordering in `~/.tinfo/config.toml`
@@ -221,6 +242,7 @@ See:
 
 - [docs/dashboard.md](docs/dashboard.md)
 - [docs/widgets.md](docs/widgets.md)
+- [docs/math.md](docs/math.md)
 - [docs/productivity.md](docs/productivity.md)
 - [docs/commands.md](docs/commands.md)
 - [docs/config.md](docs/config.md)

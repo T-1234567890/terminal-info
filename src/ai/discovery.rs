@@ -31,7 +31,12 @@ pub fn discover_agents() -> Vec<DiscoveredAgent> {
             let command = process
                 .exe()
                 .map(|path| path.to_string_lossy().to_string())
-                .or_else(|| process.cmd().first().map(|value| value.to_string_lossy().to_string()))
+                .or_else(|| {
+                    process
+                        .cmd()
+                        .first()
+                        .map(|value| value.to_string_lossy().to_string())
+                })
                 .unwrap_or_else(|| process.name().to_string_lossy().to_string());
             let command_name = command_name(&command);
             let adapter = match_agent(&command_name, &process_name, &configured)?;
@@ -113,9 +118,7 @@ fn match_agent(
     process_name: &str,
     _configured: &HashSet<String>,
 ) -> Option<AgentAdapterKind> {
-    if matches!(command_name, "codex" | "codex.exe")
-        || process_name == "codex"
-    {
+    if matches!(command_name, "codex" | "codex.exe") || process_name == "codex" {
         return Some(AgentAdapterKind::Codex);
     }
     if matches!(

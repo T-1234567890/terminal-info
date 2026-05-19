@@ -136,7 +136,14 @@ fn legacy_secret_key_name(provider: ProviderKind) -> &'static str {
 fn load_macos_keychain(provider: ProviderKind) -> Result<Option<String>, String> {
     let account = provider.secret_key_name();
     let output = Command::new("security")
-        .args(["find-generic-password", "-s", SERVICE_NAME, "-a", account, "-w"])
+        .args([
+            "find-generic-password",
+            "-s",
+            SERVICE_NAME,
+            "-a",
+            account,
+            "-w",
+        ])
         .output()
         .map_err(|err| format!("Failed to run macOS keychain lookup: {err}"))?;
 
@@ -147,7 +154,9 @@ fn load_macos_keychain(provider: ProviderKind) -> Result<Option<String>, String>
     }
 
     let stderr = String::from_utf8(output.stderr).unwrap_or_default();
-    if stderr.contains("could not be found") || stderr.contains("The specified item could not be found") {
+    if stderr.contains("could not be found")
+        || stderr.contains("The specified item could not be found")
+    {
         return Ok(None);
     }
 

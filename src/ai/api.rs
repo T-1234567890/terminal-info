@@ -50,18 +50,20 @@ impl LocalApi {
         let stop_flag = stop.clone();
         let web_enabled = self.web_enabled;
         let refresh_ms = self.refresh_ms;
-        let handle = thread::spawn(move || loop {
-            if stop_flag.load(Ordering::SeqCst) {
-                return;
-            }
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    let _ = handle_connection(&mut stream, &runtime, web_enabled, refresh_ms);
+        let handle = thread::spawn(move || {
+            loop {
+                if stop_flag.load(Ordering::SeqCst) {
+                    return;
                 }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    thread::sleep(Duration::from_millis(100));
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        let _ = handle_connection(&mut stream, &runtime, web_enabled, refresh_ms);
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(100));
+                    }
+                    Err(_) => return,
                 }
-                Err(_) => return,
             }
         });
 
@@ -166,7 +168,9 @@ fn handle_connection(
         .strip_prefix("/agents/")
         .and_then(|tail| tail.split('/').next())
     {
-        let suffix = path_only.trim_start_matches("/agents/").trim_start_matches(agent_id);
+        let suffix = path_only
+            .trim_start_matches("/agents/")
+            .trim_start_matches(agent_id);
         return match (method, suffix) {
             ("GET", "") => {
                 if let Some(agent) = runtime.agent(agent_id) {

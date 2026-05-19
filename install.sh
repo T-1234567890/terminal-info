@@ -76,10 +76,14 @@ require_sha_tool() {
 print_minisign_instructions() {
   echo "Minisign is required to verify the release." >&2
   echo "Install minisign, then run the installer again." >&2
+  echo "If Minisign installation is blocked, use quick-install.sh to verify SHA-256 only, or continue installing Minisign for the fully verified install." >&2
   echo >&2
   echo "macOS:   brew install minisign" >&2
   echo "Ubuntu:  sudo apt install -y minisign" >&2
   echo "Fedora:  sudo dnf install -y minisign" >&2
+  echo >&2
+  echo "Quick install:" >&2
+  echo "curl -fsSL -o quick-install.sh https://github.com/T-1234567890/terminal-info/releases/latest/download/quick-install.sh && bash quick-install.sh" >&2
 }
 
 print_package_manager_instructions() {

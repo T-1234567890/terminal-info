@@ -234,7 +234,10 @@ pub fn process_chat_input(
                 file.display_name
             ));
         } else {
-            display_messages.push(format!("Loaded file: {} ({size_kb:.1} KB)", file.display_name));
+            display_messages.push(format!(
+                "Loaded file: {} ({size_kb:.1} KB)",
+                file.display_name
+            ));
         }
         loaded.push(file);
     }
@@ -272,8 +275,8 @@ fn extract_file_references(input: &str) -> Vec<String> {
     let mut refs = Vec::new();
     for token in input.split_whitespace() {
         if let Some(reference) = token.strip_prefix('@') {
-            let cleaned = reference
-                .trim_matches(|ch: char| matches!(ch, '"' | '\'' | ',' | ';' | ')' | '('));
+            let cleaned =
+                reference.trim_matches(|ch: char| matches!(ch, '"' | '\'' | ',' | ';' | ')' | '('));
             if !cleaned.is_empty() {
                 refs.push(cleaned.to_string());
             }
@@ -285,7 +288,8 @@ fn extract_file_references(input: &str) -> Vec<String> {
 }
 
 fn strip_file_references(input: &str) -> String {
-    input.split_whitespace()
+    input
+        .split_whitespace()
         .filter(|token| !token.starts_with('@'))
         .collect::<Vec<_>>()
         .join(" ")
@@ -297,8 +301,8 @@ fn load_file_context(reference: &str) -> Result<LoadedFileContext, String> {
 }
 
 fn load_file_context_from_path(path: &Path) -> Result<LoadedFileContext, String> {
-    let bytes = fs::read(path)
-        .map_err(|err| format!("Failed to read {}: {err}", path.display()))?;
+    let bytes =
+        fs::read(path).map_err(|err| format!("Failed to read {}: {err}", path.display()))?;
     let truncated = bytes.len() > MAX_FILE_BYTES;
     let visible = if truncated {
         &bytes[..MAX_FILE_BYTES]
