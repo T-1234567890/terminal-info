@@ -8,15 +8,15 @@ The core CLI, dashboard, widgets, plugin platform, diagnostics, AI helpers, prod
 
 | Feature | Command area | Status | Target |
 | --- | --- | --- | --- |
-| Session Briefs | `tinfo brief` | Planned | `v1.5` |
-| Project Mode | `tinfo project` | Planned | `v1.5` |
-| Watch Rules | `tinfo watch` | Planned | `v1.6` |
-| Release Assistant | `tinfo release` | Planned | `v1.5` |
-| Environment Snapshot | `tinfo snapshot` | Planned | `v1.6` |
-| Command Pins | `tinfo pin` | Planned | `v1.6` |
-| Focus Mode | `tinfo focus` | Planned | `v1.7` |
-| Local Knowledge Base | `tinfo kb` | Planned | `v1.7` |
-| Personal Daily Brief | `tinfo today` | Planned | `v1.5` |
+| Session Briefs | `tinfo brief` | Planned | `v1.6` |
+| Project Mode | `tinfo project` | Planned | `v1.6` |
+| Watch Rules | `tinfo watch` | Planned | `v1.7` |
+| Release Assistant | `tinfo release` | Planned | `v1.6` |
+| Environment Snapshot | `tinfo snapshot` | Planned | `v1.7` |
+| Command Pins | `tinfo pin` | Planned | `v1.7` |
+| Focus Mode | `tinfo focus` | Planned | `v1.8` |
+| Local Knowledge Base | `tinfo kb` | Planned | `v1.8` |
+| Personal Daily Brief | `tinfo today` | Planned | `v1.6` |
 
 Status values:
 
