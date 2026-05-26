@@ -67,6 +67,7 @@ pub enum DiagnosticLevel {
 pub enum Statement {
     Assignment { name: String, expr: Expr },
     Equation { left: Expr, right: Expr },
+    Assumption { variable: String, condition: String },
     Expression(Expr),
 }
 
@@ -77,6 +78,10 @@ impl Statement {
             Self::Equation { left, right } => {
                 format!("{} = {}", left.to_latex(), right.to_latex())
             }
+            Self::Assumption {
+                variable,
+                condition,
+            } => format!("\\operatorname{{assume}}({variable}: {condition})"),
             Self::Expression(expr) => expr.to_latex(),
         }
     }
@@ -87,6 +92,10 @@ impl fmt::Display for Statement {
         match self {
             Self::Assignment { name, expr } => write!(f, "{name} = {expr}"),
             Self::Equation { left, right } => write!(f, "{left} = {right}"),
+            Self::Assumption {
+                variable,
+                condition,
+            } => write!(f, "assume {variable} {condition}"),
             Self::Expression(expr) => write!(f, "{expr}"),
         }
     }
@@ -110,6 +119,10 @@ pub enum Expr {
         name: String,
         args: Vec<Expr>,
     },
+    Quantity {
+        value: Box<Expr>,
+        unit: String,
+    },
 }
 
 impl Expr {
@@ -129,6 +142,7 @@ impl Expr {
                     arg.collect_vars(vars);
                 }
             }
+            Self::Quantity { value, .. } => value.collect_vars(vars),
         }
     }
 
@@ -154,6 +168,7 @@ impl Expr {
                     .join(", ");
                 format!("\\operatorname{{{name}}}({args})")
             }
+            Self::Quantity { value, unit } => format!("{}\\,{}", value.to_latex(), unit),
         }
     }
 }
@@ -175,6 +190,7 @@ impl fmt::Display for Expr {
                     .join(", ");
                 write!(f, "{name}({args})")
             }
+            Self::Quantity { value, unit } => write!(f, "{value} {unit}"),
         }
     }
 }

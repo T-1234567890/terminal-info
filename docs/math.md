@@ -29,6 +29,10 @@ a = 5
 b = a^2 + 3
 x + 2 = 5
 diff(x^2, x)
+assume x > 0
+distance = 12 km
+time = 30 min
+speed = distance / time
 ```
 
 JSON input can be an array of statement strings or an object:
@@ -55,9 +59,10 @@ tinfo --json math solve equation.math
 tinfo math solve equation.math --steps --trace --vars
 tinfo math solve equation.math --latex
 tinfo math solve equation.math --precision 4
+tinfo math solve equation.math --for x
 ```
 
-Supported deterministic operations in the first version:
+Supported deterministic operations:
 
 - assignments such as `a = 5`
 - expressions such as `a^2 + 3`
@@ -68,9 +73,18 @@ Supported deterministic operations in the first version:
 - dependency extraction
 - numeric evaluation when dependencies resolve
 - linear single-variable solving
+- solving for a specific variable with `--for x`
+- quadratic solving for one variable
+- small linear systems such as `x + y = 5` and `x - y = 1`
+- assumptions such as `assume x > 0` are parsed and reported
+- lightweight units for `mm`, `cm`, `m`, `km`, `ms`, `s`, `min`, `h`, `g`, and `kg`
 - basic derivatives through `diff(expr, variable)` or `derivative(expr, variable)`
+- basic limits through `lim(expr, variable, value)` or `limit(expr, variable, value)`
+- basic integrals through `integrate(expr, variable)` or `integral(expr, variable)`
 
-Unsupported operations, including symbolic integration, are reported as diagnostics.
+Calculus support includes constants, variables, sums, products, quotients, numeric powers, basic chain rule, and simple functions such as `sin`, `cos`, `tan`, `ln`, `log`, `exp`, and `sqrt` where deterministic rules are implemented.
+
+Unsupported operations are reported as diagnostics.
 
 ## Graph
 
@@ -166,6 +180,9 @@ tinfo --json math solve equation.math
 ## Current Limits
 
 - The parser supports a small expression grammar, not a full CAS language.
+- Assumptions are recorded for reports and future solving behavior; they do not yet drive branch-sensitive simplification.
+- Units are lightweight numeric units, not a full dimensional-analysis system.
+- Limits use direct substitution and a small deterministic rule set only.
 - LaTeX input is simple extraction only.
 - PDF export is deferred.
 - AI explanations are optional and never determine correctness.

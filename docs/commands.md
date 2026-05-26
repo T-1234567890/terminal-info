@@ -244,6 +244,7 @@ tinfo dashboard notes clear
 tinfo math solve equation.math
 cat equation.math | tinfo math solve
 tinfo --json math solve equation.math
+tinfo math solve equation.math --for x
 tinfo math graph equation.math --mermaid
 tinfo math graph equation.math --html --output graph.html
 tinfo math render equation.math --md

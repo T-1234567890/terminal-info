@@ -7,13 +7,14 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   verify:
     name: Verify ${{ matrix.platform }}
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
+    continue-on-error: ${{ matrix.experimental }}
 
     strategy:
       fail-fast: false
@@ -22,18 +23,26 @@ jobs:
           - os: macos-latest
             platform: macOS (Intel, x86_64)
             asset: tinfo-x86_64-apple-darwin.tar.gz
+            binary: tinfo
+            experimental: false
 
           - os: macos-14
             platform: macOS (Apple Silicon, arm64)
             asset: tinfo-aarch64-apple-darwin.tar.gz
+            binary: tinfo
+            experimental: false
 
           - os: ubuntu-latest
             platform: Linux (x86_64)
             asset: tinfo-x86_64-unknown-linux-gnu.tar.gz
+            binary: tinfo
+            experimental: false
 
           - os: windows-latest
             platform: Windows (x86_64)
             asset: tinfo-x86_64-pc-windows-msvc.zip
+            binary: tinfo.exe
+            experimental: true
 
     steps:
       - uses: actions/checkout@v4
@@ -41,9 +50,10 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
-      - name: Set tag
+      - name: Resolve release tag
         shell: bash
         run: |
+          set -euo pipefail
           git fetch --force --tags origin
           TAG="$(git tag --points-at "${{ github.event.workflow_run.head_sha }}" | head -n 1)"
           if [ -z "$TAG" ]; then
@@ -53,155 +63,420 @@ jobs:
             echo "Unable to determine release tag for workflow run."
             exit 1
           fi
+          EXPECTED_VERSION="${TAG#v}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo "Resolved release tag: $TAG"
+          echo "Expected CLI version: $EXPECTED_VERSION"
+          echo "Post-release log: $RUN_URL"
           echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "EXPECTED_VERSION=$EXPECTED_VERSION" >> "$GITHUB_ENV"
+          echo "RUN_URL=$RUN_URL" >> "$GITHUB_ENV"
 
-      # -------------------------
-      # Download
-      # -------------------------
-
-      - name: Download asset (Unix)
+      - name: Install Minisign (Unix)
         if: runner.os != 'Windows'
+        shell: bash
         run: |
-          curl -fsSL -o asset \
-          "https://github.com/${{ github.repository }}/releases/download/${TAG}/${{ matrix.asset }}"
+          set -euo pipefail
+          if command -v minisign >/dev/null 2>&1; then
+            minisign -v
+            exit 0
+          fi
+          if command -v brew >/dev/null 2>&1; then
+            brew install minisign
+          elif command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y minisign
+          else
+            echo "No supported package manager found for Minisign."
+            exit 1
+          fi
+          minisign -v
 
-      - name: Download asset (Windows)
+      - name: Install Minisign (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/${{ matrix.asset }}"
-          Write-Host "Downloading from: $url"
+          $ErrorActionPreference = "Stop"
+          $zipUrl = "https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-win64.zip"
+          Invoke-WebRequest $zipUrl -OutFile minisign.zip
+          Expand-Archive minisign.zip -DestinationPath minisign -Force
+          $minisignExe = Get-ChildItem -Path minisign -Recurse -Filter minisign.exe | Select-Object -First 1
+          if (-not $minisignExe) {
+            throw "minisign.exe was not found after extracting minisign.zip"
+          }
+          $minisignDir = $minisignExe.DirectoryName
+          echo $minisignDir >> $env:GITHUB_PATH
+          & "$($minisignExe.FullName)" -v
 
-          for ($i = 0; $i -lt 5; $i++) {
-            try {
-              Invoke-WebRequest $url -OutFile asset
-              Write-Host "Download succeeded"
-              exit 0
-            } catch {
-              Write-Host "Attempt $i failed, retrying..."
-              Start-Sleep -Seconds 3
-            }
+      - name: Download release assets (Unix)
+        id: download_unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          echo "::group::Download release archive and verification files"
+          curl --retry 5 --retry-delay 3 -fsSLO "$base/${{ matrix.asset }}"
+          curl --retry 5 --retry-delay 3 -fsSLO "$base/${{ matrix.asset }}.sha256"
+          curl --retry 5 --retry-delay 3 -fsSLO "$base/${{ matrix.asset }}.minisig"
+          ls -lh "${{ matrix.asset }}" "${{ matrix.asset }}.sha256" "${{ matrix.asset }}.minisig"
+          echo "::endgroup::"
+
+      - name: Download release assets (Windows)
+        id: download_windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $base = "https://github.com/${{ github.repository }}/releases/download/$env:TAG"
+          Write-Host "::group::Download release archive and verification files"
+          foreach ($suffix in @("", ".sha256", ".minisig")) {
+            $name = "${{ matrix.asset }}$suffix"
+            $url = "$base/$name"
+            Write-Host "Downloading $url"
+            Invoke-WebRequest $url -OutFile $name
+            Get-Item $name | Format-List Name,Length
+          }
+          Write-Host "::endgroup::"
+
+      - name: Verify release integrity (Unix)
+        id: integrity_unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::SHA-256 checksum"
+          shasum -a 256 -c "${{ matrix.asset }}.sha256"
+          echo "::endgroup::"
+          echo "::group::Minisign signature"
+          minisign -Vm "${{ matrix.asset }}" -x "${{ matrix.asset }}.minisig" -p keys/minisign.pub
+          echo "::endgroup::"
+
+      - name: Verify release integrity (Windows)
+        id: integrity_windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "::group::SHA-256 checksum"
+          $expected = (Get-Content "${{ matrix.asset }}.sha256" | Select-Object -First 1).Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)[0].ToLowerInvariant()
+          $actual = (Get-FileHash "${{ matrix.asset }}" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) {
+            throw "SHA-256 mismatch. expected=$expected actual=$actual"
+          }
+          Write-Host "Checksum OK: $actual"
+          Write-Host "::endgroup::"
+          Write-Host "::group::Minisign signature"
+          minisign -Vm "${{ matrix.asset }}" -x "${{ matrix.asset }}.minisig" -p keys/minisign.pub
+          Write-Host "::endgroup::"
+
+      - name: Extract binary (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          tar -xzf "${{ matrix.asset }}" -C out
+          BIN="$(find out -type f -name '${{ matrix.binary }}' -print -quit)"
+          if [ -z "$BIN" ]; then
+            echo "Binary ${{ matrix.binary }} was not found in ${{ matrix.asset }}."
+            exit 1
+          fi
+          chmod +x "$BIN"
+          echo "BIN=$BIN" >> "$GITHUB_ENV"
+          echo "Found binary: $BIN"
+
+      - name: Extract binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Expand-Archive "${{ matrix.asset }}" -DestinationPath out -Force
+          $bin = Get-ChildItem -Path out -Recurse -Filter "${{ matrix.binary }}" | Select-Object -First 1
+          if (-not $bin) {
+            throw "Binary ${{ matrix.binary }} was not found in ${{ matrix.asset }}."
+          }
+          echo "BIN=$($bin.FullName)" >> $env:GITHUB_ENV
+          Write-Host "Found binary: $($bin.FullName)"
+
+      - name: Check version consistency (Unix)
+        id: version_unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Version consistency"
+          cargo_version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          cli_version="$("$BIN" --version | awk '{print $2}')"
+          echo "Tag version: ${EXPECTED_VERSION}"
+          echo "Cargo.toml version: ${cargo_version}"
+          echo "CLI version: ${cli_version}"
+          test "$cargo_version" = "$EXPECTED_VERSION"
+          test "$cli_version" = "$EXPECTED_VERSION"
+          echo "::endgroup::"
+
+      - name: Check version consistency (Windows)
+        id: version_windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "::group::Version consistency"
+          $cargoVersion = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches.Groups[1].Value
+          $cliVersion = (& "$env:BIN" --version).Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)[1]
+          Write-Host "Tag version: $env:EXPECTED_VERSION"
+          Write-Host "Cargo.toml version: $cargoVersion"
+          Write-Host "CLI version: $cliVersion"
+          if ($cargoVersion -ne $env:EXPECTED_VERSION) { throw "Cargo.toml version does not match tag." }
+          if ($cliVersion -ne $env:EXPECTED_VERSION) { throw "CLI version does not match tag." }
+          Write-Host "::endgroup::"
+
+      - name: Run first-party CLI smoke tests (Unix)
+        id: smoke_unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export HOME="$RUNNER_TEMP/tinfo-home"
+          mkdir -p "$HOME"
+
+          run_test() {
+            local name="$1"
+            shift
+            echo "::group::Smoke: $name"
+            "$@"
+            echo "::endgroup::"
           }
 
-          Write-Error "Failed to download asset after retries"
-          exit 1
+          run_pipe_test() {
+            local name="$1"
+            local input="$2"
+            shift 2
+            echo "::group::Smoke: $name"
+            printf '%b' "$input" | "$@"
+            echo "::endgroup::"
+          }
 
-      # -------------------------
-      # Extract
-      # -------------------------
+          run_test "1 version" "$BIN" --version
+          run_test "2 help" "$BIN" --help
+          run_test "3 system" "$BIN" system
+          run_test "4 time" "$BIN" --freeze time
+          run_test "5 config output" "$BIN" config output
+          run_test "6 config widgets" "$BIN" config widgets show
+          run_test "7 storage usage" "$BIN" storage usage
+          run_test "8 diagnostic system" "$BIN" diagnostic system
+          run_pipe_test "9 math solve" 'a=5\nb=a^2+3\n' "$BIN" math solve
+          run_pipe_test "10 math graph" 'a=5\nb=a^2+3\n' "$BIN" math graph --mermaid
+          run_pipe_test "11 math render" 'a=5\nb=a^2+3\n' "$BIN" math render --md
+          run_test "12 calendar list" "$BIN" calendar list
+          run_test "13 task list" "$BIN" task list
+          run_test "14 plugin list" "$BIN" plugin list
 
-      - name: Extract (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          mkdir out
-          tar -xzf asset -C out
-
-      - name: Extract (Windows)
+      - name: Run first-party CLI smoke tests (Windows)
+        id: smoke_windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Expand-Archive asset -DestinationPath out -Force
+          $ErrorActionPreference = "Stop"
+          $env:HOME = Join-Path $env:RUNNER_TEMP "tinfo-home"
+          New-Item -ItemType Directory -Force -Path $env:HOME | Out-Null
 
-      # -------------------------
-      # Find binary
-      # -------------------------
+          function Run-Test($Name, [scriptblock]$Command) {
+            Write-Host "::group::Smoke: $Name"
+            & $Command
+            if ($LASTEXITCODE -ne 0) {
+              throw "Smoke test failed: $Name"
+            }
+            Write-Host "::endgroup::"
+          }
 
-      - name: Find binary (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          BIN=$(find out -type f -name tinfo -print -quit)
-          if [ -z "$BIN" ]; then exit 1; fi
-          echo "BIN=$BIN" >> $GITHUB_ENV
+          Run-Test "1 version" { & "$env:BIN" --version }
+          Run-Test "2 help" { & "$env:BIN" --help }
+          Run-Test "3 system" { & "$env:BIN" system }
+          Run-Test "4 time" { & "$env:BIN" --freeze time }
+          Run-Test "5 config output" { & "$env:BIN" config output }
+          Run-Test "6 config widgets" { & "$env:BIN" config widgets show }
+          Run-Test "7 storage usage" { & "$env:BIN" storage usage }
+          Run-Test "8 diagnostic system" { & "$env:BIN" diagnostic system }
+          Run-Test "9 math solve" { "a=5`nb=a^2+3`n" | & "$env:BIN" math solve }
+          Run-Test "10 math graph" { "a=5`nb=a^2+3`n" | & "$env:BIN" math graph --mermaid }
+          Run-Test "11 math render" { "a=5`nb=a^2+3`n" | & "$env:BIN" math render --md }
+          Run-Test "12 calendar list" { & "$env:BIN" calendar list }
+          Run-Test "13 task list" { & "$env:BIN" task list }
+          Run-Test "14 plugin list" { & "$env:BIN" plugin list }
 
-      - name: Find binary (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $bin = Get-ChildItem -Recurse -Filter tinfo.exe | Select-Object -First 1
-          if (-not $bin) { exit 1 }
-          echo "BIN=$($bin.FullName)" >> $env:GITHUB_ENV
-
-      # -------------------------
-      # Core CLI tests
-      # -------------------------
-
-      - name: Run CLI tests (Unix)
-        id: cli_unix
-        if: runner.os != 'Windows'
-        shell: bash
-        continue-on-error: true
-        run: |
-          chmod +x "$BIN"
-
-          "$BIN" --version
-          "$BIN" --help > /dev/null
-
-          "$BIN" system || true
-          "$BIN" time || true
-          "$BIN" network || true
-
-      - name: Run CLI tests (Windows)
-        id: cli_windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          & "$env:BIN" --version
-          & "$env:BIN" --help | Out-Null
-
-          try { & "$env:BIN" system } catch {}
-          try { & "$env:BIN" time } catch {}
-          try { & "$env:BIN" network } catch {}
-
-      # -------------------------
-      # Plugin system test
-      # -------------------------
-
-      - name: Plugin test (Unix)
-        id: plugin_unix
-        if: runner.os != 'Windows'
-        shell: bash
-        continue-on-error: true
-        run: |
-          "$BIN" plugin list || true
-          "$BIN" plugin search test || true
-
-      - name: Plugin test (Windows)
-        id: plugin_windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          & "$env:BIN" plugin list
-          & "$env:BIN" plugin search test
-
-      # -------------------------
-      # Save result
-      # -------------------------
-
-      - name: Save result
+      - name: Save platform result
         if: always()
         shell: bash
         run: |
-          STATUS="❌ Failed"
+          set -euo pipefail
+          pick_status() {
+            if [ "$1" = "success" ] || [ "$2" = "success" ]; then
+              echo "success"
+            elif [ "$1" = "failure" ] || [ "$2" = "failure" ]; then
+              echo "failure"
+            else
+              echo "skipped"
+            fi
+          }
 
-          if [[ "${{ steps.cli_unix.outcome }}" == "success" || "${{ steps.cli_windows.outcome }}" == "success" ]]; then
-            STATUS="✅ Passed"
+          download="$(pick_status '${{ steps.download_unix.outcome }}' '${{ steps.download_windows.outcome }}')"
+          integrity="$(pick_status '${{ steps.integrity_unix.outcome }}' '${{ steps.integrity_windows.outcome }}')"
+          version="$(pick_status '${{ steps.version_unix.outcome }}' '${{ steps.version_windows.outcome }}')"
+          smoke="$(pick_status '${{ steps.smoke_unix.outcome }}' '${{ steps.smoke_windows.outcome }}')"
+
+          status="✅ Passed"
+          if [ "$download" != "success" ] || [ "$integrity" != "success" ] || [ "$version" != "success" ] || [ "$smoke" != "success" ]; then
+            if [ "${{ matrix.experimental }}" = "true" ]; then
+              status="⚠️ Experimental failure"
+            else
+              status="❌ Failed"
+            fi
           fi
 
-          echo "{\"platform\":\"${{ matrix.platform }}\",\"status\":\"$STATUS\"}" > result.json
+          cat > result.json <<JSON
+          {
+            "type": "platform",
+            "platform": "${{ matrix.platform }}",
+            "experimental": ${{ matrix.experimental }},
+            "status": "$status",
+            "download": "$download",
+            "integrity": "$integrity",
+            "version": "$version",
+            "smoke": "$smoke",
+            "log_url": "$RUN_URL"
+          }
+          JSON
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ${{ matrix.platform }}
+          name: post-release-${{ matrix.asset }}
+          path: result.json
+
+  installers:
+    name: Verify installer assets
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          TAG="$(git tag --points-at "${{ github.event.workflow_run.head_sha }}" | head -n 1)"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.event.workflow_run.head_branch }}"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "Unable to determine release tag for workflow run."
+            exit 1
+          fi
+          EXPECTED_VERSION="${TAG#v}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "EXPECTED_VERSION=$EXPECTED_VERSION" >> "$GITHUB_ENV"
+          echo "RUN_URL=$RUN_URL" >> "$GITHUB_ENV"
+
+      - name: Install Minisign
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y minisign
+          minisign -v
+
+      - name: Download installer assets
+        id: installer_assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          echo "::group::Download installer assets"
+          curl --retry 5 --retry-delay 3 -fsSLO "$base/install.sh"
+          curl --retry 5 --retry-delay 3 -fsSLO "$base/quick-install.sh"
+          ls -lh install.sh quick-install.sh
+          echo "::endgroup::"
+
+      - name: Syntax check installers
+        id: installer_syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Installer syntax"
+          bash -n install.sh
+          bash -n quick-install.sh
+          echo "::endgroup::"
+
+      - name: Run regular installer in a temp directory
+        id: regular_install
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Regular installer"
+          install_dir="$RUNNER_TEMP/tinfo-install-regular"
+          mkdir -p "$install_dir"
+          TINFO_INSTALL_DIR="$install_dir" TINFO_RELEASE_TAG="$TAG" bash install.sh
+          "$install_dir/tinfo" --version
+          test "$("$install_dir/tinfo" --version | awk '{print $2}')" = "$EXPECTED_VERSION"
+          echo "::endgroup::"
+
+      - name: Run quick installer in a temp directory
+        id: quick_install
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Quick installer"
+          install_dir="$RUNNER_TEMP/tinfo-install-quick"
+          mkdir -p "$install_dir"
+          TINFO_INSTALL_DIR="$install_dir" TINFO_RELEASE_TAG="$TAG" bash quick-install.sh
+          "$install_dir/tinfo" --version
+          test "$("$install_dir/tinfo" --version | awk '{print $2}')" = "$EXPECTED_VERSION"
+          echo "::endgroup::"
+
+      - name: Save installer result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset_check="${{ steps.installer_assets.outcome }}"
+          syntax="${{ steps.installer_syntax.outcome }}"
+          regular="${{ steps.regular_install.outcome }}"
+          quick="${{ steps.quick_install.outcome }}"
+          status="✅ Passed"
+          if [ "$asset_check" != "success" ] || [ "$syntax" != "success" ] || [ "$regular" != "success" ] || [ "$quick" != "success" ]; then
+            status="❌ Failed"
+          fi
+
+          cat > result.json <<JSON
+          {
+            "type": "installers",
+            "platform": "Installer assets",
+            "status": "$status",
+            "asset_check": "$asset_check",
+            "syntax": "$syntax",
+            "regular_install": "$regular",
+            "quick_install": "$quick",
+            "log_url": "$RUN_URL"
+          }
+          JSON
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: post-release-installers
           path: result.json
 
   update-release:
     name: Update Release Body
     runs-on: ubuntu-latest
-    needs: verify
+    needs: [verify, installers]
     if: always()
 
     steps:
@@ -210,9 +485,10 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
-      - name: Set tag
+      - name: Resolve release tag
         shell: bash
         run: |
+          set -euo pipefail
           git fetch --force --tags origin
           TAG="$(git tag --points-at "${{ github.event.workflow_run.head_sha }}" | head -n 1)"
           if [ -z "$TAG" ]; then
@@ -243,38 +519,82 @@ jobs:
               'Windows (x86_64)'
             ];
 
-            const statuses = Object.fromEntries(platforms.map(p => [p, '❌ Failed']));
+            const defaultPlatform = {
+              status: '❌ Failed',
+              download: 'missing',
+              integrity: 'missing',
+              version: 'missing',
+              smoke: 'missing',
+              experimental: false,
+              log_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            };
+            const platformResults = Object.fromEntries(platforms.map(platform => [
+              platform,
+              { platform, ...defaultPlatform }
+            ]));
+            let installerResult = {
+              status: '❌ Failed',
+              asset_check: 'missing',
+              syntax: 'missing',
+              regular_install: 'missing',
+              quick_install: 'missing',
+              log_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            };
 
             for (const dir of fs.readdirSync('results')) {
               const file = path.join('results', dir, 'result.json');
               if (!fs.existsSync(file)) continue;
 
-              const data = JSON.parse(fs.readFileSync(file));
-              statuses[data.platform] = data.status;
+              const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+              if (data.type === 'platform' && platformResults[data.platform]) {
+                platformResults[data.platform] = data;
+              } else if (data.type === 'installers') {
+                installerResult = data;
+              }
             }
 
-            const overall = Object.values(statuses).includes('❌ Failed')
-              ? '❌ Partial failure'
-              : '✅ Passed';
+            const rows = platforms.map(platform => platformResults[platform]);
+            const blockingFailures = rows
+              .filter(row => !row.experimental)
+              .some(row => row.status.includes('Failed')) || installerResult.status.includes('Failed');
+            const windowsWarning = rows.some(row => row.experimental && !row.status.includes('Passed'));
+            const overall = blockingFailures
+              ? '❌ Failed'
+              : windowsWarning
+                ? '⚠️ Passed with Windows experimental warning'
+                : '✅ Passed';
 
             const date = new Date().toISOString().slice(0, 10);
             const tag = process.env.TAG;
+            const logUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
             const report = [
               "## Post-release verification",
               "",
               `**Overall status:** ${overall}`,
+              `**Actions log:** [Post-release verification run](${logUrl})`,
               "",
-              "| Platform | Status |",
-              "|----------|--------|",
-              `| macOS (Intel, x86_64) | ${statuses['macOS (Intel, x86_64)']} |`,
-              `| macOS (Apple Silicon, arm64) | ${statuses['macOS (Apple Silicon, arm64)']} |`,
-              `| Linux (x86_64) | ${statuses['Linux (x86_64)']} |`,
-              `| Windows (x86_64) | ${statuses['Windows (x86_64)']} |`,
+              "### Platform checks",
               "",
-              "**Legend:**",
-              "✅ Passed",
-              "❌ Failed",
+              "| Platform | Status | Download | Checksum + signature | Version | CLI smoke | Log |",
+              "| --- | --- | --- | --- | --- | --- | --- |",
+              ...rows.map(row => `| ${row.platform} | ${row.status} | ${row.download} | ${row.integrity} | ${row.version} | ${row.smoke} | [log](${row.log_url || logUrl}) |`),
+              "",
+              "### Installer checks",
+              "",
+              "| Area | Status |",
+              "| --- | --- |",
+              `| Installer assets published | ${installerResult.asset_check} |`,
+              `| Installer shell syntax | ${installerResult.syntax} |`,
+              `| Regular install.sh temp install | ${installerResult.regular_install} |`,
+              `| Quick quick-install.sh temp install | ${installerResult.quick_install} |`,
+              `| Installer overall | ${installerResult.status} |`,
+              "",
+              "### Smoke coverage",
+              "",
+              "The platform smoke test covers version, help, system, time, config output, config widgets, storage usage, diagnostic system, math solve, math graph, math render, calendar list, task list, and plugin list.",
+              "",
+              "**Legend:** `success` passed, `failure` failed, `skipped` did not run because an earlier stage failed, `missing` means no result artifact was found.",
               "",
               "---",
               "",

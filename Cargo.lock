@@ -1800,7 +1800,7 @@ dependencies = [
 
 [[package]]
 name = "terminal-info"
-version = "1.4.3"
+version = "1.5.0"
 dependencies = [
  "chrono",
  "clap",

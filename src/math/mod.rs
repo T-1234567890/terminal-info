@@ -82,6 +82,7 @@ pub struct SolveArgs {
     pub steps: bool,
     pub latex: bool,
     pub precision: usize,
+    pub solve_for: Option<String>,
     pub vars: bool,
     pub trace: bool,
     pub debug: bool,
@@ -125,6 +126,7 @@ pub fn handle_solve(args: SolveArgs) -> Result<(), String> {
         args.input,
         SolveOptions {
             precision: args.precision,
+            solve_for: args.solve_for,
             include_steps: args.steps,
             include_trace: args.trace,
             debug: args.debug,

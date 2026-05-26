@@ -549,6 +549,9 @@ enum MathCommand {
         /// Floating point precision
         #[arg(long, default_value_t = 6)]
         precision: usize,
+        /// Solve equations for a specific variable
+        #[arg(long = "for")]
+        solve_for: Option<String>,
         /// Show variable dependency table
         #[arg(long)]
         vars: bool,
@@ -1909,6 +1912,7 @@ fn handle_math(command: MathCommand) -> Result<(), String> {
             steps,
             latex,
             precision,
+            solve_for,
             vars,
             trace,
             debug,
@@ -1917,6 +1921,7 @@ fn handle_math(command: MathCommand) -> Result<(), String> {
             steps,
             latex,
             precision,
+            solve_for,
             vars,
             trace,
             debug,

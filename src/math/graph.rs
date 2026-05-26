@@ -75,6 +75,9 @@ pub fn build_dependency_graph(document: &MathDocument) -> DependencyGraph {
                 map.insert(format!("equation_{equation_index}"), deps);
                 equation_index += 1;
             }
+            Statement::Assumption { variable, .. } => {
+                map.entry(variable.clone()).or_default();
+            }
             Statement::Expression(expr) => {
                 let mut deps = BTreeSet::new();
                 expr.collect_vars(&mut deps);

@@ -147,6 +147,10 @@ fn clean_latex_line(line: &str) -> String {
 }
 
 fn parse_statement(input: &str) -> Result<Statement, String> {
+    if let Some(assumption) = parse_assumption(input) {
+        return assumption;
+    }
+
     let tokens = tokenize(input)?;
     if tokens
         .iter()
@@ -170,6 +174,26 @@ fn parse_statement(input: &str) -> Result<Statement, String> {
         return Ok(Statement::Equation { left, right });
     }
     Ok(Statement::Expression(parse_expr_tokens(&tokens)?))
+}
+
+fn parse_assumption(input: &str) -> Option<Result<Statement, String>> {
+    let rest = input.strip_prefix("assume ")?;
+    let mut parts = rest.splitn(2, char::is_whitespace);
+    let variable = parts.next().unwrap_or_default().trim();
+    let condition = parts.next().unwrap_or_default().trim();
+    if variable.is_empty() || condition.is_empty() {
+        return Some(Err("Assumptions must look like `assume x > 0`.".to_string()));
+    }
+    if !variable
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    {
+        return Some(Err("Assumption variable must be an identifier.".to_string()));
+    }
+    Some(Ok(Statement::Assumption {
+        variable: variable.to_string(),
+        condition: condition.to_string(),
+    }))
 }
 
 fn parse_expr_tokens(tokens: &[Token]) -> Result<Expr, String> {
@@ -310,6 +334,18 @@ impl Parser<'_> {
         };
 
         loop {
+            if let Some(Token::Ident(unit)) = self.peek().cloned()
+                && is_unit(&unit)
+                && matches!(lhs, Expr::Number(_))
+            {
+                self.next();
+                lhs = Expr::Quantity {
+                    value: Box::new(lhs),
+                    unit,
+                };
+                continue;
+            }
+
             let op = match self.peek() {
                 Some(Token::Plus) => BinaryOp::Add,
                 Some(Token::Minus) => BinaryOp::Sub,
@@ -352,6 +388,13 @@ impl Parser<'_> {
     }
 }
 
+fn is_unit(value: &str) -> bool {
+    matches!(
+        value,
+        "mm" | "cm" | "m" | "km" | "ms" | "s" | "min" | "h" | "g" | "kg"
+    )
+}
+
 fn binding_power(op: BinaryOp) -> (u8, u8) {
     match op {
         BinaryOp::Add | BinaryOp::Sub => (1, 2),
@@ -380,5 +423,12 @@ mod tests {
     fn extracts_simple_latex() {
         let doc = parse_document(r"\[x + 2 = 5\]", SourceFormat::Latex).unwrap();
         assert!(matches!(doc.statements[0], Statement::Equation { .. }));
+    }
+
+    #[test]
+    fn parses_assumptions_and_units() {
+        let doc = parse_document("assume x > 0\ndistance = 12 km", SourceFormat::Math).unwrap();
+        assert!(matches!(doc.statements[0], Statement::Assumption { .. }));
+        assert_eq!(doc.statements[1].to_string(), "distance = 12 km");
     }
 }

@@ -69,10 +69,23 @@ require_sha_tool() {
 }
 
 select_install_dir() {
+  if [ -n "${TINFO_INSTALL_DIR:-}" ]; then
+    echo "$TINFO_INSTALL_DIR"
+    return 0
+  fi
+
   if [ -d "$PRIMARY_INSTALL_DIR" ] && [ -w "$PRIMARY_INSTALL_DIR" ]; then
     echo "$PRIMARY_INSTALL_DIR"
   else
     echo "$FALLBACK_INSTALL_DIR"
+  fi
+}
+
+release_download_base() {
+  if [ -n "${TINFO_RELEASE_TAG:-}" ]; then
+    echo "https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${TINFO_RELEASE_TAG}"
+  else
+    echo "https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download"
   fi
 }
 
@@ -169,7 +182,7 @@ main() {
   require_cmd mv
   require_cmd chmod
 
-  local arch platform archive_name archive_url checksum_url tmp_dir archive_path
+  local arch platform archive_name release_base archive_url checksum_url tmp_dir archive_path
   local checksum_path binary_path install_dir install_path
 
   tmp_dir=""
@@ -178,7 +191,8 @@ main() {
   arch="$(detect_arch)"
   platform="$(detect_platform)"
   archive_name="${BINARY_NAME}-${arch}-${platform}.tar.gz"
-  archive_url="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/${archive_name}"
+  release_base="$(release_download_base)"
+  archive_url="${release_base}/${archive_name}"
   checksum_url="${archive_url}.sha256"
   install_dir="$(select_install_dir)"
   install_path="${install_dir}/${BINARY_NAME}"

@@ -112,6 +112,15 @@ pub fn render_markdown(
             variable.name, depends_on
         ));
     }
+    if !output.assumptions.is_empty() {
+        md.push_str("\n## Assumptions\n\n");
+        for assumption in &output.assumptions {
+            md.push_str(&format!(
+                "- `{}` `{}`\n",
+                assumption.variable, assumption.condition
+            ));
+        }
+    }
     if include_trace && !output.trace.is_empty() {
         md.push_str("\n## Trace\n\n");
         for step in &output.trace {
