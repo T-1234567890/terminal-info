@@ -1111,6 +1111,7 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -0.02em; }
 .legal-page { padding-block: 3rem 5rem; }
 .legal-layout { max-width: var(--measure); }
 .legal-title { font-size: 2rem; font-weight: 800; margin-bottom: 1.5rem; }
+.legal-updated { margin: -0.75rem 0 1.5rem; color: var(--text-muted); font-size: 0.85rem; }
 .section-copy { margin-bottom: 2rem; }
 .disclaimer h2 {
   font-size: 1.25rem;
